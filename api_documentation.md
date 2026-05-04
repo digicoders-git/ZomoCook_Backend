@@ -17,7 +17,7 @@ This document contains the details of the Admin APIs for the ZomoCook Admin Pane
     ```json
     {
       "email": "admin@zomocook.in",
-      "password": "password123"
+      "password": "admin@123"
     }
     ```
 *   **Success Response (200 OK):**
@@ -46,7 +46,7 @@ This document contains the details of the Admin APIs for the ZomoCook Admin Pane
       "name": "Zomo Cook",
       "email": "admin@zomocook.in",
       "phone": "8009534847",
-      "password": "password123"
+      "password": "admin@123"
     }
     ```
 *   **Success Response (201 Created):**
