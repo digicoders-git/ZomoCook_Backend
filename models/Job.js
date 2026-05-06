@@ -92,7 +92,6 @@ const jobSchema = new mongoose.Schema({
   },
   creatorModel: {
     type: String,
-    required: true,
     enum: ['Admin', 'User']
   }
 }, {

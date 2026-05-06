@@ -52,7 +52,6 @@ const customerSchema = new mongoose.Schema({
     },
     creatorModel: {
         type: String,
-        required: true,
         enum: ['Admin', 'User']
     }
 }, {

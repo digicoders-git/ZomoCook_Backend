@@ -69,19 +69,22 @@ exports.createUser = async (req, res) => {
  */
 exports.updateUser = async (req, res) => {
     try {
-        const user = await User.findById(req.params.id);
-        if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+        if (req.body.password) {
+            const bcrypt = require('bcryptjs');
+            const salt = await bcrypt.genSalt(10);
+            req.body.password = await bcrypt.hash(req.body.password, salt);
+        }
+        
+        if (req.file) req.body.profilePic = req.file.path;
 
-        const fieldsToUpdate = ['name', 'email', 'phone', 'role', 'status', 'jobActions'];
-        fieldsToUpdate.forEach(field => {
-            if (req.body[field] !== undefined) user[field] = req.body[field];
+        const updatedUser = await User.findByIdAndUpdate(req.params.id, req.body, { 
+            new: true,
+            runValidators: false 
         });
 
-        if (req.body.password) user.password = req.body.password;
-        if (req.file) user.profilePic = req.file.path;
+        if (!updatedUser) return res.status(404).json({ success: false, message: 'User not found' });
 
-        await user.save();
-        res.status(200).json({ success: true, message: 'User updated successfully', user });
+        res.status(200).json({ success: true, message: 'User updated successfully', user: updatedUser });
     } catch (error) {
         res.status(400).json({ success: false, message: error.message });
     }

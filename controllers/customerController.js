@@ -168,13 +168,16 @@ const toggleCustomerStatus = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Customer not found' });
         }
 
-        customer.accountStatus = customer.accountStatus === 'active' ? 'inactive' : 'active';
-        await customer.save();
+        const newStatus = customer.accountStatus === 'active' ? 'inactive' : 'active';
+        await Customer.updateOne(
+            { _id: req.params.id },
+            { $set: { accountStatus: newStatus } }
+        );
 
         res.status(200).json({
             success: true,
-            message: `Account status updated to ${customer.accountStatus}`,
-            accountStatus: customer.accountStatus
+            message: `Account status updated to ${newStatus}`,
+            accountStatus: newStatus
         });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });

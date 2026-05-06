@@ -158,13 +158,16 @@ const toggleJobStatus = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Job not found' });
         }
 
-        job.isActive = !job.isActive;
-        await job.save();
+        const newStatus = !job.isActive;
+        await Job.updateOne(
+            { _id: req.params.id },
+            { $set: { isActive: newStatus } }
+        );
 
         res.status(200).json({
             success: true,
-            message: `Job status updated to ${job.isActive ? 'Active' : 'Inactive'}`,
-            isActive: job.isActive
+            message: `Job status updated to ${newStatus ? 'Active' : 'Inactive'}`,
+            isActive: newStatus
         });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -179,19 +182,22 @@ const toggleJobStatus = async (req, res) => {
 const updateJobStatus = async (req, res) => {
     try {
         const { status } = req.body;
-        const job = await Job.findById(req.params.id);
+        
+        // Use updateOne to bypass validation for other fields (like creatorModel) 
+        // that might be missing in older records.
+        const result = await Job.updateOne(
+            { _id: req.params.id },
+            { $set: { status } }
+        );
 
-        if (!job) {
+        if (result.matchedCount === 0) {
             return res.status(404).json({ success: false, message: 'Job not found' });
         }
-
-        job.status = status;
-        await job.save();
 
         res.status(200).json({
             success: true,
             message: `Job status updated to ${status}`,
-            status: job.status
+            status: status
         });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
