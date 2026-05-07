@@ -16,6 +16,7 @@ const PORT = process.env.PORT || 5000;
 app.use(cors({
   origin: [
     'https://zomo-cook-admin-panel.vercel.app',
+    'https://zomo-cook-admin-panel.vercel.app/',
     'http://localhost:5173',
     'http://localhost:5174',
     'http://localhost:3000',
