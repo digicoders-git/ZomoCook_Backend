@@ -7,7 +7,8 @@ const {
     createNotification,
     getNotification,
     toggleNotificationStatus,
-    deleteNotification
+    deleteNotification,
+    saveFCMToken
 } = require('../controllers/notificationController');
 const { protect } = require('../middleware/authMiddleware');
 
@@ -25,6 +26,8 @@ const upload = multer({ storage });
 
 // All routes are protected by admin login
 router.use(protect);
+
+router.post('/save-token', saveFCMToken);
 
 router.route('/')
     .get(getNotifications)
