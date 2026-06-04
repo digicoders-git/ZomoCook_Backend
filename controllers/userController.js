@@ -1,4 +1,13 @@
 const User = require('../models/User');
+const Otp = require('../models/Otp');
+const jwt = require('jsonwebtoken');
+
+// Generate JWT
+const generateToken = (id) => {
+    return jwt.sign({ id }, process.env.JWT_SECRET, {
+        expiresIn: '365d',
+    });
+};
 
 /**
  * @desc    Get all staff users
@@ -104,3 +113,109 @@ exports.deleteUser = async (req, res) => {
         res.status(500).json({ success: false, message: error.message });
     }
 };
+
+/**
+ * @desc    Send OTP to mobile number
+ * @route   POST /api/admin/users/send-otp
+ * @access  Public
+ */
+exports.sendOtp = async (req, res) => {
+    try {
+        const { phone } = req.body;
+        if (!phone) {
+            return res.status(400).json({ success: false, message: 'Please provide a phone number' });
+        }
+
+        // Generate 6 digit random OTP
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+        // Delete any existing OTP for this phone
+        await Otp.deleteMany({ phone });
+
+        // Save OTP to database
+        await Otp.create({ phone, otp });
+
+        console.log(`[OTP Verification] Generated OTP for ${phone}: ${otp}`);
+
+        res.status(200).json({
+            success: true,
+            message: 'OTP sent successfully',
+            otp // Returning OTP directly for testing/development convenience
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+/**
+ * @desc    Verify OTP and Register/Login
+ * @route   POST /api/admin/users/verify-otp
+ * @access  Public
+ */
+exports.verifyOtp = async (req, res) => {
+    try {
+        const { phone, otp, fcmToken } = req.body;
+        if (!phone || !otp) {
+            return res.status(400).json({ success: false, message: 'Please provide phone and OTP' });
+        }
+
+        // Find the latest OTP record
+        const otpRecord = await Otp.findOne({ phone, otp });
+        if (!otpRecord) {
+            return res.status(400).json({ success: false, message: 'Invalid or expired OTP' });
+        }
+
+        // OTP verified, delete it
+        await Otp.deleteOne({ _id: otpRecord._id });
+
+        // Check if user already exists
+        let user = await User.findOne({ phone }).populate('role');
+        let isNewUser = false;
+
+        if (!user) {
+            isNewUser = true;
+            // First time user, register
+            const userData = {
+                phone,
+                name: `User_${phone.slice(-4)}`, // Default name with last 4 digits
+                status: 'Active'
+            };
+            if (fcmToken) {
+                userData.fcmToken = fcmToken;
+            }
+            user = await User.create(userData);
+        } else {
+            // Existing user, update fcmToken if provided
+            if (fcmToken) {
+                user.fcmToken = fcmToken;
+                await user.save();
+            }
+        }
+
+        // Check if user is active
+        const currentStatus = (user.status || 'Active').toLowerCase();
+        if (currentStatus === 'inactive' || currentStatus === 'cancelled' || currentStatus === 'expired') {
+            return res.status(401).json({ success: false, message: 'Your account is currently inactive. Please contact Admin.' });
+        }
+
+        res.status(200).json({
+            success: true,
+            message: isNewUser ? 'User registered successfully' : 'Logged in successfully',
+            isNewUser,
+            token: generateToken(user._id),
+            user: {
+                _id: user._id,
+                name: user.name,
+                email: user.email,
+                phone: user.phone,
+                profilePic: user.profilePic,
+                role: user.role,
+                status: user.status,
+                fcmToken: user.fcmToken
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+

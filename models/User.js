@@ -4,12 +4,11 @@ const bcrypt = require('bcryptjs');
 const userSchema = new mongoose.Schema({
     name: {
         type: String,
-        required: [true, 'Please add a name']
+        default: 'User'
     },
     email: {
         type: String,
-        required: [true, 'Please add an email'],
-        unique: true,
+        sparse: true,
         match: [
             /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/,
             'Please add a valid email'
@@ -21,7 +20,6 @@ const userSchema = new mongoose.Schema({
     },
     password: {
         type: String,
-        required: [true, 'Please add a password'],
         minlength: 6,
         select: false
     },
@@ -31,8 +29,7 @@ const userSchema = new mongoose.Schema({
     },
     role: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Role',
-        required: true
+        ref: 'Role'
     },
     jobActions: {
         type: String,

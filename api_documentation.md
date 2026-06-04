@@ -543,21 +543,63 @@ This document contains the details of the Admin APIs for the ZomoCook Admin Pane
 
 ---
 
-## 9. User Management (Staff/Admins)
-*Note: Staff users are stored in a dedicated `User` collection, separate from the core `Admin` entity.*
+## 9. User Management & OTP Authentication (Staff/Admins)
+*Note: Staff users are stored in a dedicated `User` collection, separate from the core `Admin` entity. Authentication for users is done via OTP (One-Time Password) on their phone number.*
 
-### Create System User
-*   **URL:** `/api/admin/users`
+### Send OTP
+*   **URL:** `/api/admin/users/send-otp`
 *   **Method:** `POST`
-*   **Headers:** `Authorization: Bearer <token>`
-*   **Request Body (Multipart/Form-Data):**
-    *   `name`: "Staff Name"
-    *   `email`: "staff@example.com"
-    *   `phone`: "9876543210"
-    *   `password`: "securepass123"
-    *   `role`: "role_id" (MongoDB ID of the Role)
-    *   `status`: "active" | "inactive"
-    *   `profilePic`: [File Binary] (Optional)
+*   **Description:** Sends a 6-digit OTP to the provided phone number. (Public API)
+*   **Request Body:**
+    ```json
+    {
+      "phone": "9876543210"
+    }
+    ```
+*   **Success Response (200 OK):**
+    ```json
+    {
+      "success": true,
+      "message": "OTP sent successfully",
+      "otp": "123456" // Returned directly in response for easy testing/development
+    }
+    ```
+
+### Verify OTP & Register/Login
+*   **URL:** `/api/admin/users/verify-otp`
+*   **Method:** `POST`
+*   **Description:** Verifies the OTP. If the mobile number is not registered, it automatically registers a new user. If registered, it logs the user in. FCM token can be optionally saved. (Public API)
+*   **Request Body:**
+    ```json
+    {
+      "phone": "9876543210",
+      "otp": "123456",
+      "fcmToken": "fcm_token_here" // Optional
+    }
+    ```
+*   **Success Response (200 OK):**
+    ```json
+    {
+      "success": true,
+      "message": "Logged in successfully", // or "User registered successfully"
+      "isNewUser": false, // true if registered for the first time
+      "token": "JWT_TOKEN_HERE",
+      "user": {
+        "_id": "USER_ID",
+        "name": "User_3210",
+        "email": null,
+        "phone": "9876543210",
+        "profilePic": "default-user.png",
+        "role": null,
+        "status": "Active",
+        "fcmToken": "fcm_token_here"
+      }
+    }
+    ```
+
+### Create System User [REMOVED/DEPRECATED]
+*Note: Manual creation of users has been removed. All users must sign up/log in using the OTP flow.*
+
 
 ### Get Users List
 *   **URL:** `/api/admin/users`
