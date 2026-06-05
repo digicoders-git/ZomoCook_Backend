@@ -265,7 +265,7 @@ exports.updateProfile = async (req, res) => {
     try {
         const userId = req.admin._id;
         const { 
-            name, email, propertyCategory, address,
+            name, email, propertyCategory, address, outletName,
             // Cook specific fields
             dob, gender, languages, maritalStatus, state, city,
             jobCategory, jobType, jobPositions, preferredCities,
@@ -304,6 +304,7 @@ exports.updateProfile = async (req, res) => {
         if (name) user.name = name;
         if (propertyCategory) user.propertyCategory = propertyCategory;
         if (address) user.address = address;
+        if (outletName) user.outletName = outletName;
 
         // Handle profile picture file upload
         if (req.file) {
@@ -367,6 +368,7 @@ exports.updateProfile = async (req, res) => {
                 role: updatedUser.role,
                 propertyCategory: updatedUser.propertyCategory,
                 address: updatedUser.address,
+                outletName: updatedUser.outletName,
                 status: updatedUser.status,
                 fcmToken: updatedUser.fcmToken
             }

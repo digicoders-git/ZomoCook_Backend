@@ -40,6 +40,10 @@ const userSchema = new mongoose.Schema({
         type: String,
         trim: true
     },
+    outletName: {
+        type: String,
+        trim: true
+    },
     jobActions: {
         type: String,
         trim: true

@@ -146,6 +146,7 @@ Allows a logged-in user to complete or update their profile details.
 
 #### User Role Specific Fields:
 *   `propertyCategory` (String): Customer Type. Must be `"Individual"` (for Home/Household) or `"Hotel/Restaurant"` (for Outlets/Business).
+*   `outletName` (String): Name of the restaurant/hotel outlet (required/submitted if `propertyCategory` is `"Hotel/Restaurant"`).
 
 #### Cook Role Specific Fields (Basic Profile & Job Preferences):
 *   `dob` (Date String): Date of birth (e.g., `"1995-10-15"`).
@@ -181,7 +182,8 @@ Allows a logged-in user to complete or update their profile details.
       "name": "User",
       "status": "active"
     },
-    "propertyCategory": "Individual",
+    "propertyCategory": "Hotel/Restaurant",
+    "outletName": "Grand Palace Hotel",
     "address": "123, Ring Road, Lucknow",
     "status": "Active",
     "fcmToken": "fcm_token_here"
