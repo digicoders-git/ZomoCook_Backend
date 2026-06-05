@@ -1,6 +1,7 @@
 const User = require('../models/User');
 const Otp = require('../models/Otp');
 const Role = require('../models/Role');
+const Candidate = require('../models/Candidate');
 const jwt = require('jsonwebtoken');
 
 // Generate JWT
@@ -250,6 +251,132 @@ exports.verifyOtp = async (req, res) => {
                 fcmToken: user.fcmToken
             }
         });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+/**
+ * @desc    Update current logged-in user profile
+ * @route   PUT /api/admin/users/profile
+ * @access  Private
+ */
+exports.updateProfile = async (req, res) => {
+    try {
+        const userId = req.admin._id;
+        const { 
+            name, email, propertyCategory, address,
+            // Cook specific fields
+            dob, gender, languages, maritalStatus, state, city,
+            jobCategory, jobType, jobPositions, preferredCities,
+            experienceValue, experienceUnit, currentSalary, expectedSalary
+        } = req.body;
+
+        // Helper to parse JSON fields safely
+        const parseJsonField = (field) => {
+            if (!field) return undefined;
+            if (typeof field === 'string') {
+                try {
+                    return JSON.parse(field);
+                } catch (e) {
+                    return [field];
+                }
+            }
+            return field;
+        };
+
+        // Find user first
+        let user = await User.findById(userId).populate('role');
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'User not found' });
+        }
+
+        // Validate email uniqueness if email is changed
+        if (email && email !== user.email) {
+            const emailExists = await User.findOne({ email, _id: { $ne: userId } });
+            if (emailExists) {
+                return res.status(400).json({ success: false, message: 'Email is already in use by another user' });
+            }
+            user.email = email;
+        }
+
+        // Update User fields
+        if (name) user.name = name;
+        if (propertyCategory) user.propertyCategory = propertyCategory;
+        if (address) user.address = address;
+
+        // Handle profile picture file upload
+        if (req.file) {
+            user.profilePic = req.file.path;
+        }
+
+        await user.save();
+
+        // If user has 'Cook' role, create or update Candidate profile
+        let candidate = null;
+        if (user.role && user.role.name && user.role.name.toLowerCase() === 'cook') {
+            candidate = await Candidate.findOne({ phone: user.phone });
+            
+            const candidateData = {
+                name: user.name,
+                email: user.email,
+                phone: user.phone,
+                dob: dob ? new Date(dob) : undefined,
+                gender: gender || undefined,
+                languages: parseJsonField(languages),
+                maritalStatus: maritalStatus || undefined,
+                state: state || undefined,
+                city: city || undefined,
+                address: address || undefined,
+                profileImage: user.profilePic,
+                jobPreference: {
+                    jobCategory: parseJsonField(jobCategory) || [],
+                    jobType: parseJsonField(jobType) || [],
+                    jobPositions: parseJsonField(jobPositions) || [],
+                    preferredCities: parseJsonField(preferredCities) || [],
+                    experience: {
+                        value: experienceValue || '0',
+                        unit: experienceUnit || 'years'
+                    },
+                    currentSalary: currentSalary || undefined,
+                    expectedSalary: expectedSalary || undefined
+                },
+                createdBy: user._id,
+                creatorModel: 'User'
+            };
+
+            if (!candidate) {
+                candidate = await Candidate.create(candidateData);
+            } else {
+                candidate = await Candidate.findByIdAndUpdate(candidate._id, candidateData, { new: true });
+            }
+        }
+
+        // Get fully updated user object
+        const updatedUser = await User.findById(userId).populate('role');
+
+        const responseData = {
+            success: true,
+            message: 'Profile updated successfully',
+            user: {
+                _id: updatedUser._id,
+                name: updatedUser.name,
+                email: updatedUser.email,
+                phone: updatedUser.phone,
+                profilePic: updatedUser.profilePic,
+                role: updatedUser.role,
+                propertyCategory: updatedUser.propertyCategory,
+                address: updatedUser.address,
+                status: updatedUser.status,
+                fcmToken: updatedUser.fcmToken
+            }
+        };
+
+        if (candidate) {
+            responseData.candidate = candidate;
+        }
+
+        res.status(200).json(responseData);
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }

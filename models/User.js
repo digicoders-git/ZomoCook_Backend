@@ -32,6 +32,14 @@ const userSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Role'
     },
+    propertyCategory: {
+        type: String,
+        enum: ['Individual', 'Hotel/Restaurant', 'individual', 'hotel/restaurant']
+    },
+    address: {
+        type: String,
+        trim: true
+    },
     jobActions: {
         type: String,
         trim: true
