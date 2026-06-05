@@ -1,5 +1,6 @@
 const User = require('../models/User');
 const Otp = require('../models/Otp');
+const Role = require('../models/Role');
 const jwt = require('jsonwebtoken');
 
 // Generate JWT
@@ -154,9 +155,18 @@ exports.sendOtp = async (req, res) => {
  */
 exports.verifyOtp = async (req, res) => {
     try {
-        const { phone, otp, fcmToken } = req.body;
+        const { phone, otp, fcmToken, role: requestedRole } = req.body;
         if (!phone || !otp) {
             return res.status(400).json({ success: false, message: 'Please provide phone and OTP' });
+        }
+
+        // Default role to 'User' if not provided
+        const roleName = requestedRole || 'User';
+
+        // Find or create the Role document
+        let roleDoc = await Role.findOne({ name: { $regex: new RegExp(`^${roleName}$`, 'i') } });
+        if (!roleDoc) {
+            roleDoc = await Role.create({ name: roleName });
         }
 
         // Find the latest OTP record
@@ -175,20 +185,46 @@ exports.verifyOtp = async (req, res) => {
         if (!user) {
             isNewUser = true;
             // First time user, register
+            const defaultName = roleDoc.name.toLowerCase() === 'cook' 
+                ? `Cook_${phone.slice(-4)}` 
+                : `User_${phone.slice(-4)}`;
+
             const userData = {
                 phone,
-                name: `User_${phone.slice(-4)}`, // Default name with last 4 digits
-                status: 'Active'
+                name: defaultName,
+                status: 'Active',
+                role: roleDoc._id
             };
             if (fcmToken) {
                 userData.fcmToken = fcmToken;
             }
             user = await User.create(userData);
+            // Populate role for response consistency
+            user = await User.findById(user._id).populate('role');
         } else {
-            // Existing user, update fcmToken if provided
-            if (fcmToken) {
-                user.fcmToken = fcmToken;
+            // Existing user
+            // If user has no role assigned, assign the requested role
+            if (!user.role) {
+                user.role = roleDoc._id;
+                if (fcmToken) {
+                    user.fcmToken = fcmToken;
+                }
                 await user.save();
+                user = await User.findById(user._id).populate('role');
+            } else {
+                // If user has a role, verify that it matches the requested role (case-insensitive check)
+                if (user.role.name.toLowerCase() !== roleDoc.name.toLowerCase()) {
+                    return res.status(400).json({
+                        success: false,
+                        message: `This phone number is already registered as a ${user.role.name}.`
+                    });
+                }
+                
+                // Existing user, same role - update fcmToken if provided
+                if (fcmToken) {
+                    user.fcmToken = fcmToken;
+                    await user.save();
+                }
             }
         }
 
