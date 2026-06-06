@@ -265,4 +265,116 @@ Allows a logged-in user to complete or update their profile details.
     }
     ```
 
+---
+
+## 4. Get User Profile (By Token)
+Retrieves the profile data of the currently logged-in user. If the user's role is "Cook", it also automatically fetches the corresponding candidate profile (basic info, job preferences, etc.) and returns it in the response.
+
+*   **URL:** `/profile`
+*   **Method:** `GET`
+*   **Headers:** `Authorization: Bearer <token>`
+*   **Access:** Private (Requires valid JWT token)
+
+### Success Response (200 OK) - User Role:
+```json
+{
+  "success": true,
+  "user": {
+    "_id": "65c3b9b4f...",
+    "name": "Amit Kumar",
+    "email": "amit@example.com",
+    "phone": "9876543210",
+    "profilePic": "uploads/user-1717582522000.jpg",
+    "role": {
+      "_id": "65c3b99ef...",
+      "name": "User",
+      "status": "active"
+    },
+    "propertyCategory": "Hotel/Restaurant",
+    "outletName": "Grand Palace Hotel",
+    "address": "123, Ring Road, Lucknow",
+    "status": "Active",
+    "fcmToken": "fcm_token_here",
+    "createdAt": "2026-06-05T07:15:00.000Z",
+    "updatedAt": "2026-06-05T07:26:00.000Z"
+  }
+}
+```
+
+### Success Response (200 OK) - Cook Role:
+```json
+{
+  "success": true,
+  "user": {
+    "_id": "65c3b9b4f...",
+    "name": "Amit Kumar",
+    "email": "amit@example.com",
+    "phone": "9876543210",
+    "profilePic": "uploads/user-1717582522000.jpg",
+    "role": {
+      "_id": "65c3b99ef...",
+      "name": "Cook",
+      "status": "active"
+    },
+    "address": "123, Ring Road, Lucknow",
+    "status": "Active",
+    "fcmToken": "fcm_token_here",
+    "createdAt": "2026-06-05T07:15:00.000Z",
+    "updatedAt": "2026-06-05T07:26:00.000Z"
+  },
+  "candidate": {
+    "_id": "65c3b9c7f...",
+    "name": "Amit Kumar",
+    "email": "amit@example.com",
+    "phone": "9876543210",
+    "dob": "1995-10-15T00:00:00.000Z",
+    "gender": "male",
+    "languages": ["Hindi", "English"],
+    "maritalStatus": "single",
+    "state": "Uttar Pradesh",
+    "city": "Lucknow",
+    "address": "123, Ring Road, Lucknow",
+    "profileImage": "uploads/user-1717582522000.jpg",
+    "kycStatus": "pending",
+    "profileStatus": "active",
+    "jobPreference": {
+      "jobCategory": ["hotel", "home"],
+      "jobType": ["full-time", "live-in"],
+      "jobPositions": ["Head Chef"],
+      "preferredCities": ["Lucknow"],
+      "experience": {
+        "value": "3",
+        "unit": "years"
+      },
+      "currentSalary": "25000",
+      "expectedSalary": "35000"
+    },
+    "createdBy": "65c3b9b4f...",
+    "creatorModel": "User",
+    "applications": [],
+    "createdAt": "2026-06-05T07:26:00.000Z",
+    "updatedAt": "2026-06-05T07:26:00.000Z"
+  }
+}
+```
+
+### Error Responses:
+
+*   **Token Not Provided / Invalid (401 Unauthorized):**
+    ```json
+    {
+      "success": false,
+      "message": "No token provided" // or "Invalid token"
+    }
+    ```
+
+*   **User Not Found (404 Not Found):**
+    ```json
+    {
+      "success": false,
+      "message": "User not found"
+    }
+    ```
+
+
 

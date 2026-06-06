@@ -384,3 +384,51 @@ exports.updateProfile = async (req, res) => {
     }
 };
 
+/**
+ * @desc    Get current logged-in user profile
+ * @route   GET /api/admin/users/profile
+ * @access  Private
+ */
+exports.getProfile = async (req, res) => {
+    try {
+        const userId = req.admin._id;
+        const user = await User.findById(userId).populate('role');
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'User not found' });
+        }
+
+        let candidate = null;
+        if (user.role && user.role.name && user.role.name.toLowerCase() === 'cook') {
+            candidate = await Candidate.findOne({ phone: user.phone });
+        }
+
+        const responseData = {
+            success: true,
+            user: {
+                _id: user._id,
+                name: user.name,
+                email: user.email,
+                phone: user.phone,
+                profilePic: user.profilePic,
+                role: user.role,
+                propertyCategory: user.propertyCategory,
+                address: user.address,
+                outletName: user.outletName,
+                status: user.status,
+                fcmToken: user.fcmToken,
+                createdAt: user.createdAt,
+                updatedAt: user.updatedAt
+            }
+        };
+
+        if (candidate) {
+            responseData.candidate = candidate;
+        }
+
+        res.status(200).json(responseData);
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+

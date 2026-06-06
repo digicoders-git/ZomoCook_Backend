@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const path = require('path');
-const { getUsers, createUser, updateUser, deleteUser, getUserById, sendOtp, verifyOtp, updateProfile } = require('../controllers/userController');
+const { getUsers, createUser, updateUser, deleteUser, getUserById, sendOtp, verifyOtp, updateProfile, getProfile } = require('../controllers/userController');
 const { protect } = require('../middleware/authMiddleware');
 
 // Multer storage configuration
@@ -23,6 +23,7 @@ router.post('/verify-otp', verifyOtp);
 
 router.use(protect);
 
+router.get('/profile', getProfile);
 router.put('/profile', upload.single('profilePic'), updateProfile);
 
 router.route('/')
