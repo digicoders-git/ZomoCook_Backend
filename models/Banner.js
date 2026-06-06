@@ -1,0 +1,29 @@
+const mongoose = require('mongoose');
+
+const bannerSchema = new mongoose.Schema({
+  title: {
+    type: String,
+    trim: true
+  },
+  image: {
+    type: String,
+    required: [true, 'Please upload a banner image']
+  },
+  link: {
+    type: String,
+    trim: true
+  },
+  status: {
+    type: String,
+    enum: ['active', 'inactive'],
+    default: 'active'
+  },
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Admin'
+  }
+}, {
+  timestamps: true
+});
+
+module.exports = mongoose.model('Banner', bannerSchema);

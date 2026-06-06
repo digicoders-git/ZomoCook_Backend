@@ -1208,3 +1208,121 @@ Defines cities linked to states.
       ]
     }
     ```
+
+---
+
+## 13. Banner Management APIs
+
+### Create New Banner
+*   **URL:** `/api/banners`
+*   **Method:** `POST`
+*   **Headers:** `Authorization: Bearer <token>`, `Content-Type: multipart/form-data`
+*   **Request Body (form-data):**
+    *   `title`: String (Optional) - Title of the banner (e.g. "Special Discount Offer")
+    *   `link`: String (Optional) - Target URL link when the banner is clicked
+    *   `status`: String - "active" | "inactive" (Default: "active")
+    *   `image`: [File Binary] (Required) - Banner image file
+*   **Success Response (201 Created):**
+    ```json
+    {
+      "success": true,
+      "message": "Banner created successfully",
+      "banner": {
+        "_id": "65c3b9b4f...",
+        "title": "Special Discount Offer",
+        "image": "uploads/banner-1717582522000.jpg",
+        "link": "https://example.com/promo",
+        "status": "active",
+        "createdBy": "65c3b99ef...",
+        "createdAt": "2026-06-05T07:15:00.000Z",
+        "updatedAt": "2026-06-05T07:15:00.000Z"
+      }
+    }
+    ```
+
+### Get All Banners List
+*   **URL:** `/api/banners`
+*   **Method:** `GET`
+*   **Headers:** None (Public Access)
+*   **Query Parameters:** `status` (Optional, e.g., `?status=active`)
+*   **Success Response (200 OK):**
+    ```json
+    {
+      "success": true,
+      "count": 1,
+      "banners": [
+        {
+          "_id": "65c3b9b4f...",
+          "title": "Special Discount Offer",
+          "image": "uploads/banner-1717582522000.jpg",
+          "link": "https://example.com/promo",
+          "status": "active",
+          "createdBy": "65c3b99ef...",
+          "createdAt": "2026-06-05T07:15:00.000Z",
+          "updatedAt": "2026-06-05T07:15:00.000Z"
+        }
+      ]
+    }
+    ```
+
+### Get Single Banner
+*   **URL:** `/api/banners/:id`
+*   **Method:** `GET`
+*   **Headers:** None (Public Access)
+*   **Success Response (200 OK):**
+    ```json
+    {
+      "success": true,
+      "banner": {
+        "_id": "65c3b9b4f...",
+        "title": "Special Discount Offer",
+        "image": "uploads/banner-1717582522000.jpg",
+        "link": "https://example.com/promo",
+        "status": "active",
+        "createdBy": "65c3b99ef...",
+        "createdAt": "2026-06-05T07:15:00.000Z",
+        "updatedAt": "2026-06-05T07:15:00.000Z"
+      }
+    }
+    ```
+
+### Update Banner
+*   **URL:** `/api/banners/:id`
+*   **Method:** `PUT`
+*   **Headers:** `Authorization: Bearer <token>`, `Content-Type: multipart/form-data`
+*   **Request Body (form-data):**
+    *   `title`: String (Optional)
+    *   `link`: String (Optional)
+    *   `status`: String - "active" | "inactive"
+    *   `image`: [File Binary] (Optional, new upload to replace old image)
+*   **Success Response (200 OK):**
+    ```json
+    {
+      "success": true,
+      "message": "Banner updated successfully",
+      "banner": {
+        "_id": "65c3b9b4f...",
+        "title": "Updated Offer Title",
+        "image": "uploads/banner-1717582999000.jpg",
+        "link": "https://example.com/new-promo",
+        "status": "active",
+        "createdBy": "65c3b99ef...",
+        "createdAt": "2026-06-05T07:15:00.000Z",
+        "updatedAt": "2026-06-05T07:20:00.000Z"
+      }
+    }
+    ```
+
+### Delete Banner
+*   **URL:** `/api/banners/:id`
+*   **Method:** `DELETE`
+*   **Headers:** `Authorization: Bearer <token>`
+*   **Description:** Deletes the banner from the database and removes its uploaded image file from the disk.
+*   **Success Response (200 OK):**
+    ```json
+    {
+      "success": true,
+      "message": "Banner deleted successfully"
+    }
+    ```
+
