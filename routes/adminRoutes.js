@@ -24,7 +24,7 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 // Protected Routes (only authenticated admins can register new admins)
-router.post('/register', protect, registerAdmin);
+router.post('/register', registerAdmin);
 router.post('/login', loginAdmin);
 
 // Protected Routes

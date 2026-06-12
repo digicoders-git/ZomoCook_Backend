@@ -1,0 +1,1236 @@
+{
+  "info": {
+    "name": "ZomoCook API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:5001", "type": "string" },
+    { "key": "token", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "Register Admin",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}/api/admin/register",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "register"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Super Admin\",\n  \"email\": \"admin@zomocook.com\",\n  \"phone\": \"9876543210\",\n  \"password\": \"Admin@123\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Login Admin",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}/api/admin/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "login"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@zomocook.com\",\n  \"password\": \"Admin@123\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Get Admin Profile",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/admin/profile",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "profile"]
+            }
+          }
+        },
+        {
+          "name": "Update Admin Profile",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/admin/profile",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "profile"]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "name", "value": "Super Admin", "type": "text" },
+                { "key": "email", "value": "admin@zomocook.com", "type": "text" },
+                { "key": "phone", "value": "9876543210", "type": "text" },
+                { "key": "profilePic", "type": "file", "src": [] }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Change Admin Password",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/change-password",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "change-password"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"Admin@123\",\n  \"newPassword\": \"NewAdmin@456\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users (Staff)",
+      "item": [
+        {
+          "name": "Send OTP",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}/api/admin/users/send-otp",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "users", "send-otp"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"9876543210\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Verify OTP (Login/Register)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}/api/admin/users/verify-otp",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "users", "verify-otp"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"9876543210\",\n  \"otp\": \"123456\",\n  \"role\": \"Cook\",\n  \"fcmToken\": \"optional_fcm_token\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Get All Users",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/admin/users",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "users"]
+            }
+          }
+        },
+        {
+          "name": "Get User By ID",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/admin/users/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "users", ":id"],
+              "variable": [{ "key": "id", "value": "<user_id>" }]
+            }
+          }
+        },
+        {
+          "name": "Get My Profile",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/admin/users/profile",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "users", "profile"]
+            }
+          }
+        },
+        {
+          "name": "Update My Profile",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/admin/users/profile",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "users", "profile"]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "name", "value": "John Doe", "type": "text" },
+                { "key": "email", "value": "john@example.com", "type": "text" },
+                { "key": "propertyCategory", "value": "Individual", "type": "text", "description": "Individual | Hotel/Restaurant" },
+                { "key": "address", "value": "123 Main Street, Lucknow", "type": "text" },
+                { "key": "outletName", "value": "My Outlet", "type": "text" },
+                { "key": "dob", "value": "1995-06-15", "type": "text", "description": "For Cook role" },
+                { "key": "gender", "value": "male", "type": "text", "description": "male | female | other" },
+                { "key": "maritalStatus", "value": "single", "type": "text", "description": "single | married" },
+                { "key": "state", "value": "Uttar Pradesh", "type": "text" },
+                { "key": "city", "value": "Lucknow", "type": "text" },
+                { "key": "languages", "value": "[\"Hindi\",\"English\"]", "type": "text", "description": "JSON array string" },
+                { "key": "jobCategory", "value": "[\"hotel\",\"home\"]", "type": "text", "description": "JSON array: hotel | home | daily" },
+                { "key": "jobType", "value": "[\"full-time\"]", "type": "text", "description": "JSON array: full-time | part-time | live-in" },
+                { "key": "jobPositions", "value": "[\"Head Cook\"]", "type": "text", "description": "JSON array" },
+                { "key": "preferredCities", "value": "[\"Lucknow\",\"Delhi\"]", "type": "text", "description": "JSON array" },
+                { "key": "experienceValue", "value": "3", "type": "text" },
+                { "key": "experienceUnit", "value": "years", "type": "text", "description": "years | months" },
+                { "key": "currentSalary", "value": "15000", "type": "text" },
+                { "key": "expectedSalary", "value": "20000", "type": "text" },
+                { "key": "profilePic", "type": "file", "src": [] }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/admin/users/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "users", ":id"],
+              "variable": [{ "key": "id", "value": "<user_id>" }]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "name", "value": "Updated Name", "type": "text" },
+                { "key": "email", "value": "updated@example.com", "type": "text" },
+                { "key": "phone", "value": "9876543210", "type": "text" },
+                { "key": "password", "value": "NewPass@123", "type": "text", "description": "Optional" },
+                { "key": "role", "value": "<role_id>", "type": "text" },
+                { "key": "status", "value": "Active", "type": "text", "description": "Active | Inactive | Cancelled | Expired" },
+                { "key": "jobActions", "value": "all", "type": "text" },
+                { "key": "profilePic", "type": "file", "src": [] }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/admin/users/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "users", ":id"],
+              "variable": [{ "key": "id", "value": "<user_id>" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Customers",
+      "item": [
+        {
+          "name": "Get All Customers",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/customers",
+              "host": ["{{base_url}}"],
+              "path": ["api", "customers"]
+            }
+          }
+        },
+        {
+          "name": "Create Customer",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/customers",
+              "host": ["{{base_url}}"],
+              "path": ["api", "customers"]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "name", "value": "Taj Hotel", "type": "text" },
+                { "key": "propertyCategory", "value": "Hotel/Restaurant", "type": "text", "description": "Individual | Hotel/Restaurant" },
+                { "key": "email", "value": "tajhotel@example.com", "type": "text" },
+                { "key": "password", "value": "Customer@123", "type": "text" },
+                { "key": "contactName", "value": "Ramesh Kumar", "type": "text" },
+                { "key": "contactPhone", "value": "9876543210", "type": "text" },
+                { "key": "contactAddress", "value": "MG Road, Lucknow, UP", "type": "text" },
+                { "key": "customerStatus", "value": "running", "type": "text", "description": "running | closed" },
+                { "key": "accountStatus", "value": "active", "type": "text", "description": "active | inactive" },
+                { "key": "profilePic", "type": "file", "src": [] }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Customer By ID",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/customers/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "customers", ":id"],
+              "variable": [{ "key": "id", "value": "<customer_id>" }]
+            }
+          }
+        },
+        {
+          "name": "Update Customer",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/customers/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "customers", ":id"],
+              "variable": [{ "key": "id", "value": "<customer_id>" }]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "name", "value": "Taj Hotel Updated", "type": "text" },
+                { "key": "propertyCategory", "value": "Hotel/Restaurant", "type": "text" },
+                { "key": "contactName", "value": "Suresh Kumar", "type": "text" },
+                { "key": "contactPhone", "value": "9876543211", "type": "text" },
+                { "key": "contactAddress", "value": "New Address, Lucknow", "type": "text" },
+                { "key": "customerStatus", "value": "running", "type": "text" },
+                { "key": "accountStatus", "value": "active", "type": "text" },
+                { "key": "profilePic", "type": "file", "src": [] }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Customer",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/customers/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "customers", ":id"],
+              "variable": [{ "key": "id", "value": "<customer_id>" }]
+            }
+          }
+        },
+        {
+          "name": "Toggle Customer Account Status",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/customers/:id/status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "customers", ":id", "status"],
+              "variable": [{ "key": "id", "value": "<customer_id>" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Jobs",
+      "item": [
+        {
+          "name": "Get All Jobs",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/jobs",
+              "host": ["{{base_url}}"],
+              "path": ["api", "jobs"],
+              "query": [
+                { "key": "jobCategory", "value": "hotel", "disabled": true, "description": "hotel | home | daily" },
+                { "key": "city", "value": "Lucknow", "disabled": true },
+                { "key": "status", "value": "Active", "disabled": true },
+                { "key": "isActive", "value": "true", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Job",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/jobs",
+              "host": ["{{base_url}}"],
+              "path": ["api", "jobs"]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "title", "value": "Head Cook", "type": "text" },
+                { "key": "jobCategory", "value": "hotel", "type": "text", "description": "hotel | home | daily" },
+                { "key": "overview", "value": "We are looking for an experienced head cook for our restaurant.", "type": "text" },
+                { "key": "responsibilities", "value": "Prepare meals, manage kitchen staff, plan menus.", "type": "text" },
+                { "key": "requirements", "value": "Minimum 3 years experience, food safety certification.", "type": "text" },
+                { "key": "benefits", "value": "PF, ESI, Weekly off", "type": "text" },
+                { "key": "customer", "value": "<customer_id>", "type": "text" },
+                { "key": "propertyCategory", "value": "Hotel/Restaurant", "type": "text" },
+                { "key": "state", "value": "Uttar Pradesh", "type": "text" },
+                { "key": "city", "value": "Lucknow", "type": "text" },
+                { "key": "jobType", "value": "Full Time", "type": "text" },
+                { "key": "jobPosition", "value": "Head Cook", "type": "text" },
+                { "key": "salaryRange", "value": "15000-20000", "type": "text" },
+                { "key": "experienceRange", "value": "2-5 years", "type": "text" },
+                { "key": "allowedLeave", "value": "2 days/week", "type": "text" },
+                { "key": "joiningType", "value": "Immediate", "type": "text" },
+                { "key": "basicFacility", "value": "Accommodation, Food", "type": "text", "description": "For hotel/home" },
+                { "key": "otherFacilities", "value": "Transport", "type": "text" },
+                { "key": "foodPreference", "value": "Veg", "type": "text", "description": "For home/daily" },
+                { "key": "cookingCategory", "value": "South Indian", "type": "text", "description": "For home" },
+                { "key": "event", "value": "Wedding", "type": "text", "description": "For daily" },
+                { "key": "mealPreference", "value": "Lunch", "type": "text", "description": "For daily" },
+                { "key": "servingTime", "value": "12pm-2pm", "type": "text", "description": "For daily" },
+                { "key": "menuDetails", "value": "Dal, Rice, Sabzi, Roti", "type": "text", "description": "For daily" },
+                { "key": "package", "value": "5000", "type": "text", "description": "For daily pay" },
+                { "key": "noOfGuests", "value": "50", "type": "text" },
+                { "key": "dateOfEvent", "value": "2025-12-25", "type": "text", "description": "For daily jobs" },
+                { "key": "status", "value": "New", "type": "text", "description": "Urgent | New | Active | Inactive | Cancelled | Expired" },
+                { "key": "image", "type": "file", "src": [] }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Job By ID",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/jobs/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "jobs", ":id"],
+              "variable": [{ "key": "id", "value": "<job_id>" }]
+            }
+          }
+        },
+        {
+          "name": "Update Job",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/jobs/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "jobs", ":id"],
+              "variable": [{ "key": "id", "value": "<job_id>" }]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "title", "value": "Updated Cook", "type": "text" },
+                { "key": "overview", "value": "Updated overview", "type": "text" },
+                { "key": "salaryRange", "value": "18000-25000", "type": "text" },
+                { "key": "city", "value": "Delhi", "type": "text" },
+                { "key": "image", "type": "file", "src": [] }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Job",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/jobs/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "jobs", ":id"],
+              "variable": [{ "key": "id", "value": "<job_id>" }]
+            }
+          }
+        },
+        {
+          "name": "Toggle Job isActive",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/jobs/:id/status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "jobs", ":id", "status"],
+              "variable": [{ "key": "id", "value": "<job_id>" }]
+            }
+          }
+        },
+        {
+          "name": "Update Job Status String",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/jobs/:id/status-string",
+              "host": ["{{base_url}}"],
+              "path": ["api", "jobs", ":id", "status-string"],
+              "variable": [{ "key": "id", "value": "<job_id>" }]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"Active\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Candidates",
+      "item": [
+        {
+          "name": "Get All Candidates",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/candidates",
+              "host": ["{{base_url}}"],
+              "path": ["api", "candidates"],
+              "query": [
+                { "key": "search", "value": "Rahul", "disabled": true },
+                { "key": "city", "value": "Lucknow", "disabled": true },
+                { "key": "gender", "value": "male", "disabled": true },
+                { "key": "kycStatus", "value": "pending", "disabled": true, "description": "pending | approved | rejected" },
+                { "key": "profileStatus", "value": "active", "disabled": true, "description": "active | inactive" },
+                { "key": "jobCategory", "value": "hotel", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Candidate",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/candidates",
+              "host": ["{{base_url}}"],
+              "path": ["api", "candidates"]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "name", "value": "Rahul Sharma", "type": "text" },
+                { "key": "phone", "value": "9876543210", "type": "text" },
+                { "key": "email", "value": "rahul@example.com", "type": "text" },
+                { "key": "altPhone", "value": "9876543211", "type": "text" },
+                { "key": "dob", "value": "1995-05-15", "type": "text" },
+                { "key": "age", "value": "29", "type": "text" },
+                { "key": "gender", "value": "male", "type": "text", "description": "male | female | other" },
+                { "key": "maritalStatus", "value": "single", "type": "text", "description": "single | married" },
+                { "key": "state", "value": "Uttar Pradesh", "type": "text" },
+                { "key": "city", "value": "Lucknow", "type": "text" },
+                { "key": "address", "value": "123 Main Street, Lucknow", "type": "text" },
+                { "key": "languages", "value": "[\"Hindi\",\"English\"]", "type": "text", "description": "JSON array string" },
+                { "key": "kycStatus", "value": "pending", "type": "text", "description": "pending | approved | rejected" },
+                { "key": "profileStatus", "value": "active", "type": "text", "description": "active | inactive" },
+                { "key": "idProofType", "value": "Aadhar", "type": "text" },
+                { "key": "jobPreference", "value": "{\"jobCategory\":[\"hotel\",\"home\"],\"jobType\":[\"full-time\"],\"experience\":{\"value\":\"3\",\"unit\":\"years\"},\"currentSalary\":\"15000\",\"expectedSalary\":\"20000\",\"preferredCities\":[\"Lucknow\",\"Delhi\"],\"jobPositions\":[\"Head Cook\"]}", "type": "text", "description": "JSON string" },
+                { "key": "cookingSkills", "value": "{\"indian\":true,\"chinese\":false,\"continental\":true}", "type": "text", "description": "JSON string" },
+                { "key": "workExperience", "value": "{\"lastCompany\":{\"name\":\"Hotel XYZ\",\"workplaceType\":\"hotel\",\"role\":\"Cook\",\"duration\":\"2 years\",\"experienceType\":\"full-time\",\"reasonForLeaving\":\"Better opportunity\"},\"experiences\":[]}", "type": "text", "description": "JSON string" },
+                { "key": "education", "value": "[{\"title\":\"10th\",\"from\":\"2008\",\"to\":\"2010\",\"shortDetail\":\"CBSE Board\"}]", "type": "text", "description": "JSON array string" },
+                { "key": "careerHighlights", "value": "{\"aboutMe\":\"Experienced cook\",\"highlights\":[\"5 star hotel experience\"],\"whyChooseMe\":[\"Punctual\",\"Honest\"]}", "type": "text", "description": "JSON string" },
+                { "key": "socialMedia", "value": "[{\"platform\":\"instagram\",\"url\":\"https://instagram.com/rahul\"}]", "type": "text", "description": "JSON array string" },
+                { "key": "image", "type": "file", "src": [] },
+                { "key": "cv", "type": "file", "src": [] },
+                { "key": "idProof", "type": "file", "src": [] },
+                { "key": "addressProof", "type": "file", "src": [] },
+                { "key": "policeVerification", "type": "file", "src": [] },
+                { "key": "academicCertificate", "type": "file", "src": [] },
+                { "key": "experienceCertificate", "type": "file", "src": [] },
+                { "key": "gallery", "type": "file", "src": [] }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Applications",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/candidates/applications",
+              "host": ["{{base_url}}"],
+              "path": ["api", "candidates", "applications"],
+              "query": [
+                { "key": "status", "value": "Applied", "disabled": true, "description": "Applied | Shortlisted | Demo Scheduled | Reschedule Requested | Hired | Rejected | On Hold | Not Interested" },
+                { "key": "jobId", "value": "<job_id>", "disabled": true },
+                { "key": "search", "value": "Rahul", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Candidate By ID",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/candidates/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "candidates", ":id"],
+              "variable": [{ "key": "id", "value": "<candidate_id>" }]
+            }
+          }
+        },
+        {
+          "name": "Update Candidate",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/candidates/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "candidates", ":id"],
+              "variable": [{ "key": "id", "value": "<candidate_id>" }]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "name", "value": "Rahul Sharma Updated", "type": "text" },
+                { "key": "city", "value": "Delhi", "type": "text" },
+                { "key": "jobPreference", "value": "{\"jobCategory\":[\"hotel\"],\"jobType\":[\"full-time\"],\"experience\":{\"value\":\"4\",\"unit\":\"years\"},\"expectedSalary\":\"25000\"}", "type": "text" },
+                { "key": "image", "type": "file", "src": [] }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Candidate",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/candidates/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "candidates", ":id"],
+              "variable": [{ "key": "id", "value": "<candidate_id>" }]
+            }
+          }
+        },
+        {
+          "name": "Toggle Candidate KYC Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/candidates/:id/status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "candidates", ":id", "status"],
+              "variable": [{ "key": "id", "value": "<candidate_id>" }]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"kyc\",\n  \"value\": \"approved\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Toggle Candidate Profile Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/candidates/:id/status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "candidates", ":id", "status"],
+              "variable": [{ "key": "id", "value": "<candidate_id>" }]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"profile\",\n  \"value\": \"inactive\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Banners",
+      "item": [
+        {
+          "name": "Get All Banners",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/banners",
+              "host": ["{{base_url}}"],
+              "path": ["api", "banners"]
+            }
+          }
+        },
+        {
+          "name": "Create Banner",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/banners",
+              "host": ["{{base_url}}"],
+              "path": ["api", "banners"]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "title", "value": "Summer Offer", "type": "text" },
+                { "key": "link", "value": "https://zomocook.com/offer", "type": "text" },
+                { "key": "status", "value": "active", "type": "text", "description": "active | inactive" },
+                { "key": "image", "type": "file", "src": [] }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Banner By ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/banners/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "banners", ":id"],
+              "variable": [{ "key": "id", "value": "<banner_id>" }]
+            }
+          }
+        },
+        {
+          "name": "Update Banner",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/banners/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "banners", ":id"],
+              "variable": [{ "key": "id", "value": "<banner_id>" }]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "title", "value": "Updated Banner Title", "type": "text" },
+                { "key": "link", "value": "https://zomocook.com/new-offer", "type": "text" },
+                { "key": "status", "value": "active", "type": "text" },
+                { "key": "image", "type": "file", "src": [] }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Banner",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/banners/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "banners", ":id"],
+              "variable": [{ "key": "id", "value": "<banner_id>" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "item": [
+        {
+          "name": "Get All Notifications",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/notifications",
+              "host": ["{{base_url}}"],
+              "path": ["api", "notifications"]
+            }
+          }
+        },
+        {
+          "name": "Create Notification",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/notifications",
+              "host": ["{{base_url}}"],
+              "path": ["api", "notifications"]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "title", "value": "New Job Available!", "type": "text" },
+                { "key": "message", "value": "A new Head Cook job is available in Lucknow. Apply now!", "type": "text" },
+                { "key": "target", "value": "all", "type": "text", "description": "all | candidates | customers" },
+                { "key": "status", "value": "active", "type": "text", "description": "active | inactive" },
+                { "key": "image", "type": "file", "src": [] }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Save FCM Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/notifications/save-token",
+              "host": ["{{base_url}}"],
+              "path": ["api", "notifications", "save-token"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fcmToken\": \"your_device_fcm_token_here\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Get Notification By ID",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/notifications/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "notifications", ":id"],
+              "variable": [{ "key": "id", "value": "<notification_id>" }]
+            }
+          }
+        },
+        {
+          "name": "Toggle Notification Status",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/notifications/:id/status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "notifications", ":id", "status"],
+              "variable": [{ "key": "id", "value": "<notification_id>" }]
+            }
+          }
+        },
+        {
+          "name": "Delete Notification",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/notifications/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "notifications", ":id"],
+              "variable": [{ "key": "id", "value": "<notification_id>" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Masters",
+      "item": [
+        {
+          "name": "Get Masters - sliders (Public)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/masters/sliders",
+              "host": ["{{base_url}}"],
+              "path": ["api", "masters", "sliders"]
+            }
+          }
+        },
+        {
+          "name": "Get Masters - videos (Public)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/masters/videos",
+              "host": ["{{base_url}}"],
+              "path": ["api", "masters", "videos"]
+            }
+          }
+        },
+        {
+          "name": "Get Masters - cms (Public)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/masters/cms",
+              "host": ["{{base_url}}"],
+              "path": ["api", "masters", "cms"]
+            }
+          }
+        },
+        {
+          "name": "Get Masters - states (Public)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/masters/states",
+              "host": ["{{base_url}}"],
+              "path": ["api", "masters", "states"]
+            }
+          }
+        },
+        {
+          "name": "Get Masters - cities (Public)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/masters/cities",
+              "host": ["{{base_url}}"],
+              "path": ["api", "masters", "cities"],
+              "query": [
+                { "key": "parentId", "value": "<state_master_id>", "disabled": true, "description": "Filter cities by state" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Masters by Category (Protected)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/masters/:category",
+              "host": ["{{base_url}}"],
+              "path": ["api", "masters", ":category"],
+              "variable": [{ "key": "category", "value": "jobPositions", "description": "Any custom category" }],
+              "query": [
+                { "key": "search", "value": "Cook", "disabled": true },
+                { "key": "parentId", "value": "<parent_id>", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Master",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/masters/:category",
+              "host": ["{{base_url}}"],
+              "path": ["api", "masters", ":category"],
+              "variable": [{ "key": "category", "value": "states" }]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "name", "value": "Uttar Pradesh", "type": "text" },
+                { "key": "value", "value": "UP", "type": "text", "description": "Optional: color code, abbreviation etc." },
+                { "key": "parentId", "value": "", "type": "text", "description": "Optional: parent master ID (e.g. state ID for city)" },
+                { "key": "status", "value": "active", "type": "text", "description": "active | inactive" },
+                { "key": "from", "value": "0", "type": "text", "description": "Optional: for range masters" },
+                { "key": "to", "value": "100", "type": "text", "description": "Optional: for range masters" },
+                { "key": "heading", "value": "Slide Heading", "type": "text", "description": "For CMS/sliders" },
+                { "key": "content", "value": "Slide content text", "type": "text", "description": "For CMS" },
+                { "key": "link", "value": "https://zomocook.com", "type": "text", "description": "For sliders/videos" },
+                { "key": "image", "type": "file", "src": [], "description": "For sliders/videos/cms" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Master",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/masters/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "masters", ":id"],
+              "variable": [{ "key": "id", "value": "<master_id>" }]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "name", "value": "Updated Name", "type": "text" },
+                { "key": "value", "value": "Updated Value", "type": "text" },
+                { "key": "status", "value": "active", "type": "text" },
+                { "key": "image", "type": "file", "src": [] }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete Master",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/masters/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "masters", ":id"],
+              "variable": [{ "key": "id", "value": "<master_id>" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Queries",
+      "item": [
+        {
+          "name": "Get All Queries",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/queries",
+              "host": ["{{base_url}}"],
+              "path": ["api", "queries"]
+            }
+          }
+        },
+        {
+          "name": "Create Query (Public)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}/api/queries",
+              "host": ["{{base_url}}"],
+              "path": ["api", "queries"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john@example.com\",\n  \"phone\": \"9876543210\",\n  \"message\": \"I am looking for a cook for my hotel. Please contact me.\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Delete Query",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/queries/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "queries", ":id"],
+              "variable": [{ "key": "id", "value": "<query_id>" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Roles",
+      "item": [
+        {
+          "name": "Get All Roles",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/roles",
+              "host": ["{{base_url}}"],
+              "path": ["api", "roles"]
+            }
+          }
+        },
+        {
+          "name": "Create Role",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/roles",
+              "host": ["{{base_url}}"],
+              "path": ["api", "roles"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Manager\",\n  \"permissions\": [\"dashboard\", \"customers\", \"jobs\", \"candidates\"],\n  \"status\": \"active\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Get Role By ID",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/roles/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "roles", ":id"],
+              "variable": [{ "key": "id", "value": "<role_id>" }]
+            }
+          }
+        },
+        {
+          "name": "Update Role",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/roles/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "roles", ":id"],
+              "variable": [{ "key": "id", "value": "<role_id>" }]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Senior Manager\",\n  \"permissions\": [\"dashboard\", \"customers\", \"jobs\", \"candidates\", \"notifications\"],\n  \"status\": \"active\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Delete Role",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/roles/:id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "roles", ":id"],
+              "variable": [{ "key": "id", "value": "<role_id>" }]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Web Settings",
+      "item": [
+        {
+          "name": "Get Web Settings",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/settings",
+              "host": ["{{base_url}}"],
+              "path": ["api", "settings"]
+            }
+          }
+        },
+        {
+          "name": "Update Web Settings",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/settings",
+              "host": ["{{base_url}}"],
+              "path": ["api", "settings"]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "siteName", "value": "ZomoCook", "type": "text" },
+                { "key": "companyEmail", "value": "info@zomocook.in", "type": "text" },
+                { "key": "contactNumber", "value": "+91 8009534847", "type": "text" },
+                { "key": "fullAddress", "value": "Duplex Technologies, Lucknow, Uttar Pradesh, India", "type": "text" },
+                { "key": "copyrightText", "value": "© 2026 ZomoCook. All Rights Reserved.", "type": "text" },
+                { "key": "googleMapScript", "value": "<iframe src='...'></iframe>", "type": "text" },
+                { "key": "facebookUrl", "value": "https://facebook.com/zomocook", "type": "text" },
+                { "key": "instagramUrl", "value": "https://instagram.com/zomocook", "type": "text" },
+                { "key": "twitterUrl", "value": "https://twitter.com/zomocook", "type": "text" },
+                { "key": "linkedinUrl", "value": "https://linkedin.com/company/zomocook", "type": "text" },
+                { "key": "youtubeUrl", "value": "https://youtube.com/zomocook", "type": "text" },
+                { "key": "importantInstruction", "value": "Please complete your KYC before applying.", "type": "text" },
+                { "key": "rescheduleMessage", "value": "Your demo has been rescheduled. Please check your profile.", "type": "text" },
+                { "key": "logo", "type": "file", "src": [] },
+                { "key": "favicon", "type": "file", "src": [] }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Dashboard",
+      "item": [
+        {
+          "name": "Get Dashboard Stats",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/dashboard",
+              "host": ["{{base_url}}"],
+              "path": ["api", "dashboard"]
+            }
+          }
+        },
+        {
+          "name": "Get Position Job Stats",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/dashboard/position-jobs",
+              "host": ["{{base_url}}"],
+              "path": ["api", "dashboard", "position-jobs"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
