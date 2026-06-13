@@ -50,6 +50,8 @@ const jobSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  latitude: Number,
+  longitude: Number,
   event: String, // For daily pay jobs
   foodPreference: String, // For home/daily
   mealPreference: String, // For daily
