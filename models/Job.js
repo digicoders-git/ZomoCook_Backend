@@ -81,6 +81,7 @@ const jobSchema = new mongoose.Schema({
   salaryRange: String,
   experienceRange: String,
   joiningType: String,
+  travelCharges: String,
   dateOfEvent: Date, // For daily pay jobs
   isActive: {
     type: Boolean,

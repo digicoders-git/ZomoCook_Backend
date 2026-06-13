@@ -48,7 +48,8 @@ const getJobs = async (req, res) => {
 
         // Role-based data isolation
         const isSuperAdmin = req.admin.constructor.modelName === 'Admin';
-        if (!isSuperAdmin) {
+        const isCook = req.admin.role && req.admin.role.name && req.admin.role.name.toLowerCase() === 'cook';
+        if (!isSuperAdmin && !isCook) {
             query.createdBy = req.admin._id;
         }
 
@@ -159,15 +160,21 @@ const toggleJobStatus = async (req, res) => {
         }
 
         const newStatus = !job.isActive;
+        const updateDoc = {
+            isActive: newStatus,
+            status: newStatus ? 'New' : 'Inactive'
+        };
+
         await Job.updateOne(
             { _id: req.params.id },
-            { $set: { isActive: newStatus } }
+            { $set: updateDoc }
         );
 
         res.status(200).json({
             success: true,
-            message: `Job status updated to ${newStatus ? 'Active' : 'Inactive'}`,
-            isActive: newStatus
+            message: `Job status updated to ${newStatus ? 'New' : 'Inactive'}`,
+            isActive: newStatus,
+            status: updateDoc.status
         });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -183,11 +190,18 @@ const updateJobStatus = async (req, res) => {
     try {
         const { status } = req.body;
         
+        const updateDoc = { status };
+        if (status === 'Active' || status === 'New' || status === 'Urgent') {
+            updateDoc.isActive = true;
+        } else if (status === 'Inactive' || status === 'Cancelled' || status === 'Expired') {
+            updateDoc.isActive = false;
+        }
+
         // Use updateOne to bypass validation for other fields (like creatorModel) 
         // that might be missing in older records.
         const result = await Job.updateOne(
             { _id: req.params.id },
-            { $set: { status } }
+            { $set: updateDoc }
         );
 
         if (result.matchedCount === 0) {
@@ -197,7 +211,8 @@ const updateJobStatus = async (req, res) => {
         res.status(200).json({
             success: true,
             message: `Job status updated to ${status}`,
-            status: status
+            status: status,
+            isActive: updateDoc.isActive
         });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
