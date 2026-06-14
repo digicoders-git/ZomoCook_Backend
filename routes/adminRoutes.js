@@ -8,6 +8,7 @@ const {
     getAdminProfile,
     updateAdminProfile,
     changeAdminPassword
+    
 } = require('../controllers/adminController');
 const { protect } = require('../middleware/authMiddleware');
 
