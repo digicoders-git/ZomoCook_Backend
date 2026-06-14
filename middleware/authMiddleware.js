@@ -38,4 +38,12 @@ const protect = async (req, res, next) => {
     }
 };
 
-module.exports = { protect };
+const admin = (req, res, next) => {
+    if (req.admin && req.admin.type === 'admin') {
+        next();
+    } else {
+        return res.status(403).json({ success: false, message: 'Admin access required' });
+    }
+};
+
+module.exports = { protect, admin };
