@@ -4,7 +4,7 @@ const { getOffers, createOffer, updateOffer, deleteOffer } = require('../control
 const { protect, admin } = require('../middleware/authMiddleware');
 
 router.route('/')
-  .get(getOffers)
+  .get(protect, getOffers)
   .post(protect, admin, createOffer);
 
 router.route('/:id')
