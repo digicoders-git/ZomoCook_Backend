@@ -31,5 +31,6 @@ router.post('/login', loginAdmin);
 router.get('/profile', protect, getAdminProfile);
 router.put('/profile', protect, upload.single('profilePic'), updateAdminProfile);
 router.put('/change-password', protect, changeAdminPassword);
+router.get('/subscriptions', protect, require('../controllers/adminSubscriptionController').getAllSubscriptions);
 
 module.exports = router;

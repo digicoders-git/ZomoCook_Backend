@@ -63,6 +63,7 @@ const verifyPayment = async (req, res) => {
             if (planId && req.admin && req.admin.constructor.modelName === 'User') {
                 const Plan = require('../models/Plan');
                 const User = require('../models/User');
+                const SubscriptionHistory = require('../models/SubscriptionHistory');
                 
                 const plan = await Plan.findById(planId);
                 const user = await User.findById(req.admin._id);
@@ -77,6 +78,19 @@ const verifyPayment = async (req, res) => {
                     user.currentHiringLimit = plan.hiringLimit;
                     user.cooksHiredInCurrentPlan = 0; // Reset
                     await user.save();
+                    
+                    // Create Subscription History Record
+                    await SubscriptionHistory.create({
+                        user: user._id,
+                        plan: plan._id,
+                        amountPaid: plan.price,
+                        startDate: new Date(),
+                        endDate: expiry,
+                        status: 'Active',
+                        razorpayOrderId: razorpay_order_id,
+                        razorpayPaymentId: razorpay_payment_id
+                    });
+
                     message = 'Payment verified and Plan activated successfully';
                 }
             }
