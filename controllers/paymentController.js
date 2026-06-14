@@ -57,9 +57,33 @@ const verifyPayment = async (req, res) => {
 
         if (isAuthentic) {
             // Payment verified successfully
+            const { planId } = req.body;
+            let message = 'Payment verified successfully';
+
+            if (planId && req.admin && req.admin.constructor.modelName === 'User') {
+                const Plan = require('../models/Plan');
+                const User = require('../models/User');
+                
+                const plan = await Plan.findById(planId);
+                const user = await User.findById(req.admin._id);
+
+                if (plan && user) {
+                    user.activePlan = plan._id;
+                    const expiry = new Date();
+                    expiry.setDate(expiry.getDate() + plan.durationDays);
+                    user.planExpiryDate = expiry;
+                    user.currentJobPostLimit = plan.jobPostLimit;
+                    user.jobsPostedInCurrentPlan = 0; // Reset
+                    user.currentHiringLimit = plan.hiringLimit;
+                    user.cooksHiredInCurrentPlan = 0; // Reset
+                    await user.save();
+                    message = 'Payment verified and Plan activated successfully';
+                }
+            }
+
             res.status(200).json({
                 success: true,
-                message: 'Payment verified successfully',
+                message: message,
             });
         } else {
             res.status(400).json({

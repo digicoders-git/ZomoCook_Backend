@@ -16,6 +16,20 @@ const createJob = async (req, res) => {
         }
         const jobCode = `ZOMO${nextNumber}`;
 
+        // Limit check for Users (Employers)
+        if (req.admin.constructor.modelName === 'User') {
+            const user = req.admin;
+            // Allow if there's no limit set yet (optional default behavior, or block them)
+            // Assuming currentJobPostLimit > 0 means they have a plan. 
+            // If they have no plan, block them.
+            if (!user.activePlan) {
+                return res.status(403).json({ success: false, message: 'Please purchase a Subscription Plan to post jobs.' });
+            }
+            if (user.jobsPostedInCurrentPlan >= user.currentJobPostLimit) {
+                return res.status(403).json({ success: false, message: 'Job posting limit reached for your current plan. Please upgrade your plan.' });
+            }
+        }
+
         const jobData = {
             ...req.body,
             jobCode,
@@ -25,6 +39,12 @@ const createJob = async (req, res) => {
         };
 
         const job = await Job.create(jobData);
+
+        if (req.admin.constructor.modelName === 'User') {
+            const user = req.admin;
+            user.jobsPostedInCurrentPlan += 1;
+            await user.save();
+        }
 
         res.status(201).json({
             success: true,

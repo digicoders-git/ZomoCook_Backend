@@ -53,7 +53,30 @@ const userSchema = new mongoose.Schema({
         enum: ['Active', 'Inactive', 'Cancelled', 'Expired', 'active', 'inactive'],
         default: 'Active'
     },
-    fcmToken: { type: String, default: null }
+    fcmToken: { type: String, default: null },
+    activePlan: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Plan'
+    },
+    planExpiryDate: {
+        type: Date
+    },
+    currentJobPostLimit: {
+        type: Number,
+        default: 0
+    },
+    jobsPostedInCurrentPlan: {
+        type: Number,
+        default: 0
+    },
+    currentHiringLimit: {
+        type: Number,
+        default: 0
+    },
+    cooksHiredInCurrentPlan: {
+        type: Number,
+        default: 0
+    }
 }, {
     timestamps: true
 });

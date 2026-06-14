@@ -48,12 +48,29 @@ const createBooking = async (req, res) => {
             return res.status(401).json({ success: false, message: "Not authorized" });
         }
 
+        const User = require('../models/User');
+        const user = await User.findById(employerId);
+        
+        if (user) {
+            if (!user.activePlan) {
+                return res.status(403).json({ success: false, message: 'Please purchase a Subscription Plan to hire staff.' });
+            }
+            if (user.cooksHiredInCurrentPlan >= user.currentHiringLimit) {
+                return res.status(403).json({ success: false, message: 'Hiring limit reached for your current plan. Please upgrade your plan.' });
+            }
+        }
+
         const bookingData = {
             ...req.body,
             employer: employerId
         };
 
         const booking = await Booking.create(bookingData);
+
+        if (user) {
+            user.cooksHiredInCurrentPlan += 1;
+            await user.save();
+        }
 
         res.status(201).json({
             success: true,
