@@ -4,11 +4,11 @@ const { getOffers, createOffer, updateOffer, deleteOffer } = require('../control
 const { protect, admin } = require('../middleware/authMiddleware');
 
 router.route('/')
-  .get(protect, getOffers)
-  .post(protect, admin, createOffer);
+  .get(getOffers)
+  .post(protect, createOffer);
 
 router.route('/:id')
-  .put(protect, admin, updateOffer)
-  .delete(protect, admin, deleteOffer);
+  .put(protect, updateOffer)
+  .delete(protect, deleteOffer);
 
 module.exports = router;
