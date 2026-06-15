@@ -24,14 +24,14 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
-// All routes are protected by admin login
+// Public routes (no auth required)
+router.post('/save-token', saveFCMToken);
+router.get('/', getNotifications);
+
+// Protected routes (admin only)
 router.use(protect);
 
-router.post('/save-token', saveFCMToken);
-
-router.route('/')
-    .get(getNotifications)
-    .post(upload.single('image'), createNotification);
+router.post('/', upload.single('image'), createNotification);
 
 router.route('/:id')
     .get(getNotification)
