@@ -21,6 +21,14 @@ const applicationSchema = new mongoose.Schema({
         enum: ['Applied', 'Shortlisted', 'Demo Scheduled', 'Reschedule Requested', 'Hired', 'Rejected', 'On Hold', 'Not Interested'],
         default: 'Applied'
     },
+    applicationData: {
+        fullName: String,
+        phone: String,
+        experience: String,
+        specialization: String,
+        noticePeriod: String,
+        additionalNotes: String
+    },
     demoDate: Date,
     demoTime: String,
     meetingLink: String,

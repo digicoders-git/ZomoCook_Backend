@@ -1,5 +1,6 @@
 const Booking = require('../models/Booking');
 const Job = require('../models/Job');
+const Candidate = require('../models/Candidate');
 
 /**
  * @desc    Create booking (when cook is hired)
@@ -53,7 +54,18 @@ const getBookings = async (req, res) => {
         // Filter based on role
         if (req.admin.role && req.admin.role.name && req.admin.role.name.toLowerCase() === 'cook') {
             // Cook viewing their bookings
-            query.cook = userId;
+            const candidate = await Candidate.findOne({
+                $or: [
+                    { _id: userId },
+                    { createdBy: userId },
+                    { phone: req.admin.phone }
+                ]
+            });
+            if (candidate) {
+                query.cook = candidate._id;
+            } else {
+                return res.status(200).json({ success: true, count: 0, bookings: [] });
+            }
         } else if (userModel === 'User') {
             // Customer viewing their bookings
             query.customer = userId;

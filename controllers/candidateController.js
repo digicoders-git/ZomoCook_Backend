@@ -1,4 +1,5 @@
 const Candidate = require('../models/Candidate');
+const Application = require('../models/Application');
 const fs = require('fs');
 const path = require('path');
 
@@ -194,59 +195,185 @@ const toggleCandidateStatus = async (req, res) => {
 const getApplications = async (req, res) => {
     try {
         const { status, jobId, search } = req.query;
-        let matchCriteria = {};
+        let query = {};
         
         // Role-based data isolation
         const isSuperAdmin = req.admin.constructor.modelName === 'Admin';
-        if (!isSuperAdmin) {
-            matchCriteria.createdBy = req.admin._id;
-        }
-
-        if (status) matchCriteria['applications.status'] = status;
-        if (jobId) matchCriteria['applications.job'] = jobId;
-
-        const pipeline = [
-            { $unwind: '$applications' },
-            { $match: matchCriteria },
-            { $lookup: { from: 'jobs', localField: 'applications.job', foreignField: '_id', as: 'jobDetails' } },
-            { $unwind: '$jobDetails' }
-        ];
-
-        if (search) {
-            pipeline.push({
-                $match: {
-                    $or: [
-                        { 'name': new RegExp(search, 'i') },
-                        { 'phone': new RegExp(search, 'i') },
-                        { 'city': new RegExp(search, 'i') },
-                        { 'jobDetails.title': new RegExp(search, 'i') }
-                    ]
-                }
+        const isCook = req.admin.role && req.admin.role.name && req.admin.role.name.toLowerCase() === 'cook';
+        const isUser = req.admin.constructor.modelName === 'User';
+        
+        if (isCook) {
+            const candidate = await Candidate.findOne({
+                $or: [
+                    { _id: req.admin._id },
+                    { createdBy: req.admin._id },
+                    { phone: req.admin.phone }
+                ]
             });
+            if (candidate) {
+                query.candidate = candidate._id;
+            } else {
+                return res.status(200).json({ success: true, count: 0, applications: [] });
+            }
+        } else if (isUser) {
+            query.customer = req.admin._id;
+        } else if (!isSuperAdmin) {
+            query.customer = req.admin._id;
         }
 
-        pipeline.push({
-            $project: { 
-                _id: '$applications._id', 
-                candidateId: '$_id', 
-                candidateName: '$name', 
-                candidatePhone: '$phone', 
-                candidateCity: '$city', 
-                profileImage: '$profileImage', 
-                candidateCV: '$cv', 
-                jobTitle: '$jobDetails.title', 
-                jobId: '$jobDetails._id', 
-                jobCategory: '$jobDetails.jobCategory', 
-                status: '$applications.status', 
-                appliedDate: '$applications.appliedDate' 
-            }
-        });
+        if (status) query.status = status;
+        if (jobId) query.job = jobId;
 
-        pipeline.push({ $sort: { appliedDate: -1 } });
+        const applications = await Application.find(query)
+            .populate('candidate')
+            .populate('job')
+            .populate('customer', 'name email phone outletName')
+            .sort({ appliedDate: -1 });
 
-        const applications = await Candidate.aggregate(pipeline);
-        res.status(200).json({ success: true, count: applications.length, applications });
+        const searchRegex = search ? new RegExp(search, 'i') : null;
+        const mappedApplications = applications
+            .filter((app) => {
+                if (!searchRegex) return true;
+                const candidate = app.candidate || {};
+                const job = app.job || {};
+                return searchRegex.test(candidate.name || '') ||
+                    searchRegex.test(candidate.phone || '') ||
+                    searchRegex.test(candidate.email || '') ||
+                    searchRegex.test(candidate.city || '') ||
+                    searchRegex.test(job.title || '');
+            })
+            .map((app) => {
+                const candidate = app.candidate || {};
+                const job = app.job || {};
+                const customer = app.customer || {};
+                return {
+                    _id: app._id,
+                    applicationId: app._id,
+                    candidateId: candidate._id,
+                    candidateName: candidate.name,
+                    candidatePhone: candidate.phone,
+                    candidateEmail: candidate.email,
+                    candidateGender: candidate.gender,
+                    candidateState: candidate.state,
+                    candidateCity: candidate.city,
+                    candidateAddress: candidate.address,
+                    preferredCities: candidate.jobPreference?.preferredCities || [],
+                    profileImage: candidate.profileImage,
+                    candidateCV: candidate.cv || candidate.documents?.resume,
+                    candidate,
+                    jobTitle: job.title,
+                    jobId: job._id,
+                    jobCategory: job.jobCategory,
+                    jobType: job.jobType,
+                    jobPosition: job.jobPosition,
+                    vacancy: job.packageOrGuestOrVacancy,
+                    joiningType: job.joiningType,
+                    salaryRange: job.salaryRange,
+                    experienceRange: job.experienceRange,
+                    jobState: job.state,
+                    jobCity: job.city,
+                    clientName: customer.outletName || customer.name,
+                    customer,
+                    job,
+                    status: app.status,
+                    demoDate: app.demoDate,
+                    demoTime: app.demoTime,
+                    meetingLink: app.meetingLink,
+                    remarks: app.remarks,
+                    rejectionReason: app.rejectionReason,
+                    joiningDate: app.joiningDate,
+                    appliedDate: app.appliedDate
+                };
+            });
+
+        res.status(200).json({ success: true, count: mappedApplications.length, applications: mappedApplications });
     } catch (error) { res.status(500).json({ success: false, message: error.message }); }
 };
 
-module.exports = { createCandidate, getCandidates, getCandidate, updateCandidate, deleteCandidate, toggleCandidateStatus, getApplications };
+const getCandidateMe = async (req, res) => {
+    try {
+        const candidate = await Candidate.findOne({
+            $or: [
+                { _id: req.admin._id },
+                { createdBy: req.admin._id },
+                { phone: req.admin.phone }
+            ]
+        }).populate('applications.job');
+        if (!candidate) return res.status(404).json({ success: false, message: 'Candidate profile not found' });
+        res.status(200).json({ success: true, candidate });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+const updateCandidateMe = async (req, res) => {
+    try {
+        const candidate = await Candidate.findOne({
+            $or: [
+                { _id: req.admin._id },
+                { createdBy: req.admin._id },
+                { phone: req.admin.phone }
+            ]
+        });
+        if (!candidate) return res.status(404).json({ success: false, message: 'Candidate profile not found' });
+
+        const updateData = { ...req.body };
+        
+        // Handle New Files
+        if (req.files) {
+            if (req.files.image) { deleteFile(candidate.profileImage); updateData.profileImage = req.files.image[0].path; }
+            if (req.files.cv) { deleteFile(candidate.cv); updateData.cv = req.files.cv[0].path; }
+
+            const docs = candidate.documents ? { ...candidate.documents } : {};
+            if (req.files.idProof) { deleteFile(docs.idProof); docs.idProof = req.files.idProof[0].path; }
+            if (req.files.addressProof) { deleteFile(docs.addressProof); docs.addressProof = req.files.addressProof[0].path; }
+            if (req.files.policeVerification) { deleteFile(docs.policeVerification); docs.policeVerification = req.files.policeVerification[0].path; }
+            if (req.files.cv) { deleteFile(docs.resume); docs.resume = req.files.cv[0].path; }
+            if (req.files.academicCertificate) { deleteFile(docs.academicCertificate); docs.academicCertificate = req.files.academicCertificate[0].path; }
+            if (req.files.experienceCertificate) { deleteFile(docs.experienceCertificate); docs.experienceCertificate = req.files.experienceCertificate[0].path; }
+            
+            if (Object.keys(docs).length > 0 || updateData.idProofType) {
+                updateData.documents = { ...docs, idProofType: updateData.idProofType || docs.idProofType };
+            }
+
+            if (req.files.gallery) {
+                const newPhotos = req.files.gallery.map(file => file.path);
+                updateData.photoGallery = [...(candidate.photoGallery || []), ...newPhotos];
+            }
+        }
+
+        // Parse nested fields
+        const complexFields = ['languages', 'jobPreference', 'cookingSkills', 'workExperience', 'education', 'careerHighlights', 'socialMedia'];
+        complexFields.forEach(field => {
+            if (updateData[field] && typeof updateData[field] === 'string') {
+                try {
+                    updateData[field] = JSON.parse(updateData[field]);
+                } catch (e) {
+                    console.log(`Field ${field} is not valid JSON, resetting to default type.`);
+                    if (['languages', 'education', 'socialMedia'].includes(field)) {
+                        updateData[field] = [];
+                    } else {
+                        updateData[field] = {};
+                    }
+                }
+            }
+        });
+
+        const updatedCandidate = await Candidate.findByIdAndUpdate(candidate._id, updateData, { new: true });
+        res.status(200).json({ success: true, message: 'Candidate updated successfully', candidate: updatedCandidate });
+    } catch (error) {
+        res.status(400).json({ success: false, message: error.message });
+    }
+};
+
+module.exports = { 
+    createCandidate, 
+    getCandidates, 
+    getCandidate, 
+    updateCandidate, 
+    deleteCandidate, 
+    toggleCandidateStatus, 
+    getApplications,
+    getCandidateMe,
+    updateCandidateMe
+};

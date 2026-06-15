@@ -292,9 +292,13 @@ const updateJobStatus = async (req, res) => {
 const saveJob = async (req, res) => {
     try {
         const jobId = req.params.id;
-        const candidateId = req.admin._id;
-
-        const candidate = await Candidate.findById(candidateId);
+        const candidate = await Candidate.findOne({
+            $or: [
+                { _id: req.admin._id },
+                { createdBy: req.admin._id },
+                { phone: req.admin.phone }
+            ]
+        });
         if (!candidate) return res.status(404).json({ success: false, message: 'Candidate not found' });
 
         if (!candidate.savedJobs) candidate.savedJobs = [];
@@ -317,10 +321,17 @@ const saveJob = async (req, res) => {
 const unsaveJob = async (req, res) => {
     try {
         const jobId = req.params.id;
-        const candidateId = req.admin._id;
+        const candidate = await Candidate.findOne({
+            $or: [
+                { _id: req.admin._id },
+                { createdBy: req.admin._id },
+                { phone: req.admin.phone }
+            ]
+        });
+        if (!candidate) return res.status(404).json({ success: false, message: 'Candidate not found' });
 
         await Candidate.findByIdAndUpdate(
-            candidateId,
+            candidate._id,
             { $pull: { savedJobs: jobId } },
             { new: true }
         );
@@ -338,9 +349,13 @@ const unsaveJob = async (req, res) => {
  */
 const getSavedJobs = async (req, res) => {
     try {
-        const candidateId = req.admin._id;
-
-        const candidate = await Candidate.findById(candidateId).populate({
+        const candidate = await Candidate.findOne({
+            $or: [
+                { _id: req.admin._id },
+                { createdBy: req.admin._id },
+                { phone: req.admin.phone }
+            ]
+        }).populate({
             path: 'savedJobs',
             model: 'Job'
         });
@@ -377,25 +392,37 @@ const Application = require('../models/Application');
 const applyForJob = async (req, res) => {
     try {
         const jobId = req.params.id;
-        const candidateId = req.admin._id;
         
         const job = await Job.findById(jobId);
         if (!job) return res.status(404).json({ success: false, message: 'Job not found' });
 
-        const candidate = await Candidate.findById(candidateId);
+        const candidate = await Candidate.findOne({
+            $or: [
+                { _id: req.admin._id },
+                { createdBy: req.admin._id },
+                { phone: req.admin.phone }
+            ]
+        });
         if (!candidate) return res.status(404).json({ success: false, message: 'Candidate not found' });
 
-        const existingApp = await Application.findOne({ job: jobId, candidate: candidateId });
+        const existingApp = await Application.findOne({ job: jobId, candidate: candidate._id });
         if (existingApp) {
             return res.status(400).json({ success: false, message: 'Already applied' });
         }
 
         const application = await Application.create({
             job: jobId,
-            candidate: candidateId,
+            candidate: candidate._id,
             customer: job.createdBy,
             status: 'Applied'
         });
+
+        // Add to candidate's applications array (for backward compatibility)
+        await Candidate.findByIdAndUpdate(
+            candidate._id,
+            { $push: { applications: { job: jobId, status: 'Applied', appliedDate: new Date() } } },
+            { new: true }
+        );
 
         res.status(201).json({ success: true, message: 'Applied successfully', application });
     } catch (error) {

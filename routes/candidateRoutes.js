@@ -7,7 +7,9 @@ const {
     updateCandidate,
     deleteCandidate,
     toggleCandidateStatus,
-    getApplications
+    getApplications,
+    getCandidateMe,
+    updateCandidateMe
 } = require('../controllers/candidateController');
 const { protect } = require('../middleware/authMiddleware');
 const multer = require('multer');
@@ -40,6 +42,10 @@ router.route('/')
 
 router.route('/applications')
     .get(protect, getApplications);
+
+router.route('/me')
+    .get(protect, getCandidateMe)
+    .put(protect, cpUpload, updateCandidateMe);
 
 router.route('/:id')
     .get(protect, getCandidate)

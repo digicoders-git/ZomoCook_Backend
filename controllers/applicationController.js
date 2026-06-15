@@ -2,6 +2,37 @@ const Application = require('../models/Application');
 const Job = require('../models/Job');
 const Candidate = require('../models/Candidate');
 
+const syncCandidateApplication = async (application) => {
+    if (!application || !application.candidate || !application.job) return;
+
+    const candidateId = application.candidate._id || application.candidate;
+    const jobId = application.job._id || application.job;
+
+    const result = await Candidate.updateOne(
+        { _id: candidateId, 'applications.job': jobId },
+        {
+            $set: {
+                'applications.$.status': application.status,
+                'applications.$.remarks': application.remarks || application.rejectionReason || '',
+                'applications.$.appliedDate': application.appliedDate || new Date()
+            }
+        }
+    );
+
+    if (result.matchedCount === 0) {
+        await Candidate.findByIdAndUpdate(candidateId, {
+            $push: {
+                applications: {
+                    job: jobId,
+                    status: application.status,
+                    remarks: application.remarks || application.rejectionReason || '',
+                    appliedDate: application.appliedDate || new Date()
+                }
+            }
+        });
+    }
+};
+
 /**
  * @desc    Apply for a job (Auto-creates application)
  * @route   POST /api/applications/apply
@@ -9,20 +40,32 @@ const Candidate = require('../models/Candidate');
  */
 const applyJob = async (req, res) => {
     try {
-        const { jobId } = req.body;
+        const { jobId, applicationData } = req.body;
         const candidateId = req.admin._id;
 
         // Get job and candidate details
         const job = await Job.findById(jobId);
         if (!job) return res.status(404).json({ success: false, message: 'Job not found' });
 
-        const candidate = await Candidate.findOne({
+        let candidate = await Candidate.findOne({
             $or: [
                 { _id: candidateId },
                 { createdBy: candidateId },
                 { phone: req.admin.phone }
             ]
         });
+        if (!candidate && req.admin.phone) {
+            candidate = await Candidate.create({
+                name: req.admin.name || `Cook_${req.admin.phone.slice(-4)}`,
+                email: req.admin.email,
+                phone: req.admin.phone,
+                city: req.admin.city,
+                address: req.admin.address,
+                profileImage: req.admin.profilePic,
+                createdBy: req.admin._id,
+                creatorModel: req.admin.constructor.modelName
+            });
+        }
         if (!candidate) return res.status(404).json({ success: false, message: 'Candidate not found' });
 
         // Check if already applied
@@ -31,24 +74,18 @@ const applyJob = async (req, res) => {
             return res.status(400).json({ success: false, message: 'You have already applied for this job' });
         }
 
-        // Create application
+        // Create application with form data
         const application = await Application.create({
             job: jobId,
             candidate: candidate._id,
             customer: job.createdBy,
             status: 'Applied',
+            applicationData: applicationData || {},
             appliedDate: new Date()
         });
 
         // Add to candidate's applications array (for backward compatibility)
-        await Candidate.findByIdAndUpdate(
-            candidate._id,
-            { $push: { applications: { job: jobId, status: 'Applied', appliedDate: new Date() } } },
-            { new: true }
-        );
-
-        // TODO: Send notification to customer
-        // TODO: Send notification to cook with status updates
+        await syncCandidateApplication(application);
 
         res.status(201).json({
             success: true,
@@ -84,8 +121,8 @@ const getApplications = async (req, res) => {
         if (candidateId) query.candidate = candidateId;
 
         const applications = await Application.find(query)
-            .populate('candidate', 'name phone email profileImage city')
-            .populate('job', 'title jobCategory city salaryRange')
+            .populate('candidate')
+            .populate('job')
             .populate('customer', 'name email')
             .sort({ appliedDate: -1 });
 
@@ -106,10 +143,19 @@ const getApplications = async (req, res) => {
  */
 const getMyApplications = async (req, res) => {
     try {
-        const candidateId = req.admin._id;
         const { status } = req.query;
+        const candidate = await Candidate.findOne({
+            $or: [
+                { _id: req.admin._id },
+                { createdBy: req.admin._id },
+                { phone: req.admin.phone }
+            ]
+        });
+        if (!candidate) {
+            return res.status(200).json({ success: true, count: 0, applications: [] });
+        }
 
-        let query = { candidate: candidateId };
+        let query = { candidate: candidate._id };
         if (status) query.status = status;
 
         const applications = await Application.find(query)
@@ -152,7 +198,7 @@ const updateApplicationStatus = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Application not found' });
         }
 
-        // TODO: Send notification to cook about status change
+        await syncCandidateApplication(application);
 
         res.status(200).json({
             success: true,
@@ -193,7 +239,7 @@ const scheduleDemo = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Application not found' });
         }
 
-        // TODO: Send notification to cook with demo details
+        await syncCandidateApplication(application);
 
         res.status(200).json({
             success: true,
@@ -234,7 +280,7 @@ const rescheduleDemo = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Application not found' });
         }
 
-        // TODO: Send notification to cook about rescheduled demo
+        await syncCandidateApplication(application);
 
         res.status(200).json({
             success: true,
@@ -272,6 +318,7 @@ const hireCook = async (req, res) => {
         application.status = 'Hired';
         application.joiningDate = joiningDate;
         await application.save();
+        await syncCandidateApplication(application);
 
         // Auto-create booking record
         let amount = 15000; // default fallback
@@ -295,9 +342,6 @@ const hireCook = async (req, res) => {
             status: 'confirmed',
             startDate: joiningDate ? new Date(joiningDate) : new Date()
         });
-
-        // TODO: Send notification to cook about being hired
-        // TODO: Send notification to customer about booking confirmation
 
         res.status(200).json({
             success: true,
@@ -333,7 +377,7 @@ const rejectApplication = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Application not found' });
         }
 
-        // TODO: Send notification to cook about rejection
+        await syncCandidateApplication(application);
 
         res.status(200).json({
             success: true,
