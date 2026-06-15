@@ -148,7 +148,7 @@ const deleteCandidate = async (req, res) => {
 
 const getCandidates = async (req, res) => {
     try {
-        const { search, city, gender, jobCategory, kycStatus, profileStatus } = req.query;
+        const { search, city, gender, kycStatus, profileStatus } = req.query;
         let query = {};
         
         // Role-based data isolation
@@ -167,7 +167,6 @@ const getCandidates = async (req, res) => {
         if (gender) query.gender = gender;
         if (kycStatus) query.kycStatus = kycStatus;
         if (profileStatus) query.profileStatus = profileStatus;
-        if (jobCategory) query['jobPreference.jobCategory'] = jobCategory;
         const candidates = await Candidate.find(query).sort({ createdAt: -1 });
         res.status(200).json({ success: true, count: candidates.length, candidates });
     } catch (error) { res.status(500).json({ success: false, message: error.message }); }
