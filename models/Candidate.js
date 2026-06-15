@@ -46,13 +46,13 @@ const candidateSchema = new mongoose.Schema({
       experienceType: String,
       reasonForLeaving: String
     },
-    experiences: [{
+    experiences: [({
       position: String,
       from: String,
       to: String,
       jobProfile: String,
       shortDetail: String
-    }]
+    })]
   },
   education: [{
     title: String,
@@ -79,6 +79,12 @@ const candidateSchema = new mongoose.Schema({
         url: String
     }],
     photoGallery: [{ type: String }],
+
+    // Saved Jobs (NEW)
+    savedJobs: [{ 
+        type: mongoose.Schema.Types.ObjectId, 
+        ref: 'Job'
+    }],
 
     // Applications tracking
     applications: [{

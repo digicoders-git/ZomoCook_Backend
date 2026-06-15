@@ -1,9 +1,21 @@
 const express = require('express');
 const router = express.Router();
-const { getMyBookings, createBooking } = require('../controllers/bookingController');
+const {
+    createBooking,
+    getBookings,
+    getBooking,
+    updateBooking,
+    cancelBooking
+} = require('../controllers/bookingController');
 const { protect } = require('../middleware/authMiddleware');
 
-router.get('/', protect, getMyBookings);
-router.post('/', protect, createBooking);
+router.route('/')
+    .get(protect, getBookings)
+    .post(protect, createBooking);
+
+router.route('/:id')
+    .get(protect, getBooking)
+    .put(protect, updateBooking)
+    .delete(protect, cancelBooking);
 
 module.exports = router;

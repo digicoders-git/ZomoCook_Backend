@@ -1231,6 +1231,116 @@
           }
         }
       ]
+    },
+    {
+      "name": "Applications",
+      "item": [
+        {
+          "name": "Update Application Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/applications/:id/status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "applications", ":id", "status"],
+              "variable": [{ "key": "id", "value": "<application_id>" }]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"Shortlisted\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Schedule Demo",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/applications/:id/schedule-demo",
+              "host": ["{{base_url}}"],
+              "path": ["api", "applications", ":id", "schedule-demo"],
+              "variable": [{ "key": "id", "value": "<application_id>" }]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"demoDate\": \"2025-01-15\",\n  \"demoTime\": \"10:00 AM\",\n  \"meetingLink\": \"https://meet.example.com/demo\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Reschedule Demo",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/applications/:id/reschedule-demo",
+              "host": ["{{base_url}}"],
+              "path": ["api", "applications", ":id", "reschedule-demo"],
+              "variable": [{ "key": "id", "value": "<application_id>" }]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"demoDate\": \"2025-01-20\",\n  \"demoTime\": \"2:00 PM\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Reject Application",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/applications/:id/reject",
+              "host": ["{{base_url}}"],
+              "path": ["api", "applications", ":id", "reject"],
+              "variable": [{ "key": "id", "value": "<application_id>" }]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Not matching job requirements\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Hire Candidate",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/applications/:id/hire",
+              "host": ["{{base_url}}"],
+              "path": ["api", "applications", ":id", "hire"],
+              "variable": [{ "key": "id", "value": "<application_id>" }]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"joiningDate\": \"2025-02-01\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        }
+      ]
     }
   ]
 }

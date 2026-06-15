@@ -1,58 +1,45 @@
 const mongoose = require('mongoose');
 
 const bookingSchema = new mongoose.Schema({
-    employer: {
+    job: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Job',
+        required: true
+    },
+    customer: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
         required: true
     },
-    candidate: {
+    cook: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: 'Candidate'
-    },
-    category: {
-        type: String,
+        ref: 'Candidate',
         required: true
     },
-    charges: {
+    totalAmount: {
         type: Number,
-        default: 0
-    },
-    date: {
-        type: Date,
         required: true
     },
     duration: {
         type: String,
-        required: true
-    },
-    address: {
-        type: String,
-        required: true
-    },
-    advancePaid: {
-        type: Number,
-        default: 0
+        default: 'Full Time'
     },
     status: {
         type: String,
-        enum: ['Upcoming', 'Completed', 'Cancelled'],
-        default: 'Upcoming'
+        enum: ['pending', 'confirmed', 'in-progress', 'completed', 'cancelled'],
+        default: 'pending'
     },
-    minPrice: {
-        type: Number,
-        default: 0
+    remarks: String,
+    startDate: Date,
+    endDate: Date,
+    createdAt: {
+        type: Date,
+        default: Date.now
     },
-    maxPrice: {
-        type: Number,
-        default: 0
-    },
-    days: {
-        type: Number,
-        default: 1
+    updatedAt: {
+        type: Date,
+        default: Date.now
     }
-}, {
-    timestamps: true
-});
+}, { timestamps: true });
 
 module.exports = mongoose.model('Booking', bookingSchema);

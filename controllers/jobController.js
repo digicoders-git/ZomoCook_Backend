@@ -1,4 +1,5 @@
 const Job = require('../models/Job');
+const Candidate = require('../models/Candidate');
 
 /**
  * @desc    Create new job
@@ -19,9 +20,6 @@ const createJob = async (req, res) => {
         // Limit check for Users (Employers)
         if (req.admin.constructor.modelName === 'User') {
             const user = req.admin;
-            // Allow if there's no limit set yet (optional default behavior, or block them)
-            // Assuming currentJobPostLimit > 0 means they have a plan. 
-            // If they have no plan, block them.
             if (!user.activePlan) {
                 return res.status(403).json({ success: false, message: 'Please purchase a Subscription Plan to post jobs.' });
             }
@@ -57,20 +55,30 @@ const createJob = async (req, res) => {
 };
 
 /**
- * @desc    Get all jobs
+ * @desc    Get all jobs with search, filter & pagination
  * @route   GET /api/jobs
- * @access  Private (Admin)
+ * @access  Private (Admin & Cook)
  */
 const getJobs = async (req, res) => {
     try {
-        const { jobCategory, city, status, isActive } = req.query;
+        const { jobCategory, city, status, isActive, search, limit = 50, skip = 0 } = req.query;
         let query = {};
 
         // Role-based data isolation
         const isSuperAdmin = req.admin.constructor.modelName === 'Admin';
         const isCook = req.admin.role && req.admin.role.name && req.admin.role.name.toLowerCase() === 'cook';
+        
         if (!isSuperAdmin && !isCook) {
             query.createdBy = req.admin._id;
+        }
+
+        // Search filter
+        if (search) {
+            query.$or = [
+                { title: new RegExp(search, 'i') },
+                { overview: new RegExp(search, 'i') },
+                { responsibilities: new RegExp(search, 'i') }
+            ];
         }
 
         if (jobCategory) query.jobCategory = jobCategory;
@@ -78,13 +86,31 @@ const getJobs = async (req, res) => {
         if (status) query.status = status;
         if (isActive !== undefined) query.isActive = isActive === 'true';
 
-        const jobs = await Job.find(query)
+        // Active jobs filter for cook viewing
+        if (isCook) query.isActive = true;
+
+        let jobs = await Job.find(query)
             .populate('customer', 'name email contactPhone')
-            .sort({ createdAt: -1 });
+            .sort({ createdAt: -1 })
+            .limit(parseInt(limit))
+            .skip(parseInt(skip));
+
+        const totalCount = await Job.countDocuments(query);
+
+        // Add isSaved flag for cook
+        if (isCook) {
+            const candidate = await Candidate.findById(req.admin._id);
+            const savedJobIds = candidate?.savedJobs || [];
+            jobs = jobs.map(job => ({
+                ...job.toObject(),
+                isSaved: savedJobIds.some(id => id.toString() === job._id.toString())
+            }));
+        }
 
         res.status(200).json({
             success: true,
             count: jobs.length,
+            total: totalCount,
             jobs
         });
     } catch (error) {
@@ -95,7 +121,7 @@ const getJobs = async (req, res) => {
 /**
  * @desc    Get single job
  * @route   GET /api/jobs/:id
- * @access  Private (Admin)
+ * @access  Private (Admin & Cook)
  */
 const getJob = async (req, res) => {
     try {
@@ -105,9 +131,18 @@ const getJob = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Job not found' });
         }
 
+        // Check if cook has saved this job
+        let isSaved = false;
+        const isCook = req.admin.role && req.admin.role.name && req.admin.role.name.toLowerCase() === 'cook';
+        if (isCook) {
+            const candidate = await Candidate.findById(req.admin._id);
+            isSaved = candidate?.savedJobs?.includes(job._id) || false;
+        }
+
         res.status(200).json({
             success: true,
-            job
+            job,
+            isSaved
         });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -217,8 +252,6 @@ const updateJobStatus = async (req, res) => {
             updateDoc.isActive = false;
         }
 
-        // Use updateOne to bypass validation for other fields (like creatorModel) 
-        // that might be missing in older records.
         const result = await Job.updateOne(
             { _id: req.params.id },
             { $set: updateDoc }
@@ -239,6 +272,79 @@ const updateJobStatus = async (req, res) => {
     }
 };
 
+/**
+ * @desc    Save job for cook
+ * @route   POST /api/jobs/:id/save
+ * @access  Private (Cook)
+ */
+const saveJob = async (req, res) => {
+    try {
+        const jobId = req.params.id;
+        const candidateId = req.admin._id;
+
+        const candidate = await Candidate.findById(candidateId);
+        if (!candidate) return res.status(404).json({ success: false, message: 'Candidate not found' });
+
+        if (!candidate.savedJobs) candidate.savedJobs = [];
+        if (!candidate.savedJobs.includes(jobId)) {
+            candidate.savedJobs.push(jobId);
+            await candidate.save();
+        }
+
+        res.status(200).json({ success: true, message: 'Job saved successfully' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+/**
+ * @desc    Unsave job for cook
+ * @route   DELETE /api/jobs/:id/save
+ * @access  Private (Cook)
+ */
+const unsaveJob = async (req, res) => {
+    try {
+        const jobId = req.params.id;
+        const candidateId = req.admin._id;
+
+        await Candidate.findByIdAndUpdate(
+            candidateId,
+            { $pull: { savedJobs: jobId } },
+            { new: true }
+        );
+
+        res.status(200).json({ success: true, message: 'Job unsaved successfully' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+/**
+ * @desc    Get saved jobs for cook
+ * @route   GET /api/jobs/saved
+ * @access  Private (Cook)
+ */
+const getSavedJobs = async (req, res) => {
+    try {
+        const candidateId = req.admin._id;
+
+        const candidate = await Candidate.findById(candidateId).populate({
+            path: 'savedJobs',
+            model: 'Job'
+        });
+
+        if (!candidate) return res.status(404).json({ success: false, message: 'Candidate not found' });
+
+        res.status(200).json({
+            success: true,
+            count: candidate.savedJobs?.length || 0,
+            jobs: candidate.savedJobs || []
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
 module.exports = {
     createJob,
     getJobs,
@@ -246,5 +352,46 @@ module.exports = {
     updateJob,
     deleteJob,
     toggleJobStatus,
-    updateJobStatus
+    updateJobStatus,
+    saveJob,
+    unsaveJob,
+    getSavedJobs
+};
+
+// Add applyForJob to exports at the end
+const oldExports = module.exports;
+const Application = require('../models/Application');
+
+const applyForJob = async (req, res) => {
+    try {
+        const jobId = req.params.id;
+        const candidateId = req.admin._id;
+        
+        const job = await Job.findById(jobId);
+        if (!job) return res.status(404).json({ success: false, message: 'Job not found' });
+
+        const candidate = await Candidate.findById(candidateId);
+        if (!candidate) return res.status(404).json({ success: false, message: 'Candidate not found' });
+
+        const existingApp = await Application.findOne({ job: jobId, candidate: candidateId });
+        if (existingApp) {
+            return res.status(400).json({ success: false, message: 'Already applied' });
+        }
+
+        const application = await Application.create({
+            job: jobId,
+            candidate: candidateId,
+            customer: job.createdBy,
+            status: 'Applied'
+        });
+
+        res.status(201).json({ success: true, message: 'Applied successfully', application });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+module.exports = {
+    ...oldExports,
+    applyForJob
 };

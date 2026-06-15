@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const connectDB = require('./config/db');
+const Application = require('./models/Application');
 
 // Load env vars
 dotenv.config();
@@ -10,7 +11,7 @@ dotenv.config();
 connectDB();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 
 // Middleware
 app.use(cors({
@@ -49,6 +50,7 @@ app.use('/api/masters', require('./routes/masterRoutes'));
 app.use('/api/settings', require('./routes/webSettingRoutes'));
 app.use('/api/dashboard', require('./routes/dashboardRoutes'));
 app.use('/api/banners', require('./routes/bannerRoutes'));
+app.use('/api/applications', require('./routes/applicationRoutes'));
 app.use('/api/bookings', require('./routes/bookingRoutes'));
 app.use('/api/payments', require('./routes/paymentRoutes'));
 app.use('/api/plans', require('./routes/planRoutes'));

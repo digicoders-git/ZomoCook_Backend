@@ -7,7 +7,11 @@ const {
     updateJob, 
     deleteJob, 
     toggleJobStatus,
-    updateJobStatus
+    updateJobStatus,
+    saveJob,
+    unsaveJob,
+    getSavedJobs,
+    applyForJob
 } = require('../controllers/jobController');
 const { protect } = require('../middleware/authMiddleware');
 const multer = require('multer');
@@ -29,10 +33,19 @@ router.route('/')
     .get(protect, getJobs)
     .post(protect, upload.single('image'), createJob);
 
+router.route('/saved')
+    .get(protect, getSavedJobs);
+
 router.route('/:id')
     .get(protect, getJob)
     .put(protect, upload.single('image'), updateJob)
     .delete(protect, deleteJob);
+
+router.route('/:id/save')
+    .post(protect, saveJob)
+    .delete(protect, unsaveJob);
+
+router.post('/:id/apply', protect, applyForJob);
 
 router.patch('/:id/status', protect, toggleJobStatus);
 router.patch('/:id/status-string', protect, updateJobStatus);
