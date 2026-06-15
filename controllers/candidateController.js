@@ -153,8 +153,13 @@ const getCandidates = async (req, res) => {
         
         // Role-based data isolation
         const isSuperAdmin = req.admin.constructor.modelName === 'Admin';
-        if (!isSuperAdmin) {
+        const isUser = req.admin.constructor.modelName === 'User';
+        if (!isSuperAdmin && !isUser) {
             query.createdBy = req.admin._id;
+        }
+
+        if (isUser) {
+            query.profileStatus = 'active';
         }
 
         if (search) query.$or = [{ name: new RegExp(search, 'i') }, { phone: new RegExp(search, 'i') }, { email: new RegExp(search, 'i') }];

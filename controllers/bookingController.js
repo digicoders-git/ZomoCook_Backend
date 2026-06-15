@@ -51,15 +51,22 @@ const getBookings = async (req, res) => {
         let query = {};
         
         // Filter based on role
-        if (userModel === 'User') {
-            // Customer viewing their bookings
-            query.customer = userId;
-        } else if (req.admin.role?.name?.toLowerCase() === 'cook') {
+        if (req.admin.role && req.admin.role.name && req.admin.role.name.toLowerCase() === 'cook') {
             // Cook viewing their bookings
             query.cook = userId;
+        } else if (userModel === 'User') {
+            // Customer viewing their bookings
+            query.customer = userId;
         }
 
-        if (status) query.status = status;
+        if (status) {
+            const lowerStatus = status.toLowerCase();
+            if (lowerStatus === 'upcoming') {
+                query.status = { $in: ['pending', 'confirmed', 'in-progress'] };
+            } else {
+                query.status = lowerStatus;
+            }
+        }
 
         const bookings = await Booking.find(query)
             .populate('job cook customer')

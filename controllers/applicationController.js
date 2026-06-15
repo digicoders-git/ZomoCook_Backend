@@ -267,14 +267,37 @@ const hireCook = async (req, res) => {
         application.joiningDate = joiningDate;
         await application.save();
 
-        // TODO: Create booking record
+        // Auto-create booking record
+        let amount = 15000; // default fallback
+        if (application.job && application.job.salaryRange) {
+            const match = application.job.salaryRange.match(/\d+/);
+            if (match) {
+                amount = parseInt(match[0]);
+                if (application.job.salaryRange.toLowerCase().includes('k') && amount < 100) {
+                    amount = amount * 1000;
+                }
+            }
+        }
+
+        const Booking = require('../models/Booking');
+        const booking = await Booking.create({
+            job: application.job._id,
+            customer: application.customer,
+            cook: application.candidate._id,
+            totalAmount: amount,
+            duration: application.job.jobType || 'Full Time',
+            status: 'confirmed',
+            startDate: joiningDate ? new Date(joiningDate) : new Date()
+        });
+
         // TODO: Send notification to cook about being hired
         // TODO: Send notification to customer about booking confirmation
 
         res.status(200).json({
             success: true,
             message: 'Cook hired successfully',
-            application
+            application,
+            booking
         });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
