@@ -14,6 +14,23 @@ const notificationSchema = new mongoose.Schema({
   image: {
     type: String // Path to uploaded image
   },
+  type: {
+    type: String,
+    enum: ['job_available', 'application_status', 'demo_scheduled', 'hired', 'booking', 'rating', 'profile', 'offer', 'system'],
+    default: 'system'
+  },
+  relatedId: {
+    type: mongoose.Schema.Types.ObjectId,
+    refPath: 'relatedModel'
+  },
+  relatedModel: {
+    type: String,
+    enum: ['Job', 'Application', 'Booking', 'Candidate', 'Customer'],
+    default: 'Candidate'
+  },
+  actionUrl: {
+    type: String // e.g., '/jobs/id', '/applications/id', '/bookings/id'
+  },
   target: {
     type: String,
     enum: ['all', 'candidates', 'customers'],

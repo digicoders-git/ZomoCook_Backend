@@ -10,8 +10,8 @@ const deleteFile = (filePath) => {
     }
 };
 
-// Helper: send FCM to all admin + user tokens
-const sendFCMToAll = async (title, message) => {
+// Helper: send FCM to all tokens with deep link
+const sendFCMToAll = async (title, message, notificationType, relatedId, actionUrl) => {
     const [admins, users] = await Promise.all([
         Admin.find({ fcmToken: { $ne: null } }).select('fcmToken'),
         User.find({ fcmToken: { $ne: null } }).select('fcmToken')
@@ -19,10 +19,33 @@ const sendFCMToAll = async (title, message) => {
     const tokens = [...admins, ...users].map(u => u.fcmToken).filter(Boolean);
     if (!tokens.length) return;
 
-    await admin.messaging().sendEachForMulticast({
-        tokens,
-        notification: { title, body: message }
-    });
+    const payload = {
+        notification: { 
+            title, 
+            body: message,
+            clickAction: actionUrl || '/' // Deep link
+        },
+        data: {
+            notificationType,
+            relatedId: relatedId?.toString() || '',
+            actionUrl: actionUrl || '/'
+        }
+    };
+
+    try {
+        await admin.messaging().sendEachForMulticast({
+            tokens,
+            notification: payload.notification,
+            data: payload.data,
+            webpush: {
+                fcmOptions: {
+                    link: actionUrl || '/'
+                }
+            }
+        });
+    } catch (err) {
+        console.error('FCM Error:', err);
+    }
 };
 
 /**
@@ -31,13 +54,22 @@ const sendFCMToAll = async (title, message) => {
  */
 exports.getNotifications = async (req, res) => {
     try {
-        const { search, target, status } = req.query;
+        const { search, target, status, limit = 20 } = req.query;
         let query = {};
         if (search) query.title = new RegExp(search, 'i');
         if (target) query.target = target;
         if (status) query.status = status;
-        const notifications = await Notification.find(query).sort({ createdAt: -1 });
-        res.status(200).json({ success: true, count: notifications.length, notifications });
+        
+        const notifications = await Notification.find(query)
+            .sort({ createdAt: -1 })
+            .limit(parseInt(limit))
+            .populate('relatedId');
+        
+        res.status(200).json({ 
+            success: true, 
+            count: notifications.length, 
+            notifications 
+        });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -49,18 +81,32 @@ exports.getNotifications = async (req, res) => {
  */
 exports.createNotification = async (req, res) => {
     try {
-        const { title, message, target, status } = req.body;
-        const notificationData = { title, message, target, status, createdBy: req.admin?.id };
+        const { title, message, type, relatedId, actionUrl, target, status } = req.body;
+        const notificationData = { 
+            title, 
+            message, 
+            type,
+            relatedId,
+            actionUrl,
+            target, 
+            status, 
+            createdBy: req.admin?.id 
+        };
         if (req.file) notificationData.image = req.file.path;
 
         const notification = await Notification.create(notificationData);
 
         // Send FCM push notification
         if (status !== 'inactive') {
-            sendFCMToAll(title, message).catch(err => console.error('FCM Error:', err));
+            sendFCMToAll(title, message, type, relatedId, actionUrl)
+                .catch(err => console.error('FCM Error:', err));
         }
 
-        res.status(201).json({ success: true, message: 'Notification created successfully', notification });
+        res.status(201).json({ 
+            success: true, 
+            message: 'Notification created successfully', 
+            notification 
+        });
     } catch (error) {
         res.status(400).json({ success: false, message: error.message });
     }
@@ -72,8 +118,11 @@ exports.createNotification = async (req, res) => {
  */
 exports.getNotification = async (req, res) => {
     try {
-        const notification = await Notification.findById(req.params.id);
-        if (!notification) return res.status(404).json({ success: false, message: 'Notification not found' });
+        const notification = await Notification.findById(req.params.id)
+            .populate('relatedId');
+        if (!notification) {
+            return res.status(404).json({ success: false, message: 'Notification not found' });
+        }
         res.status(200).json({ success: true, notification });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -87,9 +136,19 @@ exports.getNotification = async (req, res) => {
 exports.toggleNotificationStatus = async (req, res) => {
     try {
         const { status } = req.body;
-        const notification = await Notification.findByIdAndUpdate(req.params.id, { status }, { new: true });
-        if (!notification) return res.status(404).json({ success: false, message: 'Notification not found' });
-        res.status(200).json({ success: true, message: `Notification set to ${status}`, notification });
+        const notification = await Notification.findByIdAndUpdate(
+            req.params.id, 
+            { status }, 
+            { new: true }
+        );
+        if (!notification) {
+            return res.status(404).json({ success: false, message: 'Notification not found' });
+        }
+        res.status(200).json({ 
+            success: true, 
+            message: `Notification set to ${status}`, 
+            notification 
+        });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -102,7 +161,9 @@ exports.toggleNotificationStatus = async (req, res) => {
 exports.deleteNotification = async (req, res) => {
     try {
         const notification = await Notification.findById(req.params.id);
-        if (!notification) return res.status(404).json({ success: false, message: 'Notification not found' });
+        if (!notification) {
+            return res.status(404).json({ success: false, message: 'Notification not found' });
+        }
         if (notification.image) deleteFile(notification.image);
         await notification.deleteOne();
         res.status(200).json({ success: true, message: 'Notification deleted successfully' });
@@ -118,7 +179,9 @@ exports.deleteNotification = async (req, res) => {
 exports.saveFCMToken = async (req, res) => {
     try {
         const { token } = req.body;
-        if (!token) return res.status(400).json({ success: false, message: 'Token required' });
+        if (!token) {
+            return res.status(400).json({ success: false, message: 'Token required' });
+        }
 
         if (req.admin?.id) {
             await Admin.findByIdAndUpdate(req.admin.id, { fcmToken: token });

@@ -15,60 +15,80 @@ const seedNotifications = async () => {
       {
         title: '✨ New Job Available',
         message: 'A new home cooking job is available in your area. Apply now to secure the opportunity!',
+        type: 'job_available',
+        actionUrl: '/jobs',
         target: 'candidates',
         status: 'active'
       },
       {
         title: '🎉 Application Approved',
         message: 'Congratulations! Your application has been shortlisted. Schedule your demo with the customer.',
+        type: 'application_status',
+        actionUrl: '/applications',
         target: 'candidates',
         status: 'active'
       },
       {
         title: '📅 Demo Scheduled',
         message: 'Your demo is scheduled for tomorrow at 10:00 AM. Don\'t forget to join the meeting link!',
+        type: 'demo_scheduled',
+        actionUrl: '/bookings',
         target: 'candidates',
         status: 'active'
       },
       {
         title: '🎊 Hired Successfully',
         message: 'Great news! You have been hired. Check your bookings tab to view the details.',
+        type: 'hired',
+        actionUrl: '/bookings',
         target: 'candidates',
         status: 'active'
       },
       {
         title: '💼 New Cook Available',
         message: 'A verified cook with 5+ years of experience is available in your city.',
+        type: 'job_available',
+        actionUrl: '/available-staff',
         target: 'customers',
         status: 'active'
       },
       {
         title: '✅ Booking Confirmed',
         message: 'Your booking with Chef Rahul is confirmed for tomorrow. Meeting link has been sent.',
+        type: 'booking',
+        actionUrl: '/bookings',
         target: 'customers',
         status: 'active'
       },
       {
         title: '⭐ Rating Received',
         message: 'You received a 5-star rating from a customer! Keep up the good work.',
+        type: 'rating',
+        actionUrl: '/profile',
         target: 'candidates',
         status: 'active'
       },
       {
         title: '🔔 System Update',
         message: 'ZomoCook has been updated with new features. Check the app for improvements!',
+        type: 'system',
+        actionUrl: '/',
         target: 'all',
         status: 'active'
       },
       {
         title: '📢 Special Offer',
         message: 'Get 20% discount on your next booking. Use code COOK20 at checkout.',
+        type: 'offer',
+        actionUrl: '/offers',
         target: 'all',
         status: 'active'
       },
       {
         title: '⚠️ Profile Verification Pending',
         message: 'Please complete your profile verification to unlock all features.',
+        type: 'profile',
+        actionUrl: '/profile',
         target: 'candidates',
         status: 'active'
       }
