@@ -16,11 +16,17 @@ const applyJob = async (req, res) => {
         const job = await Job.findById(jobId);
         if (!job) return res.status(404).json({ success: false, message: 'Job not found' });
 
-        const candidate = await Candidate.findById(candidateId);
+        const candidate = await Candidate.findOne({
+            $or: [
+                { _id: candidateId },
+                { createdBy: candidateId },
+                { phone: req.admin.phone }
+            ]
+        });
         if (!candidate) return res.status(404).json({ success: false, message: 'Candidate not found' });
 
         // Check if already applied
-        const existingApp = await Application.findOne({ job: jobId, candidate: candidateId });
+        const existingApp = await Application.findOne({ job: jobId, candidate: candidate._id });
         if (existingApp) {
             return res.status(400).json({ success: false, message: 'You have already applied for this job' });
         }
@@ -28,7 +34,7 @@ const applyJob = async (req, res) => {
         // Create application
         const application = await Application.create({
             job: jobId,
-            candidate: candidateId,
+            candidate: candidate._id,
             customer: job.createdBy,
             status: 'Applied',
             appliedDate: new Date()
@@ -36,7 +42,7 @@ const applyJob = async (req, res) => {
 
         // Add to candidate's applications array (for backward compatibility)
         await Candidate.findByIdAndUpdate(
-            candidateId,
+            candidate._id,
             { $push: { applications: { job: jobId, status: 'Applied', appliedDate: new Date() } } },
             { new: true }
         );

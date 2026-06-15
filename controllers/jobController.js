@@ -99,7 +99,13 @@ const getJobs = async (req, res) => {
 
         // Add isSaved flag for cook
         if (isCook) {
-            const candidate = await Candidate.findById(req.admin._id);
+            const candidate = await Candidate.findOne({
+                $or: [
+                    { _id: req.admin._id },
+                    { createdBy: req.admin._id },
+                    { phone: req.admin.phone }
+                ]
+            });
             const savedJobIds = candidate?.savedJobs || [];
             jobs = jobs.map(job => ({
                 ...job.toObject(),
@@ -135,7 +141,13 @@ const getJob = async (req, res) => {
         let isSaved = false;
         const isCook = req.admin.role && req.admin.role.name && req.admin.role.name.toLowerCase() === 'cook';
         if (isCook) {
-            const candidate = await Candidate.findById(req.admin._id);
+            const candidate = await Candidate.findOne({
+                $or: [
+                    { _id: req.admin._id },
+                    { createdBy: req.admin._id },
+                    { phone: req.admin.phone }
+                ]
+            });
             isSaved = candidate?.savedJobs?.includes(job._id) || false;
         }
 
