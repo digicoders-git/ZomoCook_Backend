@@ -221,20 +221,10 @@ exports.sendNotificationToUser = async ({
     actionUrl
 }) => {
     try {
-        const notification = await Notification.create({
-            title,
-            message,
-            type,
-            relatedId,
-            relatedModel,
-            actionUrl,
-            target: 'all',
-            recipient: userId,
-            recipientModel: userModel,
-            status: 'active'
-        });
-
+        let resolvedRecipientId = userId;
+        let resolvedRecipientModel = userModel;
         let recipientDoc;
+
         if (userModel === 'Admin') {
             recipientDoc = await Admin.findById(userId).select('fcmToken');
         } else if (userModel === 'Candidate') {
@@ -242,6 +232,10 @@ exports.sendNotificationToUser = async ({
             const candidateDoc = await Candidate.findById(userId);
             if (candidateDoc && candidateDoc.phone) {
                 recipientDoc = await User.findOne({ phone: candidateDoc.phone }).select('fcmToken');
+                if (recipientDoc) {
+                    resolvedRecipientId = recipientDoc._id;
+                    resolvedRecipientModel = 'User';
+                }
             }
         } else {
             recipientDoc = await User.findById(userId).select('fcmToken');
@@ -251,9 +245,26 @@ exports.sendNotificationToUser = async ({
                 const candidateDoc = await Candidate.findById(userId);
                 if (candidateDoc && candidateDoc.phone) {
                     recipientDoc = await User.findOne({ phone: candidateDoc.phone }).select('fcmToken');
+                    if (recipientDoc) {
+                        resolvedRecipientId = recipientDoc._id;
+                        resolvedRecipientModel = 'User';
+                    }
                 }
             }
         }
+
+        const notification = await Notification.create({
+            title,
+            message,
+            type,
+            relatedId,
+            relatedModel,
+            actionUrl,
+            target: 'all',
+            recipient: resolvedRecipientId,
+            recipientModel: resolvedRecipientModel,
+            status: 'active'
+        });
 
         if (recipientDoc && recipientDoc.fcmToken) {
             const payload = {

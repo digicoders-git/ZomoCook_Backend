@@ -134,7 +134,18 @@ const getApplications = async (req, res) => {
         const isCustomer = req.admin.constructor.modelName === 'User';
         
         if (isCustomer) {
-            query.customer = userId; // Customer sees only their job applications
+            const Job = require('../models/Job');
+            const myJobs = await Job.find({ 
+                $or: [
+                    { createdBy: userId },
+                    { customer: userId }
+                ]
+            });
+            const jobIds = myJobs.map(j => j._id);
+            query.$or = [
+                { customer: userId },
+                { job: { $in: jobIds } }
+            ];
         }
 
         if (status) query.status = status;
