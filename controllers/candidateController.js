@@ -282,7 +282,8 @@ const getApplications = async (req, res) => {
                     remarks: app.remarks,
                     rejectionReason: app.rejectionReason,
                     joiningDate: app.joiningDate,
-                    appliedDate: app.appliedDate
+                    appliedDate: app.appliedDate,
+                    applicationData: app.applicationData
                 };
             });
 

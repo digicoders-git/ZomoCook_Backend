@@ -22,12 +22,8 @@ const applicationSchema = new mongoose.Schema({
         default: 'Applied'
     },
     applicationData: {
-        fullName: String,
-        phone: String,
-        experience: String,
-        specialization: String,
-        noticePeriod: String,
-        additionalNotes: String
+        type: mongoose.Schema.Types.Mixed,
+        default: {}
     },
     demoDate: Date,
     demoTime: String,
