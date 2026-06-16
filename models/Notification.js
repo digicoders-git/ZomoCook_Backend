@@ -44,6 +44,15 @@ const notificationSchema = new mongoose.Schema({
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Admin'
+  },
+  recipient: {
+    type: mongoose.Schema.Types.ObjectId,
+    refPath: 'recipientModel'
+  },
+  recipientModel: {
+    type: String,
+    enum: ['User', 'Admin'],
+    default: 'User'
   }
 }, {
   timestamps: true

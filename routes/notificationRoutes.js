@@ -24,12 +24,11 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
-// Public routes (no auth required)
+// Protected routes
+router.use(protect);
+
 router.post('/save-token', saveFCMToken);
 router.get('/', getNotifications);
-
-// Protected routes (admin only)
-router.use(protect);
 
 router.post('/', upload.single('image'), createNotification);
 

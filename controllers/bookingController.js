@@ -136,6 +136,21 @@ const updateBooking = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Booking not found' });
         }
 
+        // Notify cook about booking update
+        if (booking.cook && booking.cook.creatorModel === 'User') {
+            const notificationController = require('./notificationController');
+            notificationController.sendNotificationToUser({
+                userId: booking.cook.createdBy,
+                userModel: 'User',
+                title: '📅 Booking Updated',
+                message: `Your booking for job "${booking.job?.title || 'Cooking'}" status has been updated to "${status}".`,
+                type: 'booking',
+                relatedId: booking._id,
+                relatedModel: 'Booking',
+                actionUrl: '/bookings'
+            }).catch(err => console.error('Error sending booking update push notification:', err));
+        }
+
         res.status(200).json({
             success: true,
             message: 'Booking updated successfully',
@@ -153,17 +168,32 @@ const updateBooking = async (req, res) => {
  */
 const cancelBooking = async (req, res) => {
     try {
-        const booking = await Booking.findById(req.params.id);
+        let booking = await Booking.findById(req.params.id);
 
         if (!booking) {
             return res.status(404).json({ success: false, message: 'Booking not found' });
         }
 
-        await Booking.findByIdAndUpdate(
+        booking = await Booking.findByIdAndUpdate(
             req.params.id,
             { status: 'cancelled' },
             { new: true }
-        );
+        ).populate('job cook customer');
+
+        // Notify cook about booking cancellation
+        if (booking.cook && booking.cook.creatorModel === 'User') {
+            const notificationController = require('./notificationController');
+            notificationController.sendNotificationToUser({
+                userId: booking.cook.createdBy,
+                userModel: 'User',
+                title: '⚠️ Booking Cancelled',
+                message: `Your booking for job "${booking.job?.title || 'Cooking'}" has been cancelled.`,
+                type: 'booking',
+                relatedId: booking._id,
+                relatedModel: 'Booking',
+                actionUrl: '/bookings'
+            }).catch(err => console.error('Error sending booking cancellation push notification:', err));
+        }
 
         res.status(200).json({
             success: true,

@@ -38,6 +38,18 @@ const createJob = async (req, res) => {
 
         const job = await Job.create(jobData);
 
+        // Send push notification to all cooks
+        const notificationController = require('./notificationController');
+        notificationController.sendNotificationToRole({
+            roleName: 'Cook',
+            title: '✨ New Job Available',
+            message: `A new cooking job "${job.title}" is available in ${job.city || 'your area'}. Apply now!`,
+            type: 'job_available',
+            relatedId: job._id,
+            relatedModel: 'Job',
+            actionUrl: '/jobs'
+        }).catch(err => console.error('Error sending job post push notification:', err));
+
         if (req.admin.constructor.modelName === 'User') {
             const user = req.admin;
             user.jobsPostedInCurrentPlan += 1;
@@ -416,6 +428,19 @@ const applyForJob = async (req, res) => {
             customer: job.createdBy,
             status: 'Applied'
         });
+
+        // Send push notification to the customer/chef who posted the job
+        const notificationController = require('./notificationController');
+        notificationController.sendNotificationToUser({
+            userId: job.createdBy,
+            userModel: 'User',
+            title: '📝 New Job Application',
+            message: `${candidate.name} has applied for your job "${job.title}".`,
+            type: 'application_status',
+            relatedId: application._id,
+            relatedModel: 'Application',
+            actionUrl: '/applications'
+        }).catch(err => console.error('Error sending job apply push notification:', err));
 
         // Add to candidate's applications array (for backward compatibility)
         await Candidate.findByIdAndUpdate(

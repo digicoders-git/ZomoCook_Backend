@@ -54,11 +54,23 @@ const sendFCMToAll = async (title, message, notificationType, relatedId, actionU
  */
 exports.getNotifications = async (req, res) => {
     try {
-        const { search, target, status, limit = 20 } = req.query;
+        const { search, status, limit = 50 } = req.query;
         let query = {};
         if (search) query.title = new RegExp(search, 'i');
-        if (target) query.target = target;
         if (status) query.status = status;
+        
+        if (req.admin) {
+            const isSuperAdmin = req.admin.constructor.modelName === 'Admin';
+            if (!isSuperAdmin) {
+                const userRole = req.admin.role?.name?.toLowerCase() || '';
+                const targetRole = userRole === 'cook' ? 'candidates' : 'customers';
+
+                query.$or = [
+                    { recipient: req.admin._id },
+                    { recipient: null, target: { $in: ['all', targetRole] } }
+                ];
+            }
+        }
         
         const notifications = await Notification.find(query)
             .sort({ createdAt: -1 })
@@ -74,6 +86,7 @@ exports.getNotifications = async (req, res) => {
         res.status(500).json({ success: false, message: error.message });
     }
 };
+
 
 /**
  * @desc    Create new notification + send FCM push
@@ -183,10 +196,12 @@ exports.saveFCMToken = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Token required' });
         }
 
-        if (req.admin?.id) {
-            await Admin.findByIdAndUpdate(req.admin.id, { fcmToken: token });
-        } else if (req.user?.id) {
-            await User.findByIdAndUpdate(req.user.id, { fcmToken: token });
+        if (req.admin) {
+            if (req.admin.constructor.modelName === 'Admin') {
+                await Admin.findByIdAndUpdate(req.admin._id || req.admin.id, { fcmToken: token });
+            } else {
+                await User.findByIdAndUpdate(req.admin._id || req.admin.id, { fcmToken: token });
+            }
         }
 
         res.status(200).json({ success: true, message: 'FCM token saved' });
@@ -194,3 +209,112 @@ exports.saveFCMToken = async (req, res) => {
         res.status(500).json({ success: false, message: error.message });
     }
 };
+
+// Helper: Send push notification to a specific user (either Admin or User) and save in database
+exports.sendNotificationToUser = async ({
+    userId,
+    userModel = 'User',
+    title,
+    message,
+    type,
+    relatedId,
+    relatedModel,
+    actionUrl
+}) => {
+    try {
+        const notification = await Notification.create({
+            title,
+            message,
+            type,
+            relatedId,
+            relatedModel,
+            actionUrl,
+            target: 'all',
+            recipient: userId,
+            recipientModel: userModel,
+            status: 'active'
+        });
+
+        let recipientDoc;
+        if (userModel === 'Admin') {
+            recipientDoc = await Admin.findById(userId).select('fcmToken');
+        } else {
+            recipientDoc = await User.findById(userId).select('fcmToken');
+        }
+
+        if (recipientDoc && recipientDoc.fcmToken) {
+            const payload = {
+                notification: { title, body: message },
+                data: {
+                    notificationType: type,
+                    relatedId: relatedId?.toString() || '',
+                    actionUrl: actionUrl || '/'
+                }
+            };
+            await admin.messaging().send({
+                token: recipientDoc.fcmToken,
+                notification: payload.notification,
+                data: payload.data
+            });
+        }
+        return notification;
+    } catch (err) {
+        console.error('Error in sendNotificationToUser:', err);
+    }
+};
+
+// Helper: Send push notification to all users of a specific role (e.g. 'Cook') and save in database
+exports.sendNotificationToRole = async ({
+    roleName,
+    title,
+    message,
+    type,
+    relatedId,
+    relatedModel,
+    actionUrl
+}) => {
+    try {
+        const target = roleName.toLowerCase() === 'cook' ? 'candidates' : 'customers';
+        const notification = await Notification.create({
+            title,
+            message,
+            type,
+            relatedId,
+            relatedModel,
+            actionUrl,
+            target,
+            status: 'active'
+        });
+
+        const Role = require('../models/Role');
+        const roleDoc = await Role.findOne({ name: { $regex: new RegExp(`^${roleName}$`, 'i') } });
+        if (!roleDoc) {
+            console.error(`Role ${roleName} not found`);
+            return notification;
+        }
+
+        const users = await User.find({ role: roleDoc._id, fcmToken: { $ne: null } }).select('fcmToken');
+        const tokens = users.map(u => u.fcmToken).filter(Boolean);
+
+        if (tokens.length > 0) {
+            const payload = {
+                notification: { title, body: message },
+                data: {
+                    notificationType: type,
+                    relatedId: relatedId?.toString() || '',
+                    actionUrl: actionUrl || '/'
+                }
+            };
+
+            await admin.messaging().sendEachForMulticast({
+                tokens,
+                notification: payload.notification,
+                data: payload.data
+            });
+        }
+        return notification;
+    } catch (err) {
+        console.error('Error in sendNotificationToRole:', err);
+    }
+};
+

@@ -18,6 +18,11 @@ const bannerSchema = new mongoose.Schema({
     enum: ['active', 'inactive'],
     default: 'active'
   },
+  targetAudience: {
+    type: String,
+    enum: ['both', 'cook', 'chef'],
+    default: 'both'
+  },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Admin'

@@ -19,7 +19,7 @@ const deleteFile = (filePath) => {
  */
 const createBanner = async (req, res) => {
     try {
-        const { title, link, status } = req.body;
+        const { title, link, status, targetAudience } = req.body;
         
         if (!req.file) {
             return res.status(400).json({ success: false, message: 'Please upload a banner image' });
@@ -29,6 +29,7 @@ const createBanner = async (req, res) => {
             title,
             link,
             status,
+            targetAudience: targetAudience || 'both',
             image: req.file.path,
             createdBy: req.admin?._id
         };
@@ -49,11 +50,12 @@ const createBanner = async (req, res) => {
  */
 const getBanners = async (req, res) => {
     try {
-        const { status } = req.query;
+        const { status, targetAudience } = req.query;
         let query = {};
         
-        if (status) {
-            query.status = status;
+        if (status) query.status = status;
+        if (targetAudience && targetAudience !== 'all') {
+            query.$or = [{ targetAudience: targetAudience }, { targetAudience: 'both' }];
         }
 
         const banners = await Banner.find(query).sort({ createdAt: -1 });
@@ -93,13 +95,15 @@ const updateBanner = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Banner not found' });
         }
 
-        const { title, link, status } = req.body;
-        const updateData = { title, link, status };
+        const title = req.body.title !== undefined ? req.body.title : banner.title;
+        const link = req.body.link !== undefined ? req.body.link : banner.link;
+        const status = req.body.status !== undefined ? req.body.status : banner.status;
+        const targetAudience = req.body.targetAudience !== undefined ? req.body.targetAudience : banner.targetAudience;
+
+        const updateData = { title, link, status, targetAudience };
 
         if (req.file) {
-            // Delete old file
             deleteFile(banner.image);
-            // Save new path
             updateData.image = req.file.path;
         }
 
