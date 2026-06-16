@@ -231,7 +231,8 @@ exports.sendNotificationToUser = async ({
             const Candidate = require('../models/Candidate');
             const candidateDoc = await Candidate.findById(userId);
             if (candidateDoc && candidateDoc.phone) {
-                recipientDoc = await User.findOne({ phone: candidateDoc.phone }).select('fcmToken');
+                const last10 = candidateDoc.phone.slice(-10);
+                recipientDoc = await User.findOne({ phone: new RegExp(last10 + '$') }).select('fcmToken');
                 if (recipientDoc) {
                     resolvedRecipientId = recipientDoc._id;
                     resolvedRecipientModel = 'User';
@@ -244,7 +245,8 @@ exports.sendNotificationToUser = async ({
                 const Candidate = require('../models/Candidate');
                 const candidateDoc = await Candidate.findById(userId);
                 if (candidateDoc && candidateDoc.phone) {
-                    recipientDoc = await User.findOne({ phone: candidateDoc.phone }).select('fcmToken');
+                    const last10 = candidateDoc.phone.slice(-10);
+                    recipientDoc = await User.findOne({ phone: new RegExp(last10 + '$') }).select('fcmToken');
                     if (recipientDoc) {
                         resolvedRecipientId = recipientDoc._id;
                         resolvedRecipientModel = 'User';
