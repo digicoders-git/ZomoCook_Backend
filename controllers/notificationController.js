@@ -65,8 +65,26 @@ exports.getNotifications = async (req, res) => {
                 const userRole = req.admin.role?.name?.toLowerCase() || '';
                 const targetRole = userRole === 'cook' ? 'candidates' : 'customers';
 
+                let recipientIds = [req.admin._id];
+
+                // If user is a cook, also find their Candidate ID
+                if (userRole === 'cook') {
+                    const Candidate = require('../models/Candidate');
+                    const candidateDoc = await Candidate.findOne({ phone: req.admin.phone });
+                    if (candidateDoc) {
+                        recipientIds.push(candidateDoc._id);
+                    }
+                } else {
+                    // If user is a customer/chef, also check if they created any Customer profiles
+                    const Customer = require('../models/Customer');
+                    const customerDocs = await Customer.find({ createdBy: req.admin._id });
+                    if (customerDocs && customerDocs.length > 0) {
+                        customerDocs.forEach(c => recipientIds.push(c._id));
+                    }
+                }
+
                 query.$or = [
-                    { recipient: req.admin._id },
+                    { recipient: { $in: recipientIds } },
                     { recipient: null, target: { $in: ['all', targetRole] } }
                 ];
             }
