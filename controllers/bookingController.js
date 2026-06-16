@@ -137,11 +137,11 @@ const updateBooking = async (req, res) => {
         }
 
         // Notify cook about booking update
-        if (booking.cook && booking.cook.creatorModel === 'User') {
+        if (booking.cook) {
             const notificationController = require('./notificationController');
             notificationController.sendNotificationToUser({
-                userId: booking.cook.createdBy,
-                userModel: 'User',
+                userId: booking.cook._id,
+                userModel: 'Candidate',
                 title: '📅 Booking Updated',
                 message: `Your booking for job "${booking.job?.title || 'Cooking'}" status has been updated to "${status}".`,
                 type: 'booking',
@@ -181,11 +181,11 @@ const cancelBooking = async (req, res) => {
         ).populate('job cook customer');
 
         // Notify cook about booking cancellation
-        if (booking.cook && booking.cook.creatorModel === 'User') {
+        if (booking.cook) {
             const notificationController = require('./notificationController');
             notificationController.sendNotificationToUser({
-                userId: booking.cook.createdBy,
-                userModel: 'User',
+                userId: booking.cook._id,
+                userModel: 'Candidate',
                 title: '⚠️ Booking Cancelled',
                 message: `Your booking for job "${booking.job?.title || 'Cooking'}" has been cancelled.`,
                 type: 'booking',

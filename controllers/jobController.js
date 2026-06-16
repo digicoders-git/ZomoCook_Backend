@@ -109,7 +109,8 @@ const getJobs = async (req, res) => {
 
         const totalCount = await Job.countDocuments(query);
 
-        // Add isSaved flag for cook
+        // Add isSaved flag and status counts
+        let savedJobIds = [];
         if (isCook) {
             const candidate = await Candidate.findOne({
                 $or: [
@@ -118,18 +119,32 @@ const getJobs = async (req, res) => {
                     { phone: req.admin.phone }
                 ]
             });
-            const savedJobIds = candidate?.savedJobs || [];
-            jobs = jobs.map(job => ({
-                ...job.toObject(),
-                isSaved: savedJobIds.some(id => id.toString() === job._id.toString())
-            }));
+            savedJobIds = candidate?.savedJobs || [];
         }
+
+        const Application = require('../models/Application');
+        const jobsWithCounts = await Promise.all(jobs.map(async (job) => {
+            const apps = await Application.find({ job: job._id });
+            const assignedCandidates = apps.filter(app => app.status === 'Applied').length;
+            const interviews = apps.filter(app => ['Shortlisted', 'Demo Scheduled', 'Reschedule Requested'].includes(app.status)).length;
+            const rejected = apps.filter(app => ['Rejected', 'Not Interested', 'On Hold'].includes(app.status)).length;
+            const selected = apps.filter(app => app.status === 'Hired').length;
+
+            return {
+                ...job.toObject(),
+                assignedCandidates,
+                interviews,
+                rejected,
+                selected,
+                isSaved: isCook ? savedJobIds.some(id => id.toString() === job._id.toString()) : undefined
+            };
+        }));
 
         res.status(200).json({
             success: true,
-            count: jobs.length,
+            count: jobsWithCounts.length,
             total: totalCount,
-            jobs
+            jobs: jobsWithCounts
         });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -163,9 +178,24 @@ const getJob = async (req, res) => {
             isSaved = candidate?.savedJobs?.includes(job._id) || false;
         }
 
+        const Application = require('../models/Application');
+        const apps = await Application.find({ job: job._id });
+        const assignedCandidates = apps.filter(app => app.status === 'Applied').length;
+        const interviews = apps.filter(app => ['Shortlisted', 'Demo Scheduled', 'Reschedule Requested'].includes(app.status)).length;
+        const rejected = apps.filter(app => ['Rejected', 'Not Interested', 'On Hold'].includes(app.status)).length;
+        const selected = apps.filter(app => app.status === 'Hired').length;
+
+        const jobWithCounts = {
+            ...job.toObject(),
+            assignedCandidates,
+            interviews,
+            rejected,
+            selected
+        };
+
         res.status(200).json({
             success: true,
-            job,
+            job: jobWithCounts,
             isSaved
         });
     } catch (error) {

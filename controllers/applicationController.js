@@ -220,11 +220,11 @@ const updateApplicationStatus = async (req, res) => {
         }
 
         // Notify cook/candidate about status update
-        if (application.candidate && application.candidate.creatorModel === 'User') {
+        if (application.candidate) {
             const notificationController = require('./notificationController');
             notificationController.sendNotificationToUser({
-                userId: application.candidate.createdBy,
-                userModel: 'User',
+                userId: application.candidate._id,
+                userModel: 'Candidate',
                 title: '📋 Application Status Updated',
                 message: `Your application for "${application.job?.title}" has been updated to "${status}".`,
                 type: 'application_status',
@@ -276,11 +276,11 @@ const scheduleDemo = async (req, res) => {
         }
 
         // Notify cook/candidate about demo scheduled
-        if (application.candidate && application.candidate.creatorModel === 'User') {
+        if (application.candidate) {
             const notificationController = require('./notificationController');
             notificationController.sendNotificationToUser({
-                userId: application.candidate.createdBy,
-                userModel: 'User',
+                userId: application.candidate._id,
+                userModel: 'Candidate',
                 title: '📅 Demo Scheduled',
                 message: `Your demo for "${application.job?.title}" is scheduled on ${demoDate} at ${demoTime}.`,
                 type: 'demo_scheduled',
@@ -337,10 +337,10 @@ const rescheduleDemo = async (req, res) => {
         
         if (isChef) {
             // Chef rescheduled -> notify Cook
-            if (application.candidate && application.candidate.creatorModel === 'User') {
+            if (application.candidate) {
                 notificationController.sendNotificationToUser({
-                    userId: application.candidate.createdBy,
-                    userModel: 'User',
+                    userId: application.candidate._id,
+                    userModel: 'Candidate',
                     title: '📅 Demo Reschedule Requested',
                     message: `Chef has requested to reschedule the demo for "${application.job?.title}" to ${demoDate} at ${demoTime}.`,
                     type: 'demo_scheduled',
@@ -404,11 +404,11 @@ const hireCook = async (req, res) => {
         await syncCandidateApplication(application);
 
         // Notify cook/candidate about being hired
-        if (application.candidate && application.candidate.creatorModel === 'User') {
+        if (application.candidate) {
             const notificationController = require('./notificationController');
             notificationController.sendNotificationToUser({
-                userId: application.candidate.createdBy,
-                userModel: 'User',
+                userId: application.candidate._id,
+                userModel: 'Candidate',
                 title: '🎉 You are Hired!',
                 message: `Congratulations! You have been hired for the job "${application.job?.title}" starting from ${joiningDate}.`,
                 type: 'hired',
@@ -476,11 +476,11 @@ const rejectApplication = async (req, res) => {
         }
 
         // Notify cook/candidate about rejection
-        if (application.candidate && application.candidate.creatorModel === 'User') {
+        if (application.candidate) {
             const notificationController = require('./notificationController');
             notificationController.sendNotificationToUser({
-                userId: application.candidate.createdBy,
-                userModel: 'User',
+                userId: application.candidate._id,
+                userModel: 'Candidate',
                 title: '📋 Application Status Update',
                 message: `Your application for "${application.job?.title}" was not selected. Reason: ${rejectionReason || 'Not selected'}`,
                 type: 'application_status',

@@ -210,7 +210,6 @@ exports.saveFCMToken = async (req, res) => {
     }
 };
 
-// Helper: Send push notification to a specific user (either Admin or User) and save in database
 exports.sendNotificationToUser = async ({
     userId,
     userModel = 'User',
@@ -238,24 +237,42 @@ exports.sendNotificationToUser = async ({
         let recipientDoc;
         if (userModel === 'Admin') {
             recipientDoc = await Admin.findById(userId).select('fcmToken');
+        } else if (userModel === 'Candidate') {
+            const Candidate = require('../models/Candidate');
+            const candidateDoc = await Candidate.findById(userId);
+            if (candidateDoc && candidateDoc.phone) {
+                recipientDoc = await User.findOne({ phone: candidateDoc.phone }).select('fcmToken');
+            }
         } else {
             recipientDoc = await User.findById(userId).select('fcmToken');
+            if (!recipientDoc) {
+                // Try finding Candidate first, then find corresponding User
+                const Candidate = require('../models/Candidate');
+                const candidateDoc = await Candidate.findById(userId);
+                if (candidateDoc && candidateDoc.phone) {
+                    recipientDoc = await User.findOne({ phone: candidateDoc.phone }).select('fcmToken');
+                }
+            }
         }
 
         if (recipientDoc && recipientDoc.fcmToken) {
             const payload = {
                 notification: { title, body: message },
                 data: {
-                    notificationType: type,
-                    relatedId: relatedId?.toString() || '',
-                    actionUrl: actionUrl || '/'
+                    notificationType: String(type || ''),
+                    relatedId: String(relatedId || ''),
+                    actionUrl: String(actionUrl || '/')
                 }
             };
+            console.log(`[FCM] Sending push notification to token: ${recipientDoc.fcmToken}`);
             await admin.messaging().send({
                 token: recipientDoc.fcmToken,
                 notification: payload.notification,
                 data: payload.data
             });
+            console.log('[FCM] Push notification sent successfully.');
+        } else {
+            console.log(`[FCM] No FCM token found for recipient: ${userId} (${userModel})`);
         }
         return notification;
     } catch (err) {
