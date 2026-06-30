@@ -28,6 +28,19 @@ const createBooking = async (req, res) => {
         const booking = await Booking.create(bookingData);
         await booking.populate('job cook customer');
 
+        // Notify customer: booking pending, pay ₹500
+        const notificationController = require('./notificationController');
+        notificationController.sendNotificationToUser({
+            userId: customerId,
+            userModel: 'User',
+            title: '💳 Booking Request Received',
+            message: 'Your booking request is pending. Pay ₹500 to confirm staff availability.',
+            type: 'booking',
+            relatedId: booking._id,
+            relatedModel: 'Booking',
+            actionUrl: '/bookings'
+        }).catch(err => console.error('Error sending booking pending notification:', err));
+
         res.status(201).json({
             success: true,
             message: 'Booking created successfully',

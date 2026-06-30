@@ -38,7 +38,7 @@ const sendFCMToAll = async (title, message, notificationType, relatedId, actionU
                     priority: 'high',
                     notification: {
                         sound: 'default',
-                        channelId: 'default',
+                        channelId: 'zomocook_channel',
                         clickAction: 'FLUTTER_NOTIFICATION_CLICK'
                     }
                 },
@@ -305,7 +305,7 @@ exports.sendNotificationToUser = async ({
                     priority: 'high',
                     notification: {
                         sound: 'default',
-                        channelId: 'default',
+                        channelId: 'zomocook_channel',
                         clickAction: 'FLUTTER_NOTIFICATION_CLICK'
                     }
                 },
@@ -430,7 +430,7 @@ exports.sendNotificationToRole = async ({
                         priority: 'high',
                         notification: {
                             sound: 'default',
-                            channelId: 'default',
+                            channelId: 'zomocook_channel',
                             clickAction: 'FLUTTER_NOTIFICATION_CLICK'
                         }
                     },

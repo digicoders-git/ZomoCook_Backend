@@ -180,6 +180,8 @@ const getApplications = async (req, res) => {
 const getMyApplications = async (req, res) => {
     try {
         const { status } = req.query;
+
+        // Search candidate by multiple fields
         const candidate = await Candidate.findOne({
             $or: [
                 { _id: req.admin._id },
@@ -187,17 +189,29 @@ const getMyApplications = async (req, res) => {
                 { phone: req.admin.phone }
             ]
         });
-        if (!candidate) {
-            return res.status(200).json({ success: true, count: 0, applications: [] });
+
+        // If no candidate found, return applications directly by customer/user reference
+        // This handles cases where cook is a User but has direct applications
+        let applications = [];
+
+        if (candidate) {
+            let query = { candidate: candidate._id };
+            if (status) query.status = status;
+
+            applications = await Application.find(query)
+                .populate('job', 'title jobCategory city state salaryRange salary package customer outletName joiningType jobType jobPosition')
+                .populate('customer', 'name email phone outletName')
+                .sort({ appliedDate: -1 });
+        } else {
+            // Fallback: try to find applications where customer matches logged-in user
+            let query = { customer: req.admin._id };
+            if (status) query.status = status;
+
+            applications = await Application.find(query)
+                .populate('job', 'title jobCategory city state salaryRange salary package customer outletName joiningType jobType jobPosition')
+                .populate('candidate', 'name phone city profileImage')
+                .sort({ appliedDate: -1 });
         }
-
-        let query = { candidate: candidate._id };
-        if (status) query.status = status;
-
-        const applications = await Application.find(query)
-            .populate('job', 'title jobCategory city salaryRange customer')
-            .populate('customer', 'name email phone')
-            .sort({ appliedDate: -1 });
 
         res.status(200).json({
             success: true,
@@ -563,10 +577,26 @@ const getApplicationById = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Application not found' });
         }
 
-        // If viewed by the customer/job poster, mark as viewed
+        // If viewed by the customer/job poster, mark as viewed and notify cook
         if (req.admin && req.admin.constructor.modelName === 'User') {
+            const wasAlreadyViewed = application.isViewedByClient;
             application.isViewedByClient = true;
             await application.save();
+
+            // Notify cook that their profile was viewed (only first time)
+            if (!wasAlreadyViewed && application.candidate) {
+                const notificationController = require('./notificationController');
+                notificationController.sendNotificationToUser({
+                    userId: application.candidate._id,
+                    userModel: 'Candidate',
+                    title: '\uD83D\uDC40 Profile Viewed',
+                    message: 'Your profile has been shortlisted by the employer.',
+                    type: 'application_status',
+                    relatedId: application._id,
+                    relatedModel: 'Application',
+                    actionUrl: '/applications'
+                }).catch(err => console.error('Error sending profile viewed notification:', err));
+            }
         }
 
         res.status(200).json({
