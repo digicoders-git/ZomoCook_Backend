@@ -136,7 +136,14 @@ const getApplications = async (req, res) => {
         if (isCustomer) {
             const Job = require('../models/Job');
             const Customer = require('../models/Customer');
-            const customerDocs = await Customer.find({ createdBy: userId });
+            
+            const last10 = req.admin.phone ? req.admin.phone.slice(-10) : '';
+            const customerDocs = await Customer.find({
+                $or: [
+                    { createdBy: userId },
+                    { contactPhone: new RegExp(last10 + '$') }
+                ]
+            });
             const customerIds = customerDocs.map(c => c._id);
 
             const myJobs = await Job.find({ 
