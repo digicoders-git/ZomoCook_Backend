@@ -66,6 +66,106 @@ app.get('/', (req, res) => {
   res.send('ZomoCook API is running...');
 });
 
+// ── DEV/TEST: Manually trigger scheduler ──────────────────────────────────────
+app.get('/api/test/run-scheduler', async (req, res) => {
+  try {
+    const Job = require('./models/Job');
+    const Application = require('./models/Application');
+    const Booking = require('./models/Booking');
+    const User = require('./models/User');
+    const notificationController = require('./controllers/notificationController');
+    const now = new Date();
+    const results = [];
+
+    // 1. Inactive Jobs
+    const pendingJobs = await Job.find({ $or: [{ status: 'Inactive' }, { isActive: false }] });
+    for (const job of pendingJobs) {
+      const diffMins = Math.floor((now - new Date(job.createdAt)) / 60000);
+      const diffHours = Math.floor(diffMins / 60);
+      let message = '';
+      let updated = false;
+      if (diffHours >= 24 && !job.paymentReminderSent24Hour) {
+        message = 'Your job is still inactive. Activate now before candidates become unavailable.';
+        job.paymentReminderSent24Hour = true; updated = true;
+      } else if (diffHours >= 6 && !job.paymentReminderSent6Hour) {
+        message = "Don't miss qualified candidates. Complete your hiring process today.";
+        job.paymentReminderSent6Hour = true; updated = true;
+      } else if (diffMins >= 60 && !job.paymentReminderSent1Hour) {
+        message = 'Good news! Cooks are available. Activate your job now.';
+        job.paymentReminderSent1Hour = true; updated = true;
+      } else if (diffMins >= 15 && !job.paymentReminderSent15Min) {
+        message = 'Your job is now live. 3 cooks have already shown interest.';
+        job.paymentReminderSent15Min = true; updated = true;
+      }
+      if (updated && message) {
+        await job.save();
+        await notificationController.sendNotificationToUser({ userId: job.createdBy, userModel: 'User', title: '⚠️ Job Activation Required', message, type: 'job_status', relatedId: job._id, relatedModel: 'Job', actionUrl: '/jobs' });
+        results.push({ trigger: 'job_inactive', jobId: job._id, message });
+      }
+    }
+
+    // 2. Unviewed Applications
+    const activeJobs = await Job.find({ isActive: true });
+    for (const job of activeJobs) {
+      const unviewed = await Application.find({ job: job._id, status: 'Applied', isViewedByClient: false, notifiedAppliedNotViewed: false });
+      if (unviewed.length > 0) {
+        const msg = unviewed.length >= 3 ? `${unviewed.length} verified candidates are waiting. Review profiles now.` : 'Your next chef could be one click away. View shortlisted candidates.';
+        await Application.updateMany({ _id: { $in: unviewed.map(a => a._id) } }, { $set: { notifiedAppliedNotViewed: true } });
+        await notificationController.sendNotificationToUser({ userId: job.createdBy, userModel: 'User', title: '📝 Candidates Waiting', message: msg, type: 'application_status', relatedId: job._id, relatedModel: 'Job', actionUrl: '/applications' });
+        results.push({ trigger: 'unviewed_applications', jobId: job._id, count: unviewed.length });
+      }
+    }
+
+    // 4. Low Applications
+    const lowAppJobs = await Job.find({ isActive: true, lowAppsReminderSent: false });
+    for (const job of lowAppJobs) {
+      const appCount = await Application.countDocuments({ job: job._id });
+      if (appCount < 3) {
+        const msg = 'We are expanding your search to find more suitable candidates.';
+        job.lowAppsReminderSent = true;
+        await job.save();
+        await notificationController.sendNotificationToUser({ userId: job.createdBy, userModel: 'User', title: '🚀 Sourcing Candidates', message: msg, type: 'job_status', relatedId: job._id, relatedModel: 'Job', actionUrl: '/jobs' });
+        results.push({ trigger: 'low_applications', jobId: job._id, appCount });
+      }
+    }
+
+    // 7. Pending Bookings
+    const pendingBookings = await Booking.find({ status: 'pending', paymentReminderSent: false });
+    for (const booking of pendingBookings) {
+      booking.paymentReminderSent = true;
+      await booking.save();
+      await notificationController.sendNotificationToUser({ userId: booking.customer, userModel: 'User', title: '💳 Payment Pending', message: 'Your booking request is pending. Pay ₹500 to confirm staff availability.', type: 'booking', relatedId: booking._id, relatedModel: 'Booking', actionUrl: '/bookings' });
+      results.push({ trigger: 'pending_booking', bookingId: booking._id });
+    }
+
+    res.json({ success: true, message: 'Scheduler ran successfully', triggered: results.length, results });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Test: Send notification to a specific user by phone
+app.post('/api/test/send-notification', async (req, res) => {
+  try {
+    const { phone, title, message, actionUrl } = req.body;
+    const User = require('./models/User');
+    const user = await User.findOne({ phone: new RegExp(phone + '$') });
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    const notificationController = require('./controllers/notificationController');
+    await notificationController.sendNotificationToUser({
+      userId: user._id,
+      userModel: 'User',
+      title: title || 'Test Notification',
+      message: message || 'Yeh ek test notification hai',
+      type: 'system',
+      actionUrl: actionUrl || '/'
+    });
+    res.json({ success: true, message: `Notification sent to ${user.name} (${phone})`, fcmToken: user.fcmToken ? 'present' : 'missing' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // Error handling middleware (optional but good practice)
 app.use((err, req, res, next) => {
   const statusCode = res.statusCode === 200 ? 500 : res.statusCode;

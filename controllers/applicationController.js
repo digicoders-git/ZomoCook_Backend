@@ -234,18 +234,48 @@ const updateApplicationStatus = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Application not found' });
         }
 
-        // Notify cook/candidate about status update
+        // Notify cook/candidate about status update with exact messages per status
         if (application.candidate) {
             const notificationController = require('./notificationController');
+
+            let notifTitle = '📋 Application Update';
+            let notifMessage = '';
+
+            switch (status) {
+                case 'Shortlisted':
+                    notifTitle = '🌟 Profile Shortlisted';
+                    notifMessage = 'Your profile has been shortlisted by the employer.';
+                    break;
+                case 'Hired':
+                    notifTitle = '🎉 Congratulations!';
+                    notifMessage = 'Congratulations! You have been selected. View joining details.';
+                    break;
+                case 'Rejected':
+                    notifTitle = '📋 Application Update';
+                    notifMessage = `Your application for "${application.job?.title}" was not selected at this time.`;
+                    break;
+                case 'On Hold':
+                    notifTitle = '⏳ Application On Hold';
+                    notifMessage = `Your application for "${application.job?.title}" is currently on hold.`;
+                    break;
+                case 'Not Interested':
+                    notifTitle = '📋 Application Closed';
+                    notifMessage = `The employer has closed your application for "${application.job?.title}".`;
+                    break;
+                default:
+                    notifTitle = '📋 Application Status Updated';
+                    notifMessage = `Your application for "${application.job?.title}" has been updated to "${status}".`;
+            }
+
             notificationController.sendNotificationToUser({
                 userId: application.candidate._id,
                 userModel: 'Candidate',
-                title: '📋 Application Status Updated',
-                message: `Your application for "${application.job?.title}" has been updated to "${status}".`,
-                type: 'application_status',
+                title: notifTitle,
+                message: notifMessage,
+                type: status === 'Hired' ? 'hired' : 'application_status',
                 relatedId: application._id,
                 relatedModel: 'Application',
-                actionUrl: '/applications'
+                actionUrl: status === 'Hired' ? '/bookings' : '/applications'
             }).catch(err => console.error('Error sending application status update push notification:', err));
         }
 
@@ -418,14 +448,14 @@ const hireCook = async (req, res) => {
         await application.save();
         await syncCandidateApplication(application);
 
-        // Notify cook/candidate about being hired
+        // Notify cook/candidate about being hired with exact message
         if (application.candidate) {
             const notificationController = require('./notificationController');
             notificationController.sendNotificationToUser({
                 userId: application.candidate._id,
                 userModel: 'Candidate',
-                title: '🎉 You are Hired!',
-                message: `Congratulations! You have been hired for the job "${application.job?.title}" starting from ${joiningDate}.`,
+                title: '🎉 Congratulations!',
+                message: 'Congratulations! You have been selected. View joining details.',
                 type: 'hired',
                 relatedId: application._id,
                 relatedModel: 'Application',

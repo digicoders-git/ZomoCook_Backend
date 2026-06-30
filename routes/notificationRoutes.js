@@ -8,7 +8,8 @@ const {
     getNotification,
     toggleNotificationStatus,
     deleteNotification,
-    saveFCMToken
+    saveFCMToken,
+    markAllRead
 } = require('../controllers/notificationController');
 const { protect } = require('../middleware/authMiddleware');
 
@@ -28,6 +29,7 @@ const upload = multer({ storage });
 router.use(protect);
 
 router.post('/save-token', saveFCMToken);
+router.post('/mark-all-read', markAllRead);
 router.get('/', getNotifications);
 
 router.post('/', upload.single('image'), createNotification);

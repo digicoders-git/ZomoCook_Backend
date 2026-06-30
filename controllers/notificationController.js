@@ -312,6 +312,20 @@ exports.sendNotificationToUser = async ({
 };
 
 // Helper: Send push notification to all users of a specific role (e.g. 'Cook') and save in database
+exports.markAllRead = async (req, res) => {
+    try {
+        const userId = req.admin._id;
+        await Notification.updateMany(
+            { recipient: userId, isRead: false },
+            { $set: { isRead: true } }
+        );
+        res.status(200).json({ success: true, message: 'All notifications marked as read' });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// Helper: Send push notification to all users of a specific role (e.g. 'Cook') and save in database
 exports.sendNotificationToRole = async ({
     roleName,
     title,

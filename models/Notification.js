@@ -16,7 +16,7 @@ const notificationSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['job_available', 'application_status', 'demo_scheduled', 'hired', 'booking', 'rating', 'profile', 'offer', 'system'],
+    enum: ['job_available', 'application_status', 'demo_scheduled', 'hired', 'booking', 'rating', 'profile', 'offer', 'package_upgrade', 'job_status', 'system'],
     default: 'system'
   },
   relatedId: {
@@ -53,6 +53,10 @@ const notificationSchema = new mongoose.Schema({
     type: String,
     enum: ['User', 'Admin', 'Candidate', 'Customer'],
     default: 'User'
+  },
+  isRead: {
+    type: Boolean,
+    default: false
   }
 }, {
   timestamps: true
