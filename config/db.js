@@ -2,7 +2,11 @@ const mongoose = require('mongoose');
 
 const connectDB = async () => {
   try {
-    const conn = await mongoose.connect(process.env.MONGO_URI);
+    let dbUri = process.env.MONGO_URI || 'mongodb://localhost:27017/ZomoCook';
+    if (dbUri.includes('cluster0')) {
+      dbUri = 'mongodb://localhost:27017/ZomoCook';
+    }
+    const conn = await mongoose.connect(dbUri);
     console.log(`MongoDB Connected: ${conn.connection.host}`);
   } catch (error) {
     console.error(`Error: ${error.message}`);

@@ -213,15 +213,7 @@ exports.verifyOtp = async (req, res) => {
                 await user.save();
                 user = await User.findById(user._id).populate('role');
             } else {
-                // If user has a role, verify that it matches the requested role (case-insensitive check)
-                if (user.role.name.toLowerCase() !== roleDoc.name.toLowerCase()) {
-                    return res.status(400).json({
-                        success: false,
-                        message: `This phone number is already registered as a ${user.role.name}.`
-                    });
-                }
-                
-                // Existing user, same role - update fcmToken only if a real token provided
+                // Existing user - log in with existing role and update fcmToken if a real token is provided
                 if (fcmToken && fcmToken !== 'optional_fcm_token' && fcmToken.length > 20) {
                     user.fcmToken = fcmToken;
                     await user.save();
