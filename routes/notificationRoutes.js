@@ -9,7 +9,8 @@ const {
     toggleNotificationStatus,
     deleteNotification,
     saveFCMToken,
-    markAllRead
+    markAllRead,
+    markAsRead
 } = require('../controllers/notificationController');
 const { protect } = require('../middleware/authMiddleware');
 
@@ -30,6 +31,7 @@ router.use(protect);
 
 router.post('/save-token', saveFCMToken);
 router.post('/mark-all-read', markAllRead);
+router.patch('/:id/read', markAsRead);
 router.get('/', getNotifications);
 
 router.post('/', upload.single('image'), createNotification);
