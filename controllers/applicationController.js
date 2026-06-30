@@ -219,7 +219,7 @@ const updateApplicationStatus = async (req, res) => {
         const { status } = req.body;
         const applicationId = req.params.id;
 
-        const validStatuses = ['Applied', 'Shortlisted', 'Demo Scheduled', 'Reschedule Requested', 'Hired', 'Rejected', 'On Hold', 'Not Interested'];
+        const validStatuses = ['Applied', 'Shortlisted', 'Demo Scheduled', 'Reschedule Requested', 'Hired', 'Rejected', 'On Hold', 'Not Interested', 'Cancelled'];
         if (!validStatuses.includes(status)) {
             return res.status(400).json({ success: false, message: 'Invalid status' });
         }
