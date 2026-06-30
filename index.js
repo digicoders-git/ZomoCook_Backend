@@ -24,6 +24,13 @@ app.use(cors({
     if (!origin) return callback(null, true);
     const allowed = [
       'https://zomo-cook-admin-panel.vercel.app',
+      'https://yourdomain.com',              // Production frontend
+      'https://www.yourdomain.com',
+      'http://localhost:5173',        // Vite dev server
+      'http://localhost:3000',        // React dev server
+      'http://localhost:3001',        // Alternative port
+      'http://127.0.0.1:5173',
+      'http://127.0.0.1:3000',
       /^http:\/\/localhost:\d+$/,
       /^http:\/\/127\.0\.0\.1:\d+$/,
     ];
