@@ -335,21 +335,46 @@ exports.sendNotificationToUser = async ({
 
 exports.markAllRead = async (req, res) => {
     try {
+        console.log('[DEBUG] markAllRead initiated for user ID:', req.admin._id);
         const userId = req.admin._id;
         const userRole = req.admin.role?.name?.toLowerCase() || '';
         const targetRole = userRole === 'cook' ? 'candidates' : 'customers';
 
-        // Mark both: directly addressed notifications AND broadcast notifications (recipient: null)
-        await Notification.updateMany(
+        let recipientIds = [userId];
+        console.log('[DEBUG] User Role:', userRole, 'Target Role:', targetRole);
+
+        // If user is a cook, also find their Candidate ID
+        if (userRole === 'cook') {
+            const Candidate = require('../models/Candidate');
+            const candidateDoc = await Candidate.findOne({ phone: req.admin.phone });
+            if (candidateDoc) {
+                recipientIds.push(candidateDoc._id);
+                console.log('[DEBUG] Found Candidate ID:', candidateDoc._id);
+            }
+        } else {
+            // If user is a customer/chef, also check if they created any Customer profiles
+            const Customer = require('../models/Customer');
+            const customerDocs = await Customer.find({ createdBy: userId });
+            if (customerDocs && customerDocs.length > 0) {
+                customerDocs.forEach(c => recipientIds.push(c._id));
+                console.log('[DEBUG] Found Customer IDs:', customerDocs.map(c => c._id));
+            }
+        }
+
+        console.log('[DEBUG] final recipientIds array:', recipientIds);
+
+        // Mark both: directly addressed notifications (including Candidate/Customer profile IDs) AND broadcast notifications (recipient: null)
+        const updateResult = await Notification.updateMany(
             {
                 isRead: false,
                 $or: [
-                    { recipient: userId },
+                    { recipient: { $in: recipientIds } },
                     { recipient: null, target: { $in: ['all', targetRole] } }
                 ]
             },
             { $set: { isRead: true } }
         );
+        console.log('[DEBUG] updateMany result:', updateResult);
         res.status(200).json({ success: true, message: 'All notifications marked as read' });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
