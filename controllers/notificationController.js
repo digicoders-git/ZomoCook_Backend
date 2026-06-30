@@ -363,7 +363,7 @@ exports.markAllRead = async (req, res) => {
         // Mark both: directly addressed notifications (including Candidate/Customer profile IDs) AND broadcast notifications (recipient: null)
         const updateResult = await Notification.updateMany(
             {
-                isRead: false,
+                isRead: { $ne: true },
                 $or: [
                     { recipient: { $in: recipientIds } },
                     { recipient: null, target: { $in: ['all', targetRole] } }
