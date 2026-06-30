@@ -69,22 +69,20 @@ exports.getNotifications = async (req, res) => {
         if (req.admin) {
             const isSuperAdmin = req.admin.constructor.modelName === 'Admin';
             if (!isSuperAdmin) {
-                const userRole = req.admin.role?.name?.toLowerCase() || '';
-                const targetRole = userRole === 'cook' ? 'candidates' : 'customers';
+                const userRole = req.admin.role && req.admin.role.name ? req.admin.role.name.toLowerCase() : '';
+                const Candidate = require('../models/Candidate');
+                const candidateDoc = await Candidate.findOne({ phone: req.admin.phone });
+                const isCook = userRole === 'cook' || candidateDoc != null;
+                const targetRole = isCook ? 'candidates' : 'customers';
 
-                let recipientIds = [req.admin._id];
-
-                // If user is a cook, also find their Candidate ID
-                if (userRole === 'cook') {
-                    const Candidate = require('../models/Candidate');
-                    const candidateDoc = await Candidate.findOne({ phone: req.admin.phone });
+                let recipientIds = [req.admin._id || req.admin.id];
+                if (isCook) {
                     if (candidateDoc) {
                         recipientIds.push(candidateDoc._id);
                     }
                 } else {
-                    // If user is a customer/chef, also check if they created any Customer profiles
                     const Customer = require('../models/Customer');
-                    const customerDocs = await Customer.find({ createdBy: req.admin._id });
+                    const customerDocs = await Customer.find({ createdBy: req.admin._id || req.admin.id });
                     if (customerDocs && customerDocs.length > 0) {
                         customerDocs.forEach(c => recipientIds.push(c._id));
                     }
@@ -337,22 +335,21 @@ exports.markAllRead = async (req, res) => {
     try {
         console.log('[DEBUG] markAllRead initiated for user ID:', req.admin._id);
         const userId = req.admin._id;
-        const userRole = req.admin.role?.name?.toLowerCase() || '';
-        const targetRole = userRole === 'cook' ? 'candidates' : 'customers';
+        const userRole = req.admin.role && req.admin.role.name ? req.admin.role.name.toLowerCase() : '';
+        const Candidate = require('../models/Candidate');
+        const candidateDoc = await Candidate.findOne({ phone: req.admin.phone });
+        const isCook = userRole === 'cook' || candidateDoc != null;
+        const targetRole = isCook ? 'candidates' : 'customers';
 
         let recipientIds = [userId];
         console.log('[DEBUG] User Role:', userRole, 'Target Role:', targetRole);
 
-        // If user is a cook, also find their Candidate ID
-        if (userRole === 'cook') {
-            const Candidate = require('../models/Candidate');
-            const candidateDoc = await Candidate.findOne({ phone: req.admin.phone });
+        if (isCook) {
             if (candidateDoc) {
                 recipientIds.push(candidateDoc._id);
                 console.log('[DEBUG] Found Candidate ID:', candidateDoc._id);
             }
         } else {
-            // If user is a customer/chef, also check if they created any Customer profiles
             const Customer = require('../models/Customer');
             const customerDocs = await Customer.find({ createdBy: userId });
             if (customerDocs && customerDocs.length > 0) {

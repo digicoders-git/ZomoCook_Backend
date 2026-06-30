@@ -94,7 +94,9 @@ const getBookings = async (req, res) => {
         }
 
         const bookings = await Booking.find(query)
-            .populate('job cook customer')
+            .populate('job', 'title jobCategory jobType city state salaryRange outletName joiningType')
+            .populate('cook', 'name phone profileImage city')
+            .populate('customer', 'name phone email outletName')
             .sort({ createdAt: -1 });
 
         res.status(200).json({
