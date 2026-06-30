@@ -19,32 +19,39 @@ const sendFCMToAll = async (title, message, notificationType, relatedId, actionU
     const tokens = [...admins, ...users].map(u => u.fcmToken).filter(Boolean);
     if (!tokens.length) return;
 
-    const payload = {
-        notification: { 
-            title, 
-            body: message,
-            clickAction: actionUrl || '/' // Deep link
-        },
-        data: {
-            notificationType,
-            relatedId: relatedId?.toString() || '',
-            actionUrl: actionUrl || '/'
-        }
-    };
-
     try {
-        await admin.messaging().sendEachForMulticast({
-            tokens,
-            notification: payload.notification,
-            data: payload.data,
-            webpush: {
-                fcmOptions: {
-                    link: actionUrl || '/'
+        const chunkSize = 500;
+        for (let i = 0; i < tokens.length; i += chunkSize) {
+            const chunk = tokens.slice(i, i + chunkSize);
+            await admin.messaging().sendEachForMulticast({
+                tokens: chunk,
+                notification: {
+                    title,
+                    body: message,
+                },
+                data: {
+                    notificationType: String(notificationType || 'system'),
+                    relatedId: relatedId?.toString() || '',
+                    actionUrl: actionUrl || '/'
+                },
+                android: {
+                    priority: 'high',
+                    notification: {
+                        sound: 'default',
+                        channelId: 'default',
+                        clickAction: 'FLUTTER_NOTIFICATION_CLICK'
+                    }
+                },
+                apns: {
+                    payload: {
+                        aps: { sound: 'default', badge: 1 }
+                    }
                 }
-            }
-        });
+            });
+        }
+        console.log(`[FCM] Broadcast sent to ${tokens.length} tokens`);
     } catch (err) {
-        console.error('FCM Error:', err);
+        console.error('FCM Broadcast Error:', err);
     }
 };
 
@@ -293,17 +300,32 @@ exports.sendNotificationToUser = async ({
                     notificationType: String(type || ''),
                     relatedId: String(relatedId || ''),
                     actionUrl: String(actionUrl || '/')
+                },
+                android: {
+                    priority: 'high',
+                    notification: {
+                        sound: 'default',
+                        channelId: 'default',
+                        clickAction: 'FLUTTER_NOTIFICATION_CLICK'
+                    }
+                },
+                apns: {
+                    payload: {
+                        aps: { sound: 'default', badge: 1 }
+                    }
                 }
             };
-            console.log(`[FCM] Sending push notification to token: ${recipientDoc.fcmToken}`);
+            console.log(`[FCM] Sending push to: ${recipientDoc.fcmToken.substring(0, 20)}...`);
             await admin.messaging().send({
                 token: recipientDoc.fcmToken,
                 notification: payload.notification,
-                data: payload.data
+                data: payload.data,
+                android: payload.android,
+                apns: payload.apns
             });
             console.log('[FCM] Push notification sent successfully.');
         } else {
-            console.log(`[FCM] No FCM token found for recipient: ${userId} (${userModel})`);
+            console.log(`[FCM] No FCM token for recipient: ${userId} (${userModel})`);
         }
         return notification;
     } catch (err) {
@@ -311,12 +333,21 @@ exports.sendNotificationToUser = async ({
     }
 };
 
-// Helper: Send push notification to all users of a specific role (e.g. 'Cook') and save in database
 exports.markAllRead = async (req, res) => {
     try {
         const userId = req.admin._id;
+        const userRole = req.admin.role?.name?.toLowerCase() || '';
+        const targetRole = userRole === 'cook' ? 'candidates' : 'customers';
+
+        // Mark both: directly addressed notifications AND broadcast notifications (recipient: null)
         await Notification.updateMany(
-            { recipient: userId, isRead: false },
+            {
+                isRead: false,
+                $or: [
+                    { recipient: userId },
+                    { recipient: null, target: { $in: ['all', targetRole] } }
+                ]
+            },
             { $set: { isRead: true } }
         );
         res.status(200).json({ success: true, message: 'All notifications marked as read' });
@@ -359,20 +390,33 @@ exports.sendNotificationToRole = async ({
         const tokens = users.map(u => u.fcmToken).filter(Boolean);
 
         if (tokens.length > 0) {
-            const payload = {
-                notification: { title, body: message },
-                data: {
-                    notificationType: type,
-                    relatedId: relatedId?.toString() || '',
-                    actionUrl: actionUrl || '/'
-                }
-            };
-
-            await admin.messaging().sendEachForMulticast({
-                tokens,
-                notification: payload.notification,
-                data: payload.data
-            });
+            const chunkSize = 500;
+            for (let i = 0; i < tokens.length; i += chunkSize) {
+                const chunk = tokens.slice(i, i + chunkSize);
+                await admin.messaging().sendEachForMulticast({
+                    tokens: chunk,
+                    notification: { title, body: message },
+                    data: {
+                        notificationType: String(type || ''),
+                        relatedId: relatedId?.toString() || '',
+                        actionUrl: actionUrl || '/'
+                    },
+                    android: {
+                        priority: 'high',
+                        notification: {
+                            sound: 'default',
+                            channelId: 'default',
+                            clickAction: 'FLUTTER_NOTIFICATION_CLICK'
+                        }
+                    },
+                    apns: {
+                        payload: {
+                            aps: { sound: 'default', badge: 1 }
+                        }
+                    }
+                });
+            }
+            console.log(`[FCM] Role broadcast sent to ${tokens.length} ${roleName} users`);
         }
         return notification;
     } catch (err) {
