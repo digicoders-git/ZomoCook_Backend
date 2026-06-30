@@ -29,6 +29,10 @@ const bookingSchema = new mongoose.Schema({
         enum: ['pending', 'confirmed', 'in-progress', 'completed', 'cancelled'],
         default: 'pending'
     },
+    paymentReminderSent: {
+        type: Boolean,
+        default: false
+    },
     remarks: String,
     startDate: Date,
     endDate: Date,

@@ -124,26 +124,63 @@ const getBooking = async (req, res) => {
  */
 const updateBooking = async (req, res) => {
     try {
-        const { status, remarks } = req.body;
+        const { status, remarks, cook } = req.body;
+        const oldBooking = await Booking.findById(req.params.id);
+
+        if (!oldBooking) {
+            return res.status(404).json({ success: false, message: 'Booking not found' });
+        }
+
+        const updateData = {};
+        if (status !== undefined) updateData.status = status;
+        if (remarks !== undefined) updateData.remarks = remarks;
+        if (cook !== undefined) updateData.cook = cook;
 
         const booking = await Booking.findByIdAndUpdate(
             req.params.id,
-            { status, remarks },
+            updateData,
             { new: true }
         ).populate('job cook customer');
 
-        if (!booking) {
-            return res.status(404).json({ success: false, message: 'Booking not found' });
+        // Notification: Booking status changed
+        const notificationController = require('./notificationController');
+
+        // If status changed to confirmed (e.g. from pending after ₹500 payment)
+        if (status === 'confirmed' && oldBooking.status === 'pending') {
+            notificationController.sendNotificationToUser({
+                userId: booking.customer._id,
+                userModel: 'User',
+                title: '💳 Booking Confirmed',
+                message: 'Your booking is confirmed. Our team is assigning the best available staff.',
+                type: 'booking',
+                relatedId: booking._id,
+                relatedModel: 'Booking',
+                actionUrl: '/bookings'
+            }).catch(err => console.error('Error sending booking confirmed notification:', err));
+        }
+
+        // If cook was assigned / changed
+        const cookAssignedNow = cook && (!oldBooking.cook || oldBooking.cook.toString() !== cook.toString());
+        if (cookAssignedNow) {
+            notificationController.sendNotificationToUser({
+                userId: booking.customer._id,
+                userModel: 'User',
+                title: '👨‍🍳 Staff Assigned Successfully',
+                message: 'Staff assigned successfully. View details and contact information.',
+                type: 'booking',
+                relatedId: booking._id,
+                relatedModel: 'Booking',
+                actionUrl: '/bookings'
+            }).catch(err => console.error('Error sending staff assigned notification:', err));
         }
 
         // Notify cook about booking update
         if (booking.cook) {
-            const notificationController = require('./notificationController');
             notificationController.sendNotificationToUser({
                 userId: booking.cook._id,
                 userModel: 'Candidate',
                 title: '📅 Booking Updated',
-                message: `Your booking for job "${booking.job?.title || 'Cooking'}" status has been updated to "${status}".`,
+                message: `Your booking for job "${booking.job?.title || 'Cooking'}" status has been updated to "${status || booking.status}".`,
                 type: 'booking',
                 relatedId: booking._id,
                 relatedModel: 'Booking',

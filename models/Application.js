@@ -21,6 +21,18 @@ const applicationSchema = new mongoose.Schema({
         enum: ['Applied', 'Shortlisted', 'Demo Scheduled', 'Reschedule Requested', 'Hired', 'Rejected', 'On Hold', 'Not Interested'],
         default: 'Applied'
     },
+    isViewedByClient: {
+        type: Boolean,
+        default: false
+    },
+    notifiedAppliedNotViewed: {
+        type: Boolean,
+        default: false
+    },
+    notifiedViewedNoPackage: {
+        type: Boolean,
+        default: false
+    },
     applicationData: {
         type: mongoose.Schema.Types.Mixed,
         default: {}

@@ -89,6 +89,26 @@ const jobSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  paymentReminderSent15Min: {
+    type: Boolean,
+    default: false
+  },
+  paymentReminderSent1Hour: {
+    type: Boolean,
+    default: false
+  },
+  paymentReminderSent6Hour: {
+    type: Boolean,
+    default: false
+  },
+  paymentReminderSent24Hour: {
+    type: Boolean,
+    default: false
+  },
+  lowAppsReminderSent: {
+    type: Boolean,
+    default: false
+  },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     refPath: 'creatorModel'

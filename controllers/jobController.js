@@ -40,10 +40,12 @@ const createJob = async (req, res) => {
 
         // Send push notification to all cooks
         const notificationController = require('./notificationController');
+        const salaryText = job.salaryRange ? `Salary ${job.salaryRange}` : 'Good Salary';
+        const cityText = job.city ? `in ${job.city}` : '';
         notificationController.sendNotificationToRole({
             roleName: 'Cook',
-            title: '✨ New Job Available',
-            message: `A new cooking job "${job.title}" is available in ${job.city || 'your area'}. Apply now!`,
+            title: '🔔 New Matching Job',
+            message: `New Chef Requirement ${cityText}. ${salaryText}. Apply now.`,
             type: 'job_available',
             relatedId: job._id,
             relatedModel: 'Job',

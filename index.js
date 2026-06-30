@@ -10,6 +10,10 @@ dotenv.config();
 // Connect to database
 connectDB();
 
+// Initialize notification scheduler
+const initScheduler = require('./config/scheduler');
+initScheduler();
+
 const app = express();
 const PORT = process.env.PORT || 5001;
 

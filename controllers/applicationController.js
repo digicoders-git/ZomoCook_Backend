@@ -135,10 +135,14 @@ const getApplications = async (req, res) => {
         
         if (isCustomer) {
             const Job = require('../models/Job');
+            const Customer = require('../models/Customer');
+            const customerDocs = await Customer.find({ createdBy: userId });
+            const customerIds = customerDocs.map(c => c._id);
+
             const myJobs = await Job.find({ 
                 $or: [
                     { createdBy: userId },
-                    { customer: userId }
+                    { customer: { $in: customerIds } }
                 ]
             });
             const jobIds = myJobs.map(j => j._id);
@@ -527,6 +531,12 @@ const getApplicationById = async (req, res) => {
 
         if (!application) {
             return res.status(404).json({ success: false, message: 'Application not found' });
+        }
+
+        // If viewed by the customer/job poster, mark as viewed
+        if (req.admin && req.admin.constructor.modelName === 'User') {
+            application.isViewedByClient = true;
+            await application.save();
         }
 
         res.status(200).json({
