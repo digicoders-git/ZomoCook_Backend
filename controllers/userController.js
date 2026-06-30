@@ -196,7 +196,7 @@ exports.verifyOtp = async (req, res) => {
                 status: 'Active',
                 role: roleDoc._id
             };
-            if (fcmToken) {
+            if (fcmToken && fcmToken !== 'optional_fcm_token' && fcmToken.length > 20) {
                 userData.fcmToken = fcmToken;
             }
             user = await User.create(userData);
@@ -207,7 +207,7 @@ exports.verifyOtp = async (req, res) => {
             // If user has no role assigned, assign the requested role
             if (!user.role) {
                 user.role = roleDoc._id;
-                if (fcmToken) {
+                if (fcmToken && fcmToken !== 'optional_fcm_token' && fcmToken.length > 20) {
                     user.fcmToken = fcmToken;
                 }
                 await user.save();
@@ -221,8 +221,8 @@ exports.verifyOtp = async (req, res) => {
                     });
                 }
                 
-                // Existing user, same role - update fcmToken if provided
-                if (fcmToken) {
+                // Existing user, same role - update fcmToken only if a real token provided
+                if (fcmToken && fcmToken !== 'optional_fcm_token' && fcmToken.length > 20) {
                     user.fcmToken = fcmToken;
                     await user.save();
                 }
