@@ -291,6 +291,7 @@ exports.sendNotificationToUser = async ({
             status: 'active'
         });
 
+        let fcmResult = null;
         if (recipientDoc && recipientDoc.fcmToken) {
             const payload = {
                 notification: { title, body: message },
@@ -314,20 +315,21 @@ exports.sendNotificationToUser = async ({
                 }
             };
             console.log(`[FCM] Sending push to: ${recipientDoc.fcmToken.substring(0, 20)}...`);
-            await admin.messaging().send({
+            fcmResult = await admin.messaging().send({
                 token: recipientDoc.fcmToken,
                 notification: payload.notification,
                 data: payload.data,
                 android: payload.android,
                 apns: payload.apns
             });
-            console.log('[FCM] Push notification sent successfully.');
+            console.log('[FCM] Push notification sent successfully. Message ID:', fcmResult);
         } else {
             console.log(`[FCM] No FCM token for recipient: ${userId} (${userModel})`);
         }
-        return notification;
+        return { success: true, notification, fcmResult };
     } catch (err) {
         console.error('Error in sendNotificationToUser:', err);
+        throw err;
     }
 };
 
