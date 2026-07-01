@@ -3,13 +3,13 @@ const admin = require('firebase-admin');
 if (!admin.apps.length) {
     let privateKey = process.env.FIREBASE_PRIVATE_KEY;
     if (privateKey) {
-        privateKey = privateKey.trim();
-        if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
-            privateKey = privateKey.substring(1, privateKey.length - 1);
-        } else if (privateKey.startsWith("'") && privateKey.endsWith("'")) {
-            privateKey = privateKey.substring(1, privateKey.length - 1);
+        // Remove surrounding quotes if present
+        privateKey = privateKey.trim().replace(/^"|"$/g, '').replace(/^'|'$/g, '');
+        // If key has literal \n (escaped), replace with real newlines
+        // If key already has real newlines, this won't affect it
+        if (!privateKey.includes('\n')) {
+            privateKey = privateKey.replace(/\\n/g, '\n');
         }
-        privateKey = privateKey.replace(/\\n/g, '\n');
     }
 
     admin.initializeApp({
