@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "",
   "license": "ISC",
-  "author": "shiva",
+  "author": "Mayank",
   "type": "commonjs",
   "main": "index.js",
   "scripts": {
@@ -11,6 +11,9 @@
     "dev": "nodemon index.js",
     "seed:notifications": "node seedNotifications.js",
     "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "engines": {
+    "node": "22.x"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
