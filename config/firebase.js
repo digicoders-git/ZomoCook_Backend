@@ -1,15 +1,18 @@
 const admin = require('firebase-admin');
 
 if (!admin.apps.length) {
-    let privateKey = process.env.FIREBASE_PRIVATE_KEY;
-    if (privateKey) {
-        // Remove surrounding quotes if present
-        privateKey = privateKey.trim().replace(/^"|"$/g, '').replace(/^'|'$/g, '');
-        // If key has literal \n (escaped), replace with real newlines
-        // If key already has real newlines, this won't affect it
-        if (!privateKey.includes('\n')) {
-            privateKey = privateKey.replace(/\\n/g, '\n');
-        }
+    let privateKey = process.env.FIREBASE_PRIVATE_KEY || '';
+    
+    // Strip surrounding quotes if any
+    privateKey = privateKey.trim().replace(/^"|"$/g, '').replace(/^'|'$/g, '');
+    
+    // Handle both escaped \n and real newlines
+    privateKey = privateKey.replace(/\\n/g, '\n');
+
+    // Validate key format
+    if (!privateKey.includes('-----BEGIN PRIVATE KEY-----')) {
+        console.error('[Firebase] FIREBASE_PRIVATE_KEY is missing or malformed!');
+        process.exit(1);
     }
 
     admin.initializeApp({
@@ -19,7 +22,11 @@ if (!admin.apps.length) {
             privateKey: privateKey
         })
     });
+    
+    console.log('[Firebase] Initialized. Project:', process.env.FIREBASE_PROJECT_ID);
 }
+
+module.exports = admin;
 
 module.exports = admin;
 
