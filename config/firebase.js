@@ -1,4 +1,5 @@
 const admin = require('firebase-admin');
+require('dotenv').config();
 
 if (!admin.apps.length) {
     let privateKey = process.env.FIREBASE_PRIVATE_KEY || '';
