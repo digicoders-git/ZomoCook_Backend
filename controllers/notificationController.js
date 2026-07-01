@@ -25,26 +25,19 @@ const sendFCMToAll = async (title, message, notificationType, relatedId, actionU
             const chunk = tokens.slice(i, i + chunkSize);
             await admin.messaging().sendEachForMulticast({
                 tokens: chunk,
-                notification: {
-                    title,
-                    body: message,
-                },
                 data: {
+                    title: String(title || ''),
+                    body: String(message || ''),
                     notificationType: String(notificationType || 'system'),
                     relatedId: relatedId?.toString() || '',
                     actionUrl: actionUrl || '/'
                 },
                 android: {
                     priority: 'high',
-                    notification: {
-                        sound: 'default',
-                        channelId: 'zomocook_channel',
-                        clickAction: 'FLUTTER_NOTIFICATION_CLICK'
-                    }
                 },
                 apns: {
                     payload: {
-                        aps: { sound: 'default', badge: 1 }
+                        aps: { sound: 'default', badge: 1, 'content-available': 1 }
                     }
                 }
             });
@@ -294,30 +287,25 @@ exports.sendNotificationToUser = async ({
         let fcmResult = null;
         if (recipientDoc && recipientDoc.fcmToken) {
             const payload = {
-                notification: { title, body: message },
                 data: {
+                    title: String(title || ''),
+                    body: String(message || ''),
                     notificationType: String(type || ''),
                     relatedId: String(relatedId || ''),
                     actionUrl: String(actionUrl || '/')
                 },
                 android: {
                     priority: 'high',
-                    notification: {
-                        sound: 'default',
-                        channelId: 'zomocook_channel',
-                        clickAction: 'FLUTTER_NOTIFICATION_CLICK'
-                    }
                 },
                 apns: {
                     payload: {
-                        aps: { sound: 'default', badge: 1 }
+                        aps: { sound: 'default', badge: 1, 'content-available': 1 }
                     }
                 }
             };
             console.log(`[FCM] Sending push to: ${recipientDoc.fcmToken.substring(0, 20)}...`);
             fcmResult = await admin.messaging().send({
                 token: recipientDoc.fcmToken,
-                notification: payload.notification,
                 data: payload.data,
                 android: payload.android,
                 apns: payload.apns
@@ -419,23 +407,19 @@ exports.sendNotificationToRole = async ({
                 const chunk = tokens.slice(i, i + chunkSize);
                 await admin.messaging().sendEachForMulticast({
                     tokens: chunk,
-                    notification: { title, body: message },
                     data: {
+                        title: String(title || ''),
+                        body: String(message || ''),
                         notificationType: String(type || ''),
                         relatedId: relatedId?.toString() || '',
                         actionUrl: actionUrl || '/'
                     },
                     android: {
                         priority: 'high',
-                        notification: {
-                            sound: 'default',
-                            channelId: 'zomocook_channel',
-                            clickAction: 'FLUTTER_NOTIFICATION_CLICK'
-                        }
                     },
                     apns: {
                         payload: {
-                            aps: { sound: 'default', badge: 1 }
+                            aps: { sound: 'default', badge: 1, 'content-available': 1 }
                         }
                     }
                 });
