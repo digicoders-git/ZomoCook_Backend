@@ -10,6 +10,25 @@ const deleteFile = (filePath) => {
     }
 };
 
+// Helper: build FCM payload with notification + data (works in all app states)
+const buildFCMPayload = (title, message, notificationType, relatedId, actionUrl) => ({
+    notification: { title: String(title || ''), body: String(message || '') },
+    data: {
+        title: String(title || ''),
+        body: String(message || ''),
+        notificationType: String(notificationType || 'system'),
+        relatedId: relatedId?.toString() || '',
+        actionUrl: actionUrl || '/'
+    },
+    android: {
+        priority: 'high',
+        notification: { channelId: 'zomocook_channel', sound: 'default' }
+    },
+    apns: {
+        payload: { aps: { sound: 'default', badge: 1 } }
+    }
+});
+
 // Helper: send FCM to all tokens with deep link
 const sendFCMToAll = async (title, message, notificationType, relatedId, actionUrl) => {
     const [admins, users] = await Promise.all([
@@ -19,28 +38,12 @@ const sendFCMToAll = async (title, message, notificationType, relatedId, actionU
     const tokens = [...admins, ...users].map(u => u.fcmToken).filter(Boolean);
     if (!tokens.length) return;
 
+    const payload = buildFCMPayload(title, message, notificationType, relatedId, actionUrl);
     try {
         const chunkSize = 500;
         for (let i = 0; i < tokens.length; i += chunkSize) {
             const chunk = tokens.slice(i, i + chunkSize);
-            await admin.messaging().sendEachForMulticast({
-                tokens: chunk,
-                data: {
-                    title: String(title || ''),
-                    body: String(message || ''),
-                    notificationType: String(notificationType || 'system'),
-                    relatedId: relatedId?.toString() || '',
-                    actionUrl: actionUrl || '/'
-                },
-                android: {
-                    priority: 'high',
-                },
-                apns: {
-                    payload: {
-                        aps: { sound: 'default', badge: 1, 'content-available': 1 }
-                    }
-                }
-            });
+            await admin.messaging().sendEachForMulticast({ tokens: chunk, ...payload });
         }
         console.log(`[FCM] Broadcast sent to ${tokens.length} tokens`);
     } catch (err) {
@@ -286,31 +289,13 @@ exports.sendNotificationToUser = async ({
 
         let fcmResult = null;
         if (recipientDoc && recipientDoc.fcmToken) {
-            const payload = {
-                data: {
-                    title: String(title || ''),
-                    body: String(message || ''),
-                    notificationType: String(type || ''),
-                    relatedId: String(relatedId || ''),
-                    actionUrl: String(actionUrl || '/')
-                },
-                android: {
-                    priority: 'high',
-                },
-                apns: {
-                    payload: {
-                        aps: { sound: 'default', badge: 1, 'content-available': 1 }
-                    }
-                }
-            };
+            const payload = buildFCMPayload(title, message, type, relatedId, actionUrl);
             console.log(`[FCM] Sending push to: ${recipientDoc.fcmToken.substring(0, 20)}...`);
             fcmResult = await admin.messaging().send({
                 token: recipientDoc.fcmToken,
-                data: payload.data,
-                android: payload.android,
-                apns: payload.apns
+                ...payload
             });
-            console.log('[FCM] Push notification sent successfully. Message ID:', fcmResult);
+            console.log('[FCM] Push sent. Message ID:', fcmResult);
         } else {
             console.log(`[FCM] No FCM token for recipient: ${userId} (${userModel})`);
         }
@@ -402,27 +387,11 @@ exports.sendNotificationToRole = async ({
         const tokens = users.map(u => u.fcmToken).filter(Boolean);
 
         if (tokens.length > 0) {
+            const payload = buildFCMPayload(title, message, type, relatedId, actionUrl);
             const chunkSize = 500;
             for (let i = 0; i < tokens.length; i += chunkSize) {
                 const chunk = tokens.slice(i, i + chunkSize);
-                await admin.messaging().sendEachForMulticast({
-                    tokens: chunk,
-                    data: {
-                        title: String(title || ''),
-                        body: String(message || ''),
-                        notificationType: String(type || ''),
-                        relatedId: relatedId?.toString() || '',
-                        actionUrl: actionUrl || '/'
-                    },
-                    android: {
-                        priority: 'high',
-                    },
-                    apns: {
-                        payload: {
-                            aps: { sound: 'default', badge: 1, 'content-available': 1 }
-                        }
-                    }
-                });
+                await admin.messaging().sendEachForMulticast({ tokens: chunk, ...payload });
             }
             console.log(`[FCM] Role broadcast sent to ${tokens.length} ${roleName} users`);
         }
