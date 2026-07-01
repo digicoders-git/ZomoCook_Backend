@@ -173,6 +173,26 @@ app.post('/api/test/send-notification', async (req, res) => {
   }
 });
 
+// Test: List all live users and their FCM token presence
+app.get('/api/test/list-users', async (req, res) => {
+  try {
+    const User = require('./models/User');
+    const users = await User.find({}).select('phone fcmToken name');
+    res.json({
+      success: true,
+      count: users.length,
+      users: users.map(u => ({
+        name: u.name,
+        phone: u.phone,
+        hasFcmToken: !!u.fcmToken,
+        fcmToken: u.fcmToken ? (u.fcmToken.substring(0, 15) + '...') : null
+      }))
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // Error handling middleware (optional but good practice)
 app.use((err, req, res, next) => {
   const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
