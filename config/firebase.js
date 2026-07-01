@@ -1,29 +1,12 @@
 const admin = require('firebase-admin');
+const path = require('path');
 
 if (!admin.apps.length) {
-    let privateKey = process.env.FIREBASE_PRIVATE_KEY || '';
-    
-    // Strip surrounding quotes if any
-    privateKey = privateKey.trim().replace(/^"|"$/g, '').replace(/^'|'$/g, '');
-    
-    // Handle both escaped \n and real newlines
-    privateKey = privateKey.replace(/\\n/g, '\n');
-
-    // Validate key format
-    if (!privateKey.includes('-----BEGIN PRIVATE KEY-----')) {
-        console.error('[Firebase] FIREBASE_PRIVATE_KEY is missing or malformed!');
-        process.exit(1);
-    }
-
+    const serviceAccount = require(path.join(__dirname, '../../collegepanel-1027b-firebase-adminsdk-fbsvc-c7187e7903.json'));
     admin.initializeApp({
-        credential: admin.credential.cert({
-            projectId: process.env.FIREBASE_PROJECT_ID,
-            clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-            privateKey: privateKey
-        })
+        credential: admin.credential.cert(serviceAccount)
     });
-    
-    console.log('[Firebase] Initialized. Project:', process.env.FIREBASE_PROJECT_ID);
+    console.log('[Firebase] Initialized. Project:', serviceAccount.project_id);
 }
 
 module.exports = admin;
