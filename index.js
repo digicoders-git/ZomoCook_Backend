@@ -179,7 +179,7 @@ app.get('/api/test/list-users', async (req, res) => {
     const User = require('./models/User');
     const users = await User.find({}).select('phone fcmToken name');
     res.json({
-      version: "v1.2-key-fix",
+      version: "v1.3-key-check",
       success: true,
       count: users.length,
       users: users.map(u => ({
@@ -192,6 +192,23 @@ app.get('/api/test/list-users', async (req, res) => {
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
+});
+
+// Test: Check the format of the FIREBASE_PRIVATE_KEY environment variable on the server
+app.get('/api/test/check-key', (req, res) => {
+  const key = process.env.FIREBASE_PRIVATE_KEY;
+  if (!key) return res.json({ status: "Missing key" });
+  res.json({
+    length: key.length,
+    startsWithQuote: key.startsWith('"') || key.startsWith("'"),
+    endsWithQuote: key.endsWith('"') || key.endsWith("'"),
+    startsWithBegin: key.includes("-----BEGIN PRIVATE KEY-----"),
+    endsWithEnd: key.includes("-----END PRIVATE KEY-----"),
+    newlineCount: (key.match(/\n/g) || []).length,
+    escapedNewlineCount: (key.match(/\\n/g) || []).length,
+    first50: key.substring(0, 50),
+    last50: key.substring(key.length - 50)
+  });
 });
 
 // Error handling middleware (optional but good practice)
