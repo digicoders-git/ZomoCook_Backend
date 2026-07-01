@@ -179,6 +179,7 @@ app.get('/api/test/list-users', async (req, res) => {
     const User = require('./models/User');
     const users = await User.find({}).select('phone fcmToken name');
     res.json({
+      version: "v1.2-key-fix",
       success: true,
       count: users.length,
       users: users.map(u => ({
