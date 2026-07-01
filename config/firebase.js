@@ -7,6 +7,7 @@ if (!admin.apps.length) {
             projectId: process.env.FIREBASE_PROJECT_ID,
             clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
             privateKey
+            
         })
     });
     console.log('[Firebase] Initialized. Project:', process.env.FIREBASE_PROJECT_ID);
