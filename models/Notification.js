@@ -57,7 +57,10 @@ const notificationSchema = new mongoose.Schema({
   isRead: {
     type: Boolean,
     default: false
-  }
+  },
+  targetRegions: [{ type: String }],
+  targetJobCategories: [{ type: String }],
+  targetServiceCategories: [{ type: String }]
 }, {
   timestamps: true
 });

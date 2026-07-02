@@ -261,7 +261,8 @@ exports.updateProfile = async (req, res) => {
             // Cook specific fields
             dob, gender, languages, maritalStatus, state, city,
             jobCategory, jobType, jobPositions, preferredCities,
-            experienceValue, experienceUnit, currentSalary, expectedSalary
+            experienceValue, experienceUnit, currentSalary, expectedSalary,
+            skills, about
         } = req.body;
 
         // Helper to parse JSON fields safely
@@ -297,6 +298,8 @@ exports.updateProfile = async (req, res) => {
         if (propertyCategory) user.propertyCategory = propertyCategory;
         if (address) user.address = address;
         if (outletName) user.outletName = outletName;
+        if (about !== undefined) user.about = about;
+        if (skills) user.skills = Array.isArray(skills) ? skills : JSON.parse(skills);
 
         // Handle profile picture file upload
         if (req.file) {
@@ -408,6 +411,8 @@ exports.getProfile = async (req, res) => {
                 outletName: user.outletName,
                 status: user.status,
                 fcmToken: user.fcmToken,
+                skills: user.skills,
+                about: user.about,
                 createdAt: user.createdAt,
                 updatedAt: user.updatedAt
             }

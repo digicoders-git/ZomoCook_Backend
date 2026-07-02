@@ -76,7 +76,9 @@ const userSchema = new mongoose.Schema({
     cooksHiredInCurrentPlan: {
         type: Number,
         default: 0
-    }
+    },
+    skills: [{ type: String }],
+    about: { type: String, trim: true }
 }, {
     timestamps: true
 });

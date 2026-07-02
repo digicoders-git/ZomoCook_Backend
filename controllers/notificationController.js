@@ -76,9 +76,7 @@ exports.getNotifications = async (req, res) => {
 
                 let recipientIds = [req.admin._id || req.admin.id];
                 if (isCook) {
-                    if (candidateDoc) {
-                        recipientIds.push(candidateDoc._id);
-                    }
+                    if (candidateDoc) recipientIds.push(candidateDoc._id);
                 } else {
                     const Customer = require('../models/Customer');
                     const customerDocs = await Customer.find({ createdBy: req.admin._id || req.admin.id });
@@ -87,9 +85,34 @@ exports.getNotifications = async (req, res) => {
                     }
                 }
 
+                // Region/category wise filter
+                const userState = req.admin.state || '';
+                const userCity = req.admin.city || '';
+                const userJobCategories = candidateDoc?.jobPreference?.jobCategory || [];
+
                 query.$or = [
                     { recipient: { $in: recipientIds } },
-                    { recipient: null, target: { $in: ['all', targetRole] } }
+                    {
+                        recipient: null,
+                        target: { $in: ['all', targetRole] },
+                        $and: [
+                            {
+                                $or: [
+                                    { targetRegions: { $size: 0 } },
+                                    { targetRegions: { $exists: false } },
+                                    ...(userState ? [{ targetRegions: userState }] : []),
+                                    ...(userCity ? [{ targetRegions: userCity }] : [])
+                                ]
+                            },
+                            {
+                                $or: [
+                                    { targetJobCategories: { $size: 0 } },
+                                    { targetJobCategories: { $exists: false } },
+                                    ...(userJobCategories.length ? [{ targetJobCategories: { $in: userJobCategories } }] : [])
+                                ]
+                            }
+                        ]
+                    }
                 ];
             }
         }
@@ -116,7 +139,7 @@ exports.getNotifications = async (req, res) => {
  */
 exports.createNotification = async (req, res) => {
     try {
-        const { title, message, type, relatedId, actionUrl, target, status } = req.body;
+        const { title, message, type, relatedId, actionUrl, target, status, targetRegions, targetJobCategories, targetServiceCategories } = req.body;
         const notificationData = { 
             title, 
             message, 
@@ -125,7 +148,10 @@ exports.createNotification = async (req, res) => {
             actionUrl,
             target, 
             status, 
-            createdBy: req.admin?.id 
+            createdBy: req.admin?.id,
+            targetRegions: targetRegions ? (Array.isArray(targetRegions) ? targetRegions : JSON.parse(targetRegions)) : [],
+            targetJobCategories: targetJobCategories ? (Array.isArray(targetJobCategories) ? targetJobCategories : JSON.parse(targetJobCategories)) : [],
+            targetServiceCategories: targetServiceCategories ? (Array.isArray(targetServiceCategories) ? targetServiceCategories : JSON.parse(targetServiceCategories)) : []
         };
         if (req.file) notificationData.image = req.file.path;
 

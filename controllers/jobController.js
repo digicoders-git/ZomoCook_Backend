@@ -17,14 +17,38 @@ const createJob = async (req, res) => {
         }
         const jobCode = `ZOMO${nextNumber}`;
 
-        // Limit check for Users (Employers)
+        // Payment check for Users (Employers)
         if (req.admin.constructor.modelName === 'User') {
-            const user = req.admin;
-            if (!user.activePlan) {
-                return res.status(403).json({ success: false, message: 'Please purchase a Subscription Plan to post jobs.' });
-            }
-            if (user.jobsPostedInCurrentPlan >= user.currentJobPostLimit) {
-                return res.status(403).json({ success: false, message: 'Job posting limit reached for your current plan. Please upgrade your plan.' });
+            const User = require('../models/User');
+            const fullUser = await User.findById(req.admin._id).populate('activePlan');
+            const hasActivePlan = fullUser.activePlan && fullUser.planExpiryDate && new Date(fullUser.planExpiryDate) > new Date();
+            const withinLimit = hasActivePlan && fullUser.jobsPostedInCurrentPlan < fullUser.currentJobPostLimit;
+
+            if (!withinLimit) {
+                const jobCategory = req.body.jobCategory;
+                // Daily job: must have paid 25% advance (paymentStatus in body)
+                if (jobCategory === 'daily') {
+                    if (req.body.paymentStatus !== 'paid') {
+                        return res.status(402).json({
+                            success: false,
+                            requiresPayment: true,
+                            paymentType: 'daily_job_advance',
+                            advancePercent: 25,
+                            message: 'Daily job requires 25% advance payment before posting.'
+                        });
+                    }
+                } else {
+                    // Regular job: must have paid ₹299
+                    if (req.body.paymentStatus !== 'paid') {
+                        return res.status(402).json({
+                            success: false,
+                            requiresPayment: true,
+                            paymentType: 'job_post_fee',
+                            amount: 299,
+                            message: 'Please pay ₹299 to post this job.'
+                        });
+                    }
+                }
             }
         }
 
@@ -75,7 +99,7 @@ const createJob = async (req, res) => {
  */
 const getJobs = async (req, res) => {
     try {
-        const { jobCategory, city, status, isActive, search, limit = 50, skip = 0 } = req.query;
+        const { jobCategory, city, state, status, isActive, search, jobType, jobPosition, salaryRange, experienceRange, limit = 50, skip = 0 } = req.query;
         let query = {};
 
         // Role-based data isolation
@@ -97,8 +121,13 @@ const getJobs = async (req, res) => {
 
         if (jobCategory) query.jobCategory = jobCategory;
         if (city) query.city = new RegExp(city, 'i');
+        if (state) query.state = new RegExp(state, 'i');
         if (status) query.status = status;
         if (isActive !== undefined) query.isActive = isActive === 'true';
+        if (jobType) query.jobType = new RegExp(jobType, 'i');
+        if (jobPosition) query.jobPosition = new RegExp(jobPosition, 'i');
+        if (salaryRange) query.salaryRange = new RegExp(salaryRange, 'i');
+        if (experienceRange) query.experienceRange = new RegExp(experienceRange, 'i');
 
         // Active jobs filter for cook viewing
         if (isCook) query.isActive = true;

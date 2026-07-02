@@ -116,7 +116,14 @@ const jobSchema = new mongoose.Schema({
   creatorModel: {
     type: String,
     enum: ['Admin', 'User']
-  }
+  },
+  paymentStatus: {
+    type: String,
+    enum: ['free', 'pending', 'paid'],
+    default: 'free'
+  },
+  advanceAmount: { type: Number, default: 0 },
+  jobPostFee: { type: Number, default: 0 }
 }, {
   timestamps: true
 });
