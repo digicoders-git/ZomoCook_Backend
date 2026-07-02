@@ -17,7 +17,8 @@ const seedPlans = async () => {
                 features: ['Contact & Chat with Cook', 'Priority Listing', 'Replacement Support', 'Basic Customer Support'],
                 isPopular: true,
                 isBestValue: false,
-                isActive: true
+                isActive: true,
+                allowedJobCategories: []
             },
             {
                 name: 'Premium Plan',
@@ -28,7 +29,8 @@ const seedPlans = async () => {
                 features: ['Everything in Standard +', 'Priority Assistance', 'Dedicated Support'],
                 isPopular: false,
                 isBestValue: true,
-                isActive: true
+                isActive: true,
+                allowedJobCategories: []
             },
             {
                 name: 'Basic Plan',
@@ -39,7 +41,8 @@ const seedPlans = async () => {
                 features: ['Contact & Chat with Cook'],
                 isPopular: false,
                 isBestValue: false,
-                isActive: true
+                isActive: true,
+                allowedJobCategories: []
             }
         ];
 

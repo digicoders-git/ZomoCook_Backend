@@ -36,7 +36,7 @@ const PlanSchema = new mongoose.Schema({
     allowedJobCategories: {
         type: [String],
         enum: ['hotel', 'home', 'daily'],
-        default: ['hotel', 'home', 'daily']
+        default: []
     },
     isActive: {
         type: Boolean,
