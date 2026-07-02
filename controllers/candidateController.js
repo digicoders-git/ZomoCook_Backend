@@ -18,13 +18,13 @@ const createCandidate = async (req, res) => {
     try {
         const candidateData = { ...req.body };
         
+        const docs = {};
         // Handle Multiple Files
         if (req.files) {
             if (req.files.image) candidateData.profileImage = req.files.image[0].path;
             if (req.files.cv) candidateData.cv = req.files.cv[0].path;
 
             // Handle Documents
-            const docs = {};
             if (req.files.idProof) docs.idProof = req.files.idProof[0].path;
             if (req.files.addressProof) docs.addressProof = req.files.addressProof[0].path;
             if (req.files.policeVerification) docs.policeVerification = req.files.policeVerification[0].path;
@@ -32,13 +32,14 @@ const createCandidate = async (req, res) => {
             if (req.files.academicCertificate) docs.academicCertificate = req.files.academicCertificate[0].path;
             if (req.files.experienceCertificate) docs.experienceCertificate = req.files.experienceCertificate[0].path;
             
-            candidateData.documents = { ...docs, idProofType: candidateData.idProofType || '' };
-
             // Handle Gallery
             if (req.files.gallery) {
                 candidateData.photoGallery = req.files.gallery.map(file => file.path);
             }
         }
+
+        candidateData.documents = { ...docs, idProofType: candidateData.idProofType || 'Aadhar' };
+        delete candidateData.idProofType;
 
         // Set Creator
         candidateData.createdBy = req.admin._id;
@@ -79,11 +80,11 @@ const updateCandidate = async (req, res) => {
         const updateData = { ...req.body };
         
         // Handle New Files
+        const docs = candidate.documents ? { ...candidate.documents } : {};
         if (req.files) {
             if (req.files.image) { deleteFile(candidate.profileImage); updateData.profileImage = req.files.image[0].path; }
             if (req.files.cv) { deleteFile(candidate.cv); updateData.cv = req.files.cv[0].path; }
 
-            const docs = candidate.documents ? { ...candidate.documents } : {};
             if (req.files.idProof) { deleteFile(docs.idProof); docs.idProof = req.files.idProof[0].path; }
             if (req.files.addressProof) { deleteFile(docs.addressProof); docs.addressProof = req.files.addressProof[0].path; }
             if (req.files.policeVerification) { deleteFile(docs.policeVerification); docs.policeVerification = req.files.policeVerification[0].path; }
@@ -91,14 +92,15 @@ const updateCandidate = async (req, res) => {
             if (req.files.academicCertificate) { deleteFile(docs.academicCertificate); docs.academicCertificate = req.files.academicCertificate[0].path; }
             if (req.files.experienceCertificate) { deleteFile(docs.experienceCertificate); docs.experienceCertificate = req.files.experienceCertificate[0].path; }
             
-            if (Object.keys(docs).length > 0 || updateData.idProofType) {
-                updateData.documents = { ...docs, idProofType: updateData.idProofType || docs.idProofType };
-            }
-
             if (req.files.gallery) {
                 const newPhotos = req.files.gallery.map(file => file.path);
                 updateData.photoGallery = [...(candidate.photoGallery || []), ...newPhotos];
             }
+        }
+
+        if (Object.keys(docs).length > 0 || updateData.idProofType) {
+            updateData.documents = { ...docs, idProofType: updateData.idProofType || docs.idProofType };
+            delete updateData.idProofType;
         }
 
         // Parse nested fields
@@ -321,11 +323,11 @@ const updateCandidateMe = async (req, res) => {
         const updateData = { ...req.body };
         
         // Handle New Files
+        const docs = candidate.documents ? { ...candidate.documents } : {};
         if (req.files) {
             if (req.files.image) { deleteFile(candidate.profileImage); updateData.profileImage = req.files.image[0].path; }
             if (req.files.cv) { deleteFile(candidate.cv); updateData.cv = req.files.cv[0].path; }
 
-            const docs = candidate.documents ? { ...candidate.documents } : {};
             if (req.files.idProof) { deleteFile(docs.idProof); docs.idProof = req.files.idProof[0].path; }
             if (req.files.addressProof) { deleteFile(docs.addressProof); docs.addressProof = req.files.addressProof[0].path; }
             if (req.files.policeVerification) { deleteFile(docs.policeVerification); docs.policeVerification = req.files.policeVerification[0].path; }
@@ -333,14 +335,15 @@ const updateCandidateMe = async (req, res) => {
             if (req.files.academicCertificate) { deleteFile(docs.academicCertificate); docs.academicCertificate = req.files.academicCertificate[0].path; }
             if (req.files.experienceCertificate) { deleteFile(docs.experienceCertificate); docs.experienceCertificate = req.files.experienceCertificate[0].path; }
             
-            if (Object.keys(docs).length > 0 || updateData.idProofType) {
-                updateData.documents = { ...docs, idProofType: updateData.idProofType || docs.idProofType };
-            }
-
             if (req.files.gallery) {
                 const newPhotos = req.files.gallery.map(file => file.path);
                 updateData.photoGallery = [...(candidate.photoGallery || []), ...newPhotos];
             }
+        }
+
+        if (Object.keys(docs).length > 0 || updateData.idProofType) {
+            updateData.documents = { ...docs, idProofType: updateData.idProofType || docs.idProofType };
+            delete updateData.idProofType;
         }
 
         // Parse nested fields
