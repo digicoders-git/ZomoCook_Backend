@@ -188,39 +188,31 @@ const getApplications = async (req, res) => {
 const getMyApplications = async (req, res) => {
     try {
         const { status } = req.query;
-
-        // Search candidate by multiple fields
+        const userId = req.admin._id;
         const last10 = req.admin.phone ? req.admin.phone.slice(-10) : '';
+
+        // Candidate dhundo - phone ya createdBy se
         const candidate = await Candidate.findOne({
             $or: [
-                { _id: req.admin._id },
-                { createdBy: req.admin._id },
-                { phone: last10 ? new RegExp(last10 + '$') : req.admin.phone }
+                { _id: userId },
+                { createdBy: userId },
+                ...(last10 ? [{ phone: new RegExp(last10 + '$') }] : [])
             ]
         });
 
-        // If no candidate found, return applications directly by customer/user reference
-        // This handles cases where cook is a User but has direct applications
-        let applications = [];
-
+        let query = {};
         if (candidate) {
-            let query = { candidate: candidate._id };
-            if (status) query.status = status;
-
-            applications = await Application.find(query)
-                .populate('job', 'title jobCategory city state salaryRange salary outletName joiningType jobType jobPosition')
-                .populate('customer', 'name email phone outletName')
-                .sort({ appliedDate: -1 });
+            query.candidate = candidate._id;
         } else {
-            // Fallback: try to find applications where customer matches logged-in user
-            let query = { customer: req.admin._id };
-            if (status) query.status = status;
-
-            applications = await Application.find(query)
-                .populate('job', 'title jobCategory city state salaryRange salary outletName joiningType jobType jobPosition')
-                .populate('customer', 'name email phone outletName')
-                .sort({ appliedDate: -1 });
+            // Fallback: User ID se directly applications dhundo
+            query.candidate = userId;
         }
+        if (status) query.status = status;
+
+        const applications = await Application.find(query)
+            .populate('job', 'title jobCategory city state salaryRange salary outletName joiningType jobType jobPosition')
+            .populate('customer', 'name email phone outletName')
+            .sort({ appliedDate: -1 });
 
         res.status(200).json({
             success: true,
