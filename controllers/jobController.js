@@ -110,7 +110,7 @@ const getJobs = async (req, res) => {
         // Role-based data isolation
         const isSuperAdmin = req.admin.constructor.modelName === 'Admin';
         const isCook = req.admin.role && req.admin.role.name && req.admin.role.name.toLowerCase() === 'cook';
-        
+
         if (!isSuperAdmin && !isCook) {
             query.createdBy = req.admin._id;
         }
@@ -341,7 +341,7 @@ const toggleJobStatus = async (req, res) => {
 const updateJobStatus = async (req, res) => {
     try {
         const { status } = req.body;
-        
+
         const updateDoc = { status };
         if (status === 'Active' || status === 'New' || status === 'Urgent') {
             updateDoc.isActive = true;
@@ -480,7 +480,7 @@ const Application = require('../models/Application');
 const applyForJob = async (req, res) => {
     try {
         const jobId = req.params.id;
-        
+
         const job = await Job.findById(jobId);
         if (!job) return res.status(404).json({ success: false, message: 'Job not found' });
 

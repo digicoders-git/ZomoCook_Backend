@@ -85,12 +85,12 @@ exports.updateUser = async (req, res) => {
             const salt = await bcrypt.genSalt(10);
             req.body.password = await bcrypt.hash(req.body.password, salt);
         }
-        
+
         if (req.file) req.body.profilePic = req.file.path;
 
-        const updatedUser = await User.findByIdAndUpdate(req.params.id, req.body, { 
+        const updatedUser = await User.findByIdAndUpdate(req.params.id, req.body, {
             new: true,
-            runValidators: false 
+            runValidators: false
         });
 
         if (!updatedUser) return res.status(404).json({ success: false, message: 'User not found' });
@@ -186,8 +186,8 @@ exports.verifyOtp = async (req, res) => {
         if (!user) {
             isNewUser = true;
             // First time user, register
-            const defaultName = roleDoc.name.toLowerCase() === 'cook' 
-                ? `Cook_${phone.slice(-4)}` 
+            const defaultName = roleDoc.name.toLowerCase() === 'cook'
+                ? `Cook_${phone.slice(-4)}`
                 : `User_${phone.slice(-4)}`;
 
             const userData = {
@@ -256,7 +256,7 @@ exports.verifyOtp = async (req, res) => {
 exports.updateProfile = async (req, res) => {
     try {
         const userId = req.admin._id;
-        const { 
+        const {
             name, email, propertyCategory, address, outletName,
             // Cook specific fields
             dob, gender, languages, maritalStatus, state, city,
@@ -312,7 +312,7 @@ exports.updateProfile = async (req, res) => {
         let candidate = null;
         if (user.role && user.role.name && user.role.name.toLowerCase() === 'cook') {
             candidate = await Candidate.findOne({ phone: user.phone });
-            
+
             const candidateData = {
                 name: user.name,
                 email: user.email,

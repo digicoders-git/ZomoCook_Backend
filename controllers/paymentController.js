@@ -35,7 +35,7 @@ const createOrder = async (req, res) => {
             relatedJob: jobId || undefined,
             relatedPlan: planId || undefined,
             description: type === 'daily_job_advance' ? 'Daily job 25% advance' :
-                         type === 'subscription' ? 'Subscription purchase' : 'Job post fee ₹299'
+                type === 'subscription' ? 'Subscription purchase' : 'Job post fee ₹299'
         };
         if (isCustomer) txnData.customer = req.admin._id;
         else txnData.user = req.admin._id;

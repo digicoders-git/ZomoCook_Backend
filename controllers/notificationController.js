@@ -61,7 +61,7 @@ exports.getNotifications = async (req, res) => {
         let query = {};
         if (search) query.title = new RegExp(search, 'i');
         if (status) query.status = status;
-        
+
         if (req.admin) {
             const isSuperAdmin = req.admin.constructor.modelName === 'Admin';
             if (!isSuperAdmin) {
@@ -124,16 +124,16 @@ exports.getNotifications = async (req, res) => {
                 ];
             }
         }
-        
+
         const notifications = await Notification.find(query)
             .sort({ createdAt: -1 })
             .limit(parseInt(limit))
             .populate('relatedId');
-        
-        res.status(200).json({ 
-            success: true, 
-            count: notifications.length, 
-            notifications 
+
+        res.status(200).json({
+            success: true,
+            count: notifications.length,
+            notifications
         });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -148,14 +148,14 @@ exports.getNotifications = async (req, res) => {
 exports.createNotification = async (req, res) => {
     try {
         const { title, message, type, relatedId, actionUrl, target, status, targetRegions, targetJobCategories, targetServiceCategories } = req.body;
-        const notificationData = { 
-            title, 
-            message, 
+        const notificationData = {
+            title,
+            message,
             type,
             relatedId,
             actionUrl,
-            target, 
-            status, 
+            target,
+            status,
             createdBy: req.admin?.id,
             targetRegions: targetRegions ? (Array.isArray(targetRegions) ? targetRegions : JSON.parse(targetRegions)) : [],
             targetJobCategories: targetJobCategories ? (Array.isArray(targetJobCategories) ? targetJobCategories : JSON.parse(targetJobCategories)) : [],
@@ -171,10 +171,10 @@ exports.createNotification = async (req, res) => {
                 .catch(err => console.error('FCM Error:', err));
         }
 
-        res.status(201).json({ 
-            success: true, 
-            message: 'Notification created successfully', 
-            notification 
+        res.status(201).json({
+            success: true,
+            message: 'Notification created successfully',
+            notification
         });
     } catch (error) {
         res.status(400).json({ success: false, message: error.message });
@@ -206,17 +206,17 @@ exports.toggleNotificationStatus = async (req, res) => {
     try {
         const { status } = req.body;
         const notification = await Notification.findByIdAndUpdate(
-            req.params.id, 
-            { status }, 
+            req.params.id,
+            { status },
             { new: true }
         );
         if (!notification) {
             return res.status(404).json({ success: false, message: 'Notification not found' });
         }
-        res.status(200).json({ 
-            success: true, 
-            message: `Notification set to ${status}`, 
-            notification 
+        res.status(200).json({
+            success: true,
+            message: `Notification set to ${status}`,
+            notification
         });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
