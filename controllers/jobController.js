@@ -114,11 +114,12 @@ const getJobs = async (req, res) => {
         // Add isSaved flag and status counts
         let savedJobIds = [];
         if (isCook) {
+            const last10 = req.admin.phone ? req.admin.phone.slice(-10) : '';
             const candidate = await Candidate.findOne({
                 $or: [
                     { _id: req.admin._id },
                     { createdBy: req.admin._id },
-                    { phone: req.admin.phone }
+                    { phone: last10 ? new RegExp(last10 + '$') : req.admin.phone }
                 ]
             });
             savedJobIds = candidate?.savedJobs || [];
@@ -170,11 +171,12 @@ const getJob = async (req, res) => {
         let isSaved = false;
         const isCook = req.admin.role && req.admin.role.name && req.admin.role.name.toLowerCase() === 'cook';
         if (isCook) {
+            const last10 = req.admin.phone ? req.admin.phone.slice(-10) : '';
             const candidate = await Candidate.findOne({
                 $or: [
                     { _id: req.admin._id },
                     { createdBy: req.admin._id },
-                    { phone: req.admin.phone }
+                    { phone: last10 ? new RegExp(last10 + '$') : req.admin.phone }
                 ]
             });
             isSaved = candidate?.savedJobs?.includes(job._id) || false;
@@ -336,11 +338,12 @@ const updateJobStatus = async (req, res) => {
 const saveJob = async (req, res) => {
     try {
         const jobId = req.params.id;
+        const last10 = req.admin.phone ? req.admin.phone.slice(-10) : '';
         const candidate = await Candidate.findOne({
             $or: [
                 { _id: req.admin._id },
                 { createdBy: req.admin._id },
-                { phone: req.admin.phone }
+                { phone: last10 ? new RegExp(last10 + '$') : req.admin.phone }
             ]
         });
         if (!candidate) return res.status(404).json({ success: false, message: 'Candidate not found' });
@@ -365,11 +368,12 @@ const saveJob = async (req, res) => {
 const unsaveJob = async (req, res) => {
     try {
         const jobId = req.params.id;
+        const last10 = req.admin.phone ? req.admin.phone.slice(-10) : '';
         const candidate = await Candidate.findOne({
             $or: [
                 { _id: req.admin._id },
                 { createdBy: req.admin._id },
-                { phone: req.admin.phone }
+                { phone: last10 ? new RegExp(last10 + '$') : req.admin.phone }
             ]
         });
         if (!candidate) return res.status(404).json({ success: false, message: 'Candidate not found' });
@@ -393,11 +397,12 @@ const unsaveJob = async (req, res) => {
  */
 const getSavedJobs = async (req, res) => {
     try {
+        const last10 = req.admin.phone ? req.admin.phone.slice(-10) : '';
         const candidate = await Candidate.findOne({
             $or: [
                 { _id: req.admin._id },
                 { createdBy: req.admin._id },
-                { phone: req.admin.phone }
+                { phone: last10 ? new RegExp(last10 + '$') : req.admin.phone }
             ]
         }).populate({
             path: 'savedJobs',
@@ -440,11 +445,12 @@ const applyForJob = async (req, res) => {
         const job = await Job.findById(jobId);
         if (!job) return res.status(404).json({ success: false, message: 'Job not found' });
 
+        const last10 = req.admin.phone ? req.admin.phone.slice(-10) : '';
         const candidate = await Candidate.findOne({
             $or: [
                 { _id: req.admin._id },
                 { createdBy: req.admin._id },
-                { phone: req.admin.phone }
+                { phone: last10 ? new RegExp(last10 + '$') : req.admin.phone }
             ]
         });
         if (!candidate) return res.status(404).json({ success: false, message: 'Candidate not found' });

@@ -67,7 +67,10 @@ exports.getNotifications = async (req, res) => {
             if (!isSuperAdmin) {
                 const userRole = req.admin.role && req.admin.role.name ? req.admin.role.name.toLowerCase() : '';
                 const Candidate = require('../models/Candidate');
-                const candidateDoc = await Candidate.findOne({ phone: req.admin.phone });
+                const last10 = req.admin.phone ? req.admin.phone.slice(-10) : '';
+                const candidateDoc = await Candidate.findOne({
+                    phone: last10 ? new RegExp(last10 + '$') : req.admin.phone
+                });
                 const isCook = userRole === 'cook' || candidateDoc != null;
                 const targetRole = isCook ? 'candidates' : 'customers';
 
@@ -312,7 +315,10 @@ exports.markAllRead = async (req, res) => {
         const userId = req.admin._id;
         const userRole = req.admin.role && req.admin.role.name ? req.admin.role.name.toLowerCase() : '';
         const Candidate = require('../models/Candidate');
-        const candidateDoc = await Candidate.findOne({ phone: req.admin.phone });
+        const last10 = req.admin.phone ? req.admin.phone.slice(-10) : '';
+        const candidateDoc = await Candidate.findOne({
+            phone: last10 ? new RegExp(last10 + '$') : req.admin.phone
+        });
         const isCook = userRole === 'cook' || candidateDoc != null;
         const targetRole = isCook ? 'candidates' : 'customers';
 

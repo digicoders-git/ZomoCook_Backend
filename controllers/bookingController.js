@@ -67,11 +67,12 @@ const getBookings = async (req, res) => {
         // Filter based on role
         if (req.admin.role && req.admin.role.name && req.admin.role.name.toLowerCase() === 'cook') {
             // Cook viewing their bookings
+            const last10 = req.admin.phone ? req.admin.phone.slice(-10) : '';
             const candidate = await Candidate.findOne({
                 $or: [
                     { _id: userId },
                     { createdBy: userId },
-                    { phone: req.admin.phone }
+                    { phone: last10 ? new RegExp(last10 + '$') : req.admin.phone }
                 ]
             });
             if (candidate) {

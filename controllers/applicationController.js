@@ -55,11 +55,12 @@ const applyJob = async (req, res) => {
         const job = await Job.findById(jobId);
         if (!job) return res.status(404).json({ success: false, message: 'Job not found' });
 
+        const last10 = req.admin.phone ? req.admin.phone.slice(-10) : '';
         let candidate = await Candidate.findOne({
             $or: [
                 { _id: candidateId },
                 { createdBy: candidateId },
-                { phone: req.admin.phone }
+                { phone: last10 ? new RegExp(last10 + '$') : req.admin.phone }
             ]
         });
         if (!candidate && req.admin.phone) {
@@ -189,11 +190,12 @@ const getMyApplications = async (req, res) => {
         const { status } = req.query;
 
         // Search candidate by multiple fields
+        const last10 = req.admin.phone ? req.admin.phone.slice(-10) : '';
         const candidate = await Candidate.findOne({
             $or: [
                 { _id: req.admin._id },
                 { createdBy: req.admin._id },
-                { phone: req.admin.phone }
+                { phone: last10 ? new RegExp(last10 + '$') : req.admin.phone }
             ]
         });
 
@@ -301,6 +303,38 @@ const updateApplicationStatus = async (req, res) => {
         }
 
         await syncCandidateApplication(application);
+
+        // Auto-create booking record when status becomes 'Hired'
+        if (status === 'Hired') {
+            const Booking = require('../models/Booking');
+            const existingBooking = await Booking.findOne({
+                job: application.job._id,
+                cook: application.candidate._id
+            });
+            
+            if (!existingBooking) {
+                let amount = 15000; // default fallback
+                if (application.job && application.job.salaryRange) {
+                    const match = application.job.salaryRange.match(/\d+/);
+                    if (match) {
+                        amount = parseInt(match[0]);
+                        if (application.job.salaryRange.toLowerCase().includes('k') && amount < 100) {
+                            amount = amount * 1000;
+                        }
+                    }
+                }
+                
+                await Booking.create({
+                    job: application.job._id,
+                    customer: application.customer,
+                    cook: application.candidate._id,
+                    totalAmount: amount,
+                    duration: application.job.jobType || 'Full Time',
+                    status: 'confirmed',
+                    startDate: application.joiningDate || new Date()
+                });
+            }
+        }
 
         res.status(200).json({
             success: true,

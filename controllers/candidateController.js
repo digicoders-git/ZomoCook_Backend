@@ -205,11 +205,12 @@ const getApplications = async (req, res) => {
         const isUser = req.admin.constructor.modelName === 'User';
         
         if (isCook) {
+            const last10 = req.admin.phone ? req.admin.phone.slice(-10) : '';
             const candidate = await Candidate.findOne({
                 $or: [
                     { _id: req.admin._id },
                     { createdBy: req.admin._id },
-                    { phone: req.admin.phone }
+                    { phone: last10 ? new RegExp(last10 + '$') : req.admin.phone }
                 ]
             });
             if (candidate) {
@@ -295,11 +296,12 @@ const getApplications = async (req, res) => {
 
 const getCandidateMe = async (req, res) => {
     try {
+        const last10 = req.admin.phone ? req.admin.phone.slice(-10) : '';
         const candidate = await Candidate.findOne({
             $or: [
                 { _id: req.admin._id },
                 { createdBy: req.admin._id },
-                { phone: req.admin.phone }
+                { phone: last10 ? new RegExp(last10 + '$') : req.admin.phone }
             ]
         }).populate('applications.job');
         if (!candidate) return res.status(404).json({ success: false, message: 'Candidate profile not found' });
@@ -311,11 +313,12 @@ const getCandidateMe = async (req, res) => {
 
 const updateCandidateMe = async (req, res) => {
     try {
+        const last10 = req.admin.phone ? req.admin.phone.slice(-10) : '';
         const candidate = await Candidate.findOne({
             $or: [
                 { _id: req.admin._id },
                 { createdBy: req.admin._id },
-                { phone: req.admin.phone }
+                { phone: last10 ? new RegExp(last10 + '$') : req.admin.phone }
             ]
         });
         if (!candidate) return res.status(404).json({ success: false, message: 'Candidate profile not found' });
