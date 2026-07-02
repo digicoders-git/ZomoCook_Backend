@@ -208,7 +208,7 @@ const getMyApplications = async (req, res) => {
             if (status) query.status = status;
 
             applications = await Application.find(query)
-                .populate('job', 'title jobCategory city state salaryRange salary package customer outletName joiningType jobType jobPosition')
+                .populate('job', 'title jobCategory city state salaryRange salary outletName joiningType jobType jobPosition')
                 .populate('customer', 'name email phone outletName')
                 .sort({ appliedDate: -1 });
         } else {
@@ -217,8 +217,8 @@ const getMyApplications = async (req, res) => {
             if (status) query.status = status;
 
             applications = await Application.find(query)
-                .populate('job', 'title jobCategory city state salaryRange salary package customer outletName joiningType jobType jobPosition')
-                .populate('candidate', 'name phone city profileImage')
+                .populate('job', 'title jobCategory city state salaryRange salary outletName joiningType jobType jobPosition')
+                .populate('customer', 'name email phone outletName')
                 .sort({ appliedDate: -1 });
         }
 
