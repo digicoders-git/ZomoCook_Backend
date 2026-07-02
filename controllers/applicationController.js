@@ -165,8 +165,8 @@ const getApplications = async (req, res) => {
         if (candidateId) query.candidate = candidateId;
 
         const applications = await Application.find(query)
-            .populate('candidate', 'name phone city profileImage cv')
-            .populate('job', 'title jobCategory jobType city state salaryRange outletName joiningType')
+            .populate('candidate', 'name phone city profileImage jobPreference')
+            .populate('job', 'title jobCategory jobType city state salaryRange outletName joiningType jobPosition')
             .populate('customer', 'name email phone outletName')
             .sort({ appliedDate: -1 });
 
