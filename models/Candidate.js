@@ -35,6 +35,10 @@ const candidateSchema = new mongoose.Schema({
         jobPositions: [{ type: String }]
     },
 
+    // Skills & About
+    skills: [{ type: String }],
+    about: { type: String, trim: true },
+
     // Additional Sections (Future expansions)
     cookingSkills: { type: Object, default: {} },
     workExperience: {

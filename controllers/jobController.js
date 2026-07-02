@@ -21,11 +21,16 @@ const createJob = async (req, res) => {
         if (req.admin.constructor.modelName === 'User') {
             const User = require('../models/User');
             const fullUser = await User.findById(req.admin._id).populate('activePlan');
+            const jobCategory = req.body.jobCategory;
             const hasActivePlan = fullUser.activePlan && fullUser.planExpiryDate && new Date(fullUser.planExpiryDate) > new Date();
-            const withinLimit = hasActivePlan && fullUser.jobsPostedInCurrentPlan < fullUser.currentJobPostLimit;
+            const planAllowsCategory = hasActivePlan && (
+                !fullUser.activePlan.allowedJobCategories ||
+                fullUser.activePlan.allowedJobCategories.length === 0 ||
+                fullUser.activePlan.allowedJobCategories.includes(jobCategory)
+            );
+            const withinLimit = planAllowsCategory && fullUser.jobsPostedInCurrentPlan < fullUser.currentJobPostLimit;
 
             if (!withinLimit) {
-                const jobCategory = req.body.jobCategory;
                 // Daily job: must have paid 25% advance (paymentStatus in body)
                 if (jobCategory === 'daily') {
                     if (req.body.paymentStatus !== 'paid') {
@@ -99,7 +104,7 @@ const createJob = async (req, res) => {
  */
 const getJobs = async (req, res) => {
     try {
-        const { jobCategory, city, state, status, isActive, search, jobType, jobPosition, salaryRange, experienceRange, limit = 50, skip = 0 } = req.query;
+        const { jobCategory, city, state, status, isActive, search, jobType, jobPosition, salaryRange, experienceRange, serviceCategory, minSalary, maxSalary, limit = 50, skip = 0 } = req.query;
         let query = {};
 
         // Role-based data isolation
@@ -128,6 +133,11 @@ const getJobs = async (req, res) => {
         if (jobPosition) query.jobPosition = new RegExp(jobPosition, 'i');
         if (salaryRange) query.salaryRange = new RegExp(salaryRange, 'i');
         if (experienceRange) query.experienceRange = new RegExp(experienceRange, 'i');
+        if (serviceCategory) query.cookingCategory = new RegExp(serviceCategory, 'i');
+        if (minSalary || maxSalary) {
+            // salaryRange is stored as string like "15000-20000", filter numerically
+            if (minSalary) query.$expr = { $gte: [{ $toInt: { $arrayElemAt: [{ $split: ['$salaryRange', '-'] }, 0] } }, parseInt(minSalary)] };
+        }
 
         // Active jobs filter for cook viewing
         if (isCook) query.isActive = true;

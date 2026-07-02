@@ -397,6 +397,23 @@ exports.getProfile = async (req, res) => {
             candidate = await Candidate.findOne({ phone: user.phone });
         }
 
+        // Calculate profile completion %
+        const profileFields = ['name', 'email', 'phone', 'profilePic', 'address'];
+        const cookFields = ['dob', 'gender', 'state', 'city', 'languages', 'maritalStatus'];
+        const cookPrefFields = ['jobCategory', 'jobType', 'jobPositions', 'preferredCities', 'currentSalary', 'expectedSalary'];
+        let totalFields = profileFields.length;
+        let filledFields = profileFields.filter(f => user[f] && user[f] !== 'default-user.png').length;
+        if (user.skills && user.skills.length > 0) { totalFields++; filledFields++; }
+        if (user.about) { totalFields++; filledFields++; }
+
+        if (candidate) {
+            totalFields += cookFields.length + cookPrefFields.length;
+            filledFields += cookFields.filter(f => candidate[f] && (Array.isArray(candidate[f]) ? candidate[f].length > 0 : true)).length;
+            const pref = candidate.jobPreference || {};
+            filledFields += cookPrefFields.filter(f => pref[f] && (Array.isArray(pref[f]) ? pref[f].length > 0 : pref[f])).length;
+        }
+        const profileCompletion = Math.round((filledFields / totalFields) * 100);
+
         const responseData = {
             success: true,
             user: {
@@ -413,6 +430,11 @@ exports.getProfile = async (req, res) => {
                 fcmToken: user.fcmToken,
                 skills: user.skills,
                 about: user.about,
+                activePlan: user.activePlan,
+                planExpiryDate: user.planExpiryDate,
+                currentJobPostLimit: user.currentJobPostLimit,
+                jobsPostedInCurrentPlan: user.jobsPostedInCurrentPlan,
+                profileCompletion,
                 createdAt: user.createdAt,
                 updatedAt: user.updatedAt
             }

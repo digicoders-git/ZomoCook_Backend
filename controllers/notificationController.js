@@ -89,6 +89,7 @@ exports.getNotifications = async (req, res) => {
                 const userState = req.admin.state || '';
                 const userCity = req.admin.city || '';
                 const userJobCategories = candidateDoc?.jobPreference?.jobCategory || [];
+                const userServiceCategories = candidateDoc?.cookingSkills ? Object.keys(candidateDoc.cookingSkills) : [];
 
                 query.$or = [
                     { recipient: { $in: recipientIds } },
@@ -109,6 +110,13 @@ exports.getNotifications = async (req, res) => {
                                     { targetJobCategories: { $size: 0 } },
                                     { targetJobCategories: { $exists: false } },
                                     ...(userJobCategories.length ? [{ targetJobCategories: { $in: userJobCategories } }] : [])
+                                ]
+                            },
+                            {
+                                $or: [
+                                    { targetServiceCategories: { $size: 0 } },
+                                    { targetServiceCategories: { $exists: false } },
+                                    ...(userServiceCategories.length ? [{ targetServiceCategories: { $in: userServiceCategories } }] : [])
                                 ]
                             }
                         ]

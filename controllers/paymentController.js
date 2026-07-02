@@ -26,9 +26,8 @@ const createOrder = async (req, res) => {
 
         if (!order) return res.status(500).json({ success: false, message: 'Failed to create Razorpay order' });
 
-        // Create pending transaction record
-        const txn = await Transaction.create({
-            user: req.admin._id,
+        const isCustomer = req.admin.constructor.modelName === 'Customer';
+        const txnData = {
             type: type || 'job_post_fee',
             amount,
             status: 'pending',
@@ -37,7 +36,11 @@ const createOrder = async (req, res) => {
             relatedPlan: planId || undefined,
             description: type === 'daily_job_advance' ? 'Daily job 25% advance' :
                          type === 'subscription' ? 'Subscription purchase' : 'Job post fee ₹299'
-        });
+        };
+        if (isCustomer) txnData.customer = req.admin._id;
+        else txnData.user = req.admin._id;
+
+        const txn = await Transaction.create(txnData);
 
         res.status(200).json({ success: true, order, transactionId: txn._id });
     } catch (error) {
@@ -77,13 +80,15 @@ const verifyPayment = async (req, res) => {
         let message = 'Payment verified successfully';
 
         // Handle subscription activation
-        if (type === 'subscription' && planId && req.admin.constructor.modelName === 'User') {
+        if (type === 'subscription' && planId) {
             const Plan = require('../models/Plan');
             const User = require('../models/User');
             const SubscriptionHistory = require('../models/SubscriptionHistory');
 
             const plan = await Plan.findById(planId);
-            const user = await User.findById(req.admin._id);
+            const isCustomer = req.admin.constructor.modelName === 'Customer';
+            const UserModel = isCustomer ? require('../models/Customer') : User;
+            const user = await UserModel.findById(req.admin._id);
 
             if (plan && user) {
                 const expiry = new Date();
@@ -97,7 +102,8 @@ const verifyPayment = async (req, res) => {
                 await user.save();
 
                 await SubscriptionHistory.create({
-                    user: user._id,
+                    user: isCustomer ? undefined : user._id,
+                    customer: isCustomer ? user._id : undefined,
                     plan: plan._id,
                     amountPaid: plan.price,
                     startDate: new Date(),
@@ -140,7 +146,8 @@ const verifyPayment = async (req, res) => {
 const getTransactionHistory = async (req, res) => {
     try {
         const { type, status, limit = 20, skip = 0 } = req.query;
-        const query = { user: req.admin._id };
+        const isCustomer = req.admin.constructor.modelName === 'Customer';
+        const query = isCustomer ? { customer: req.admin._id } : { user: req.admin._id };
         if (type) query.type = type;
         if (status) query.status = status;
 
@@ -169,17 +176,23 @@ const checkJobPostPayment = async (req, res) => {
     try {
         const { jobCategory } = req.body;
         const user = req.admin;
+        const modelName = user.constructor.modelName;
 
-        if (user.constructor.modelName !== 'User') {
+        if (modelName === 'Admin') {
             return res.status(200).json({ success: true, requiresPayment: false, message: 'Admin can post for free' });
         }
 
-        const User = require('../models/User');
+        const UserModel = modelName === 'Customer' ? require('../models/Customer') : require('../models/User');
         const Plan = require('../models/Plan');
-        const fullUser = await User.findById(user._id).populate('activePlan');
+        const fullUser = await UserModel.findById(user._id).populate('activePlan');
 
         const hasActivePlan = fullUser.activePlan && fullUser.planExpiryDate && new Date(fullUser.planExpiryDate) > new Date();
-        const withinLimit = hasActivePlan && fullUser.jobsPostedInCurrentPlan < fullUser.currentJobPostLimit;
+        const planAllowsCategory = hasActivePlan && (
+            !fullUser.activePlan.allowedJobCategories ||
+            fullUser.activePlan.allowedJobCategories.length === 0 ||
+            fullUser.activePlan.allowedJobCategories.includes(jobCategory)
+        );
+        const withinLimit = planAllowsCategory && fullUser.jobsPostedInCurrentPlan < fullUser.currentJobPostLimit;
 
         if (withinLimit) {
             return res.status(200).json({
@@ -190,7 +203,7 @@ const checkJobPostPayment = async (req, res) => {
             });
         }
 
-        // No plan or limit exceeded
+        // No plan or limit exceeded or category not in plan
         if (jobCategory === 'daily') {
             return res.status(200).json({
                 success: true,

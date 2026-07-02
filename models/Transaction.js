@@ -1,7 +1,8 @@
 const mongoose = require('mongoose');
 
 const transactionSchema = new mongoose.Schema({
-    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    customer: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer' },
     type: {
         type: String,
         enum: ['job_post_fee', 'daily_job_advance', 'subscription'],

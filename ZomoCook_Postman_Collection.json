@@ -172,7 +172,8 @@
               "raw": "{{base_url}}/api/admin/users/profile",
               "host": ["{{base_url}}"],
               "path": ["api", "admin", "users", "profile"]
-            }
+            },
+            "description": "Returns user profile with profileCompletion %, activePlan, planExpiryDate, currentJobPostLimit, jobsPostedInCurrentPlan"
           }
         },
         {
@@ -363,10 +364,137 @@
       ]
     },
     {
+      "name": "Payments",
+      "item": [
+        {
+          "name": "Check Job Post Payment Required",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/payments/check-job-post",
+              "host": ["{{base_url}}"],
+              "path": ["api", "payments", "check-job-post"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"jobCategory\": \"hotel\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "Call this before posting a job. Returns requiresPayment: true/false. If true, paymentType will be 'job_post_fee' (₹299) or 'daily_job_advance' (25% of package)."
+          }
+        },
+        {
+          "name": "Create Razorpay Order",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/payments/create-order",
+              "host": ["{{base_url}}"],
+              "path": ["api", "payments", "create-order"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 299,\n  \"type\": \"job_post_fee\",\n  \"jobId\": \"<job_id>\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "type: job_post_fee | daily_job_advance | subscription. Returns Razorpay order object + transactionId."
+          }
+        },
+        {
+          "name": "Create Order - Daily Job Advance (25%)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/payments/create-order",
+              "host": ["{{base_url}}"],
+              "path": ["api", "payments", "create-order"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 1250,\n  \"type\": \"daily_job_advance\",\n  \"jobId\": \"<job_id>\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "For daily job: amount = 25% of package price. e.g. package=5000, advance=1250"
+          }
+        },
+        {
+          "name": "Create Order - Package/Subscription",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/payments/create-order",
+              "host": ["{{base_url}}"],
+              "path": ["api", "payments", "create-order"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 999,\n  \"type\": \"subscription\",\n  \"planId\": \"<plan_id>\"\n}",
+              "options": { "raw": { "language": "json" } }
+            }
+          }
+        },
+        {
+          "name": "Verify Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/payments/verify",
+              "host": ["{{base_url}}"],
+              "path": ["api", "payments", "verify"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"razorpay_order_id\": \"order_xxx\",\n  \"razorpay_payment_id\": \"pay_xxx\",\n  \"razorpay_signature\": \"signature_xxx\",\n  \"type\": \"job_post_fee\",\n  \"jobId\": \"<job_id>\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "description": "After Razorpay payment success on frontend, call this to verify & activate job/subscription. type: job_post_fee | daily_job_advance | subscription"
+          }
+        },
+        {
+          "name": "My Transaction History",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": {
+              "raw": "{{base_url}}/api/payments/transactions",
+              "host": ["{{base_url}}"],
+              "path": ["api", "payments", "transactions"],
+              "query": [
+                { "key": "type", "value": "job_post_fee", "disabled": true, "description": "job_post_fee | daily_job_advance | subscription" },
+                { "key": "status", "value": "success", "disabled": true, "description": "pending | success | failed" },
+                { "key": "limit", "value": "20", "disabled": true },
+                { "key": "skip", "value": "0", "disabled": true }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
       "name": "Jobs",
       "item": [
         {
-          "name": "Get All Jobs",
+          "name": "Get All Jobs (Cook - Multiple Filters)",
           "request": {
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
@@ -377,8 +505,17 @@
               "query": [
                 { "key": "jobCategory", "value": "hotel", "disabled": true, "description": "hotel | home | daily" },
                 { "key": "city", "value": "Lucknow", "disabled": true },
+                { "key": "state", "value": "Uttar Pradesh", "disabled": true },
                 { "key": "status", "value": "Active", "disabled": true },
-                { "key": "isActive", "value": "true", "disabled": true }
+                { "key": "isActive", "value": "true", "disabled": true },
+                { "key": "jobType", "value": "Full Time", "disabled": true },
+                { "key": "jobPosition", "value": "Head Cook", "disabled": true },
+                { "key": "serviceCategory", "value": "South Indian", "disabled": true, "description": "cookingCategory filter" },
+                { "key": "salaryRange", "value": "15000", "disabled": true },
+                { "key": "experienceRange", "value": "2-5 years", "disabled": true },
+                { "key": "search", "value": "cook", "disabled": true },
+                { "key": "limit", "value": "20", "disabled": true },
+                { "key": "skip", "value": "0", "disabled": true }
               ]
             }
           }
@@ -810,6 +947,9 @@
                 { "key": "message", "value": "A new Head Cook job is available in Lucknow. Apply now!", "type": "text" },
                 { "key": "target", "value": "all", "type": "text", "description": "all | candidates | customers" },
                 { "key": "status", "value": "active", "type": "text", "description": "active | inactive" },
+                { "key": "targetRegions", "value": "[\"Lucknow\",\"Uttar Pradesh\"]", "type": "text", "description": "JSON array of cities/states. Empty = all regions" },
+                { "key": "targetJobCategories", "value": "[\"hotel\",\"home\"]", "type": "text", "description": "JSON array: hotel | home | daily. Empty = all categories" },
+                { "key": "targetServiceCategories", "value": "[\"South Indian\",\"Chinese\"]", "type": "text", "description": "JSON array of cooking/service categories. Empty = all" },
                 { "key": "image", "type": "file", "src": [] }
               ]
             }

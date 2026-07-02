@@ -46,14 +46,14 @@ const createCandidate = async (req, res) => {
         candidateData.creatorModel = req.admin.constructor.modelName;
 
         // Parse nested fields
-        const complexFields = ['languages', 'jobPreference', 'cookingSkills', 'workExperience', 'education', 'careerHighlights', 'socialMedia'];
+        const complexFields = ['languages', 'jobPreference', 'cookingSkills', 'workExperience', 'education', 'careerHighlights', 'socialMedia', 'skills'];
         complexFields.forEach(field => {
             if (candidateData[field] && typeof candidateData[field] === 'string') {
                 try {
                     candidateData[field] = JSON.parse(candidateData[field]);
                 } catch (e) {
                     console.log(`Field ${field} is not valid JSON, resetting to default type.`);
-                    if (['languages', 'education', 'socialMedia'].includes(field)) {
+                    if (['languages', 'education', 'socialMedia', 'skills'].includes(field)) {
                         candidateData[field] = [];
                     } else {
                         candidateData[field] = {};
@@ -104,14 +104,14 @@ const updateCandidate = async (req, res) => {
         }
 
         // Parse nested fields
-        const complexFields = ['languages', 'jobPreference', 'cookingSkills', 'workExperience', 'education', 'careerHighlights', 'socialMedia'];
+        const complexFields = ['languages', 'jobPreference', 'cookingSkills', 'workExperience', 'education', 'careerHighlights', 'socialMedia', 'skills'];
         complexFields.forEach(field => {
             if (updateData[field] && typeof updateData[field] === 'string') {
                 try {
                     updateData[field] = JSON.parse(updateData[field]);
                 } catch (e) {
                     console.log(`Field ${field} is not valid JSON, resetting to default type.`);
-                    if (['languages', 'education', 'socialMedia'].includes(field)) {
+                    if (['languages', 'education', 'socialMedia', 'skills'].includes(field)) {
                         updateData[field] = [];
                     } else {
                         updateData[field] = {};
@@ -350,14 +350,14 @@ const updateCandidateMe = async (req, res) => {
         }
 
         // Parse nested fields
-        const complexFields = ['languages', 'jobPreference', 'cookingSkills', 'workExperience', 'education', 'careerHighlights', 'socialMedia'];
+        const complexFields = ['languages', 'jobPreference', 'cookingSkills', 'workExperience', 'education', 'careerHighlights', 'socialMedia', 'skills'];
         complexFields.forEach(field => {
             if (updateData[field] && typeof updateData[field] === 'string') {
                 try {
                     updateData[field] = JSON.parse(updateData[field]);
                 } catch (e) {
                     console.log(`Field ${field} is not valid JSON, resetting to default type.`);
-                    if (['languages', 'education', 'socialMedia'].includes(field)) {
+                    if (['languages', 'education', 'socialMedia', 'skills'].includes(field)) {
                         updateData[field] = [];
                     } else {
                         updateData[field] = {};
