@@ -166,6 +166,14 @@ const getTransactionHistory = async (req, res) => {
     }
 };
 
+const normalizeCategory = (cat) => {
+    if (!cat) return '';
+    const clean = cat.trim().toLowerCase();
+    if (clean === 'commercial') return 'hotel';
+    if (clean === 'domestic') return 'home';
+    return clean;
+};
+
 /**
  * @desc    Check if user needs to pay for job post
  * @route   POST /api/payments/check-job-post
@@ -186,11 +194,12 @@ const checkJobPostPayment = async (req, res) => {
         const Plan = require('../models/Plan');
         const fullUser = await UserModel.findById(user._id).populate('activePlan');
 
+        const reqCat = normalizeCategory(jobCategory);
         const hasActivePlan = fullUser.activePlan && fullUser.planExpiryDate && new Date(fullUser.planExpiryDate) > new Date();
         const planAllowsCategory = hasActivePlan && (
             !fullUser.activePlan.allowedJobCategories ||
             fullUser.activePlan.allowedJobCategories.length === 0 ||
-            fullUser.activePlan.allowedJobCategories.includes(jobCategory)
+            fullUser.activePlan.allowedJobCategories.map(c => normalizeCategory(c)).includes(reqCat)
         );
         const withinLimit = planAllowsCategory && fullUser.jobsPostedInCurrentPlan < fullUser.currentJobPostLimit;
 
@@ -204,7 +213,7 @@ const checkJobPostPayment = async (req, res) => {
         }
 
         // No plan or limit exceeded or category not in plan
-        if (jobCategory === 'daily') {
+        if (reqCat === 'daily') {
             return res.status(200).json({
                 success: true,
                 requiresPayment: true,

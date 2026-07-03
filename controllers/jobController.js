@@ -1,6 +1,14 @@
 const Job = require('../models/Job');
 const Candidate = require('../models/Candidate');
 
+const normalizeCategory = (cat) => {
+    if (!cat) return '';
+    const clean = cat.trim().toLowerCase();
+    if (clean === 'commercial') return 'hotel';
+    if (clean === 'domestic') return 'home';
+    return clean;
+};
+
 /**
  * @desc    Create new job
  * @route   POST /api/jobs
@@ -20,19 +28,21 @@ const createJob = async (req, res) => {
         // Payment check for Users (Employers)
         if (req.admin.constructor.modelName === 'User') {
             const User = require('../models/User');
+            const Plan = require('../models/Plan');
             const fullUser = await User.findById(req.admin._id).populate('activePlan');
             const jobCategory = req.body.jobCategory;
+            const reqCat = normalizeCategory(jobCategory);
             const hasActivePlan = fullUser.activePlan && fullUser.planExpiryDate && new Date(fullUser.planExpiryDate) > new Date();
             const planAllowsCategory = hasActivePlan && (
                 !fullUser.activePlan.allowedJobCategories ||
                 fullUser.activePlan.allowedJobCategories.length === 0 ||
-                fullUser.activePlan.allowedJobCategories.includes(jobCategory)
+                fullUser.activePlan.allowedJobCategories.map(c => normalizeCategory(c)).includes(reqCat)
             );
             const withinLimit = planAllowsCategory && fullUser.jobsPostedInCurrentPlan < fullUser.currentJobPostLimit;
 
             if (!withinLimit) {
                 // Daily job: must have paid 25% advance (paymentStatus in body)
-                if (jobCategory === 'daily') {
+                if (reqCat === 'daily') {
                     if (req.body.paymentStatus !== 'paid') {
                         return res.status(402).json({
                             success: false,
