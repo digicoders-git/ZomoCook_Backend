@@ -190,6 +190,8 @@ const getJobs = async (req, res) => {
                 interviews,
                 rejected,
                 selected,
+                appliedCount: apps.length,
+                assignedCount: assignedCandidates,
                 isSaved: isCook ? savedJobIds.some(id => id.toString() === job._id.toString()) : undefined
             };
         }));
@@ -245,7 +247,9 @@ const getJob = async (req, res) => {
             assignedCandidates,
             interviews,
             rejected,
-            selected
+            selected,
+            appliedCount: apps.length,
+            assignedCount: assignedCandidates
         };
 
         res.status(200).json({

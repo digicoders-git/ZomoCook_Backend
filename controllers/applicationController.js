@@ -292,6 +292,23 @@ const updateApplicationStatus = async (req, res) => {
                 relatedModel: 'Application',
                 actionUrl: status === 'Hired' ? '/bookings' : '/applications'
             }).catch(err => console.error('Error sending application status update push notification:', err));
+
+            // Notify Customer (Employer) that a cook has been assigned (shortlisted or hired)
+            if (status === 'Shortlisted' || status === 'Hired') {
+                const customerTitle = status === 'Shortlisted' ? '🌟 Cook Shortlisted' : '🎉 Cook Hired';
+                const customerMessage = `"${application.candidate?.name || 'A candidate'}" has been ${status === 'Shortlisted' ? 'shortlisted' : 'hired'} for your job "${application.job?.title || 'hiring requirement'}".`;
+                
+                notificationController.sendNotificationToUser({
+                    userId: application.customer,
+                    userModel: 'User',
+                    title: customerTitle,
+                    message: customerMessage,
+                    type: 'candidate_assigned',
+                    relatedId: application._id,
+                    relatedModel: 'Application',
+                    actionUrl: '/bookings'
+                }).catch(err => console.error('Error sending application status update push notification to customer:', err));
+            }
         }
 
         await syncCandidateApplication(application);
@@ -508,6 +525,21 @@ const hireCook = async (req, res) => {
                 relatedModel: 'Application',
                 actionUrl: '/bookings'
             }).catch(err => console.error('Error sending hired push notification:', err));
+
+            // Notify Customer (Employer) that a cook has been hired
+            const customerTitle = '🎉 Cook Hired';
+            const customerMessage = `"${application.candidate?.name || 'A candidate'}" has been hired for your job "${application.job?.title || 'hiring requirement'}".`;
+            
+            notificationController.sendNotificationToUser({
+                userId: application.customer,
+                userModel: 'User',
+                title: customerTitle,
+                message: customerMessage,
+                type: 'candidate_assigned',
+                relatedId: application._id,
+                relatedModel: 'Application',
+                actionUrl: '/bookings'
+            }).catch(err => console.error('Error sending hired push notification to customer:', err));
         }
 
         // Auto-create booking record
