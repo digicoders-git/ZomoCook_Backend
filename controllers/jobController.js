@@ -38,7 +38,9 @@ const createJob = async (req, res) => {
                 fullUser.activePlan.allowedJobCategories.length === 0 ||
                 fullUser.activePlan.allowedJobCategories.map(c => normalizeCategory(c)).includes(reqCat)
             );
-            const withinLimit = planAllowsCategory && fullUser.jobsPostedInCurrentPlan < fullUser.currentJobPostLimit;
+            const jobsPosted = fullUser.jobsPostedInCurrentPlan || 0;
+            const postLimit = fullUser.currentJobPostLimit || 0;
+            const withinLimit = planAllowsCategory && jobsPosted < postLimit;
 
             if (!withinLimit) {
                 // Daily job: must have paid 25% advance (paymentStatus in body)
@@ -93,7 +95,7 @@ const createJob = async (req, res) => {
 
         if (req.admin.constructor.modelName === 'User') {
             const user = req.admin;
-            user.jobsPostedInCurrentPlan += 1;
+            user.jobsPostedInCurrentPlan = (user.jobsPostedInCurrentPlan || 0) + 1;
             await user.save();
         }
 

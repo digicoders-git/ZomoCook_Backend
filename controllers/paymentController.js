@@ -201,14 +201,34 @@ const checkJobPostPayment = async (req, res) => {
             fullUser.activePlan.allowedJobCategories.length === 0 ||
             fullUser.activePlan.allowedJobCategories.map(c => normalizeCategory(c)).includes(reqCat)
         );
-        const withinLimit = planAllowsCategory && fullUser.jobsPostedInCurrentPlan < fullUser.currentJobPostLimit;
+
+        const jobsPosted = fullUser.jobsPostedInCurrentPlan || 0;
+        const postLimit = fullUser.currentJobPostLimit || 0;
+        const withinLimit = planAllowsCategory && jobsPosted < postLimit;
+
+        console.log('[DEBUG] checkJobPostPayment category check:');
+        console.log('- User ID:', fullUser._id);
+        console.log('- User Name:', fullUser.name);
+        console.log('- jobCategory (requested):', jobCategory);
+        console.log('- reqCat (normalized):', reqCat);
+        console.log('- activePlan:', fullUser.activePlan ? {
+            _id: fullUser.activePlan._id,
+            name: fullUser.activePlan.name,
+            allowedJobCategories: fullUser.activePlan.allowedJobCategories
+        } : null);
+        console.log('- planExpiryDate:', fullUser.planExpiryDate);
+        console.log('- hasActivePlan:', hasActivePlan);
+        console.log('- planAllowsCategory:', planAllowsCategory);
+        console.log('- jobsPosted:', jobsPosted);
+        console.log('- postLimit:', postLimit);
+        console.log('- withinLimit:', withinLimit);
 
         if (withinLimit) {
             return res.status(200).json({
                 success: true,
                 requiresPayment: false,
                 message: 'Free post available under your plan',
-                remainingPosts: fullUser.currentJobPostLimit - fullUser.jobsPostedInCurrentPlan
+                remainingPosts: postLimit - jobsPosted
             });
         }
 
