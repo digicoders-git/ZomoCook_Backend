@@ -116,7 +116,7 @@ const createJob = async (req, res) => {
  */
 const getJobs = async (req, res) => {
     try {
-        const { jobCategory, city, state, status, isActive, search, jobType, jobPosition, salaryRange, experienceRange, serviceCategory, minSalary, maxSalary, limit = 50, skip = 0 } = req.query;
+        const { jobCategory, city, state, status, isActive, search, jobType, jobPosition, salaryRange, experienceRange, serviceCategory, minSalary, maxSalary, limit = 50, skip = 0, paymentStatus, leadManager } = req.query;
         let query = {};
 
         // Role-based data isolation
@@ -141,6 +141,17 @@ const getJobs = async (req, res) => {
         if (state) query.state = new RegExp(state, 'i');
         if (status) query.status = status;
         if (isActive !== undefined) query.isActive = isActive === 'true';
+        if (leadManager) query.leadManager = leadManager;
+
+        if (paymentStatus) {
+            if (paymentStatus === 'unpaid' || paymentStatus === 'free') {
+                query.paymentStatus = 'free';
+            } else if (paymentStatus === 'paid') {
+                query.paymentStatus = 'paid';
+            } else {
+                query.paymentStatus = paymentStatus;
+            }
+        }
         if (jobType) query.jobType = new RegExp(jobType, 'i');
         if (jobPosition) query.jobPosition = new RegExp(jobPosition, 'i');
         if (salaryRange) query.salaryRange = new RegExp(salaryRange, 'i');
@@ -359,9 +370,9 @@ const updateJobStatus = async (req, res) => {
         const { status } = req.body;
 
         const updateDoc = { status };
-        if (status === 'Active' || status === 'New' || status === 'Urgent') {
+        if (status === 'Active' || status === 'New' || status === 'Urgent' || status === 'Open' || status === 'In Progress') {
             updateDoc.isActive = true;
-        } else if (status === 'Inactive' || status === 'Cancelled' || status === 'Expired') {
+        } else if (status === 'Inactive' || status === 'Cancelled' || status === 'Expired' || status === 'Closed' || status === 'Hold') {
             updateDoc.isActive = false;
         }
 

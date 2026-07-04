@@ -63,7 +63,7 @@ const jobSchema = new mongoose.Schema({
   image: String,
   status: {
     type: String,
-    enum: ['Urgent', 'New', 'Active', 'Inactive', 'Cancelled', 'Expired'],
+    enum: ['Urgent', 'New', 'Active', 'Inactive', 'Cancelled', 'Expired', 'Open', 'In Progress', 'Closed', 'Hold'],
     default: 'New'
   },
   jobType: {
@@ -88,6 +88,10 @@ const jobSchema = new mongoose.Schema({
   isActive: {
     type: Boolean,
     default: true
+  },
+  leadManager: {
+    type: String,
+    default: ''
   },
   paymentReminderSent15Min: {
     type: Boolean,
