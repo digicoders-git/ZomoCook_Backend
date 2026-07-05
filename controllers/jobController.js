@@ -25,6 +25,12 @@ const createJob = async (req, res) => {
         }
         const jobCode = `ZOMO${nextNumber}`;
 
+        let requiresPayment = false;
+        let paymentInfo = null;
+        let jobStatus = 'New';
+        let isActive = true;
+        let finalPaymentStatus = req.body.paymentStatus || 'free';
+
         // Payment check for Users (Employers)
         if (req.admin.constructor.modelName === 'User') {
             const User = require('../models/User');
@@ -46,32 +52,39 @@ const createJob = async (req, res) => {
                 // Daily job: must have paid 25% advance (paymentStatus in body)
                 if (reqCat === 'daily') {
                     if (req.body.paymentStatus !== 'paid') {
-                        return res.status(402).json({
-                            success: false,
-                            requiresPayment: true,
+                        requiresPayment = true;
+                        paymentInfo = {
                             paymentType: 'daily_job_advance',
                             advancePercent: 25,
                             message: 'Daily job requires 25% advance payment before posting.'
-                        });
+                        };
                     }
                 } else {
                     // Regular job: must have paid ₹299
                     if (req.body.paymentStatus !== 'paid') {
-                        return res.status(402).json({
-                            success: false,
-                            requiresPayment: true,
+                        requiresPayment = true;
+                        paymentInfo = {
                             paymentType: 'job_post_fee',
                             amount: 299,
                             message: 'Please pay ₹299 to post this job.'
-                        });
+                        };
                     }
                 }
             }
         }
 
+        if (requiresPayment) {
+            jobStatus = 'Hold';
+            isActive = false;
+            finalPaymentStatus = 'pending';
+        }
+
         const jobData = {
             ...req.body,
             jobCode,
+            status: jobStatus,
+            isActive: isActive,
+            paymentStatus: finalPaymentStatus,
             image: req.file ? req.file.path : undefined,
             createdBy: req.admin._id,
             creatorModel: req.admin.constructor.modelName
@@ -79,30 +92,34 @@ const createJob = async (req, res) => {
 
         const job = await Job.create(jobData);
 
-        // Send push notification to all cooks
-        const notificationController = require('./notificationController');
-        const salaryText = job.salaryRange ? `Salary ${job.salaryRange}` : 'Good Salary';
-        const cityText = job.city ? `in ${job.city}` : '';
-        notificationController.sendNotificationToRole({
-            roleName: 'Cook',
-            title: '🔔 New Matching Job',
-            message: `New Chef Requirement ${cityText}. ${salaryText}. Apply now.`,
-            type: 'job_available',
-            relatedId: job._id,
-            relatedModel: 'Job',
-            actionUrl: '/jobs'
-        }).catch(err => console.error('Error sending job post push notification:', err));
+        if (!requiresPayment) {
+            // Send push notification to all cooks
+            const notificationController = require('./notificationController');
+            const salaryText = job.salaryRange ? `Salary ${job.salaryRange}` : 'Good Salary';
+            const cityText = job.city ? `in ${job.city}` : '';
+            notificationController.sendNotificationToRole({
+                roleName: 'Cook',
+                title: '🔔 New Matching Job',
+                message: `New Chef Requirement ${cityText}. ${salaryText}. Apply now.`,
+                type: 'job_available',
+                relatedId: job._id,
+                relatedModel: 'Job',
+                actionUrl: '/jobs'
+            }).catch(err => console.error('Error sending job post push notification:', err));
 
-        if (req.admin.constructor.modelName === 'User') {
-            const user = req.admin;
-            user.jobsPostedInCurrentPlan = (user.jobsPostedInCurrentPlan || 0) + 1;
-            await user.save();
+            if (req.admin.constructor.modelName === 'User') {
+                const user = req.admin;
+                user.jobsPostedInCurrentPlan = (user.jobsPostedInCurrentPlan || 0) + 1;
+                await user.save();
+            }
         }
 
         res.status(201).json({
             success: true,
-            message: "Job created successfully",
-            job
+            message: requiresPayment ? paymentInfo.message : "Job created successfully",
+            job,
+            requiresPayment,
+            paymentInfo
         });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -619,8 +636,55 @@ const resendJobNotification = async (req, res) => {
     }
 };
 
+const completePayment = async (req, res) => {
+    try {
+        const jobId = req.params.id;
+        const job = await Job.findById(jobId);
+        if (!job) {
+            return res.status(404).json({ success: false, message: 'Job not found' });
+        }
+
+        job.paymentStatus = 'paid';
+        job.status = 'New';
+        job.isActive = true;
+        await job.save();
+
+        // Send push notification to all cooks now that payment is complete
+        const notificationController = require('./notificationController');
+        const salaryText = job.salaryRange ? `Salary ${job.salaryRange}` : 'Good Salary';
+        const cityText = job.city ? `in ${job.city}` : '';
+        notificationController.sendNotificationToRole({
+            roleName: 'Cook',
+            title: '🔔 New Matching Job',
+            message: `New Chef Requirement ${cityText}. ${salaryText}. Apply now.`,
+            type: 'job_available',
+            relatedId: job._id,
+            relatedModel: 'Job',
+            actionUrl: '/jobs'
+        }).catch(err => console.error('Error sending job post push notification:', err));
+
+        if (job.creatorModel === 'User') {
+            const User = require('../models/User');
+            const user = await User.findById(job.createdBy);
+            if (user) {
+                user.jobsPostedInCurrentPlan = (user.jobsPostedInCurrentPlan || 0) + 1;
+                await user.save();
+            }
+        }
+
+        res.status(200).json({
+            success: true,
+            message: "Payment completed and Job is now active",
+            job
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
 module.exports = {
     ...oldExports,
     applyForJob,
-    resendJobNotification
+    resendJobNotification,
+    completePayment
 };
