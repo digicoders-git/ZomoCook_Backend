@@ -11,7 +11,8 @@ const {
     saveJob,
     unsaveJob,
     getSavedJobs,
-    applyForJob
+    applyForJob,
+    resendJobNotification
 } = require('../controllers/jobController');
 const { protect } = require('../middleware/authMiddleware');
 const multer = require('multer');
@@ -49,5 +50,6 @@ router.post('/:id/apply', protect, applyForJob);
 
 router.patch('/:id/status', protect, toggleJobStatus);
 router.patch('/:id/status-string', protect, updateJobStatus);
+router.post('/:id/resend-notification', protect, resendJobNotification);
 
 module.exports = router;

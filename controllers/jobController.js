@@ -559,7 +559,38 @@ const applyForJob = async (req, res) => {
     }
 };
 
+const resendJobNotification = async (req, res) => {
+    try {
+        const job = await Job.findById(req.params.id);
+        if (!job) {
+            return res.status(404).json({ success: false, message: 'Job not found' });
+        }
+
+        const notificationController = require('./notificationController');
+        const salaryText = job.salaryRange ? `Salary ${job.salaryRange}` : 'Good Salary';
+        const cityText = job.city ? `in ${job.city}` : '';
+        
+        await notificationController.sendNotificationToRole({
+            roleName: 'Cook',
+            title: '🔔 Matching Job Reminder',
+            message: `Chef Requirement ${cityText}. ${salaryText}. Apply now.`,
+            type: 'job_available',
+            relatedId: job._id,
+            relatedModel: 'Job',
+            actionUrl: `/jobs/view/${job._id}`
+        });
+
+        res.status(200).json({
+            success: true,
+            message: "Notification resent successfully to all cooks"
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
 module.exports = {
     ...oldExports,
-    applyForJob
+    applyForJob,
+    resendJobNotification
 };
