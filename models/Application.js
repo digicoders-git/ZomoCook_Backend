@@ -18,7 +18,7 @@ const applicationSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['Applied', 'Shortlisted', 'Demo Scheduled', 'Reschedule Requested', 'Hired', 'Rejected', 'On Hold', 'Not Interested', 'Cancelled'],
+        enum: ['Applied', 'Shortlisted', 'Profile Reviewed', 'Package Selected', 'Package Paid', 'Demo Scheduled', 'Reschedule Requested', 'Hired', 'Rejected', 'On Hold', 'Not Interested', 'Cancelled'],
         default: 'Applied'
     },
     isViewedByClient: {
@@ -37,6 +37,21 @@ const applicationSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.Mixed,
         default: {}
     },
+    servicePackage: {
+        type: String,
+        enum: ['Basic', 'Standard', 'Premium'],
+        default: null
+    },
+    servicePackagePaymentId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'ServicePackagePayment'
+    },
+    servicePackagePaid: {
+        type: Boolean,
+        default: false
+    },
+    packageSelectedDate: Date,
+    packagePaidDate: Date,
     demoDate: Date,
     demoTime: String,
     meetingLink: String,

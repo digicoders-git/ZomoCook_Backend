@@ -1,6 +1,8 @@
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
 const Transaction = require('../models/Transaction');
+const ServicePackagePayment = require('../models/ServicePackagePayment');
+const Application = require('../models/Application');
 
 const getRazorpay = () => new Razorpay({
     key_id: process.env.RAZORPAY_KEY_ID,
@@ -11,11 +13,11 @@ const getRazorpay = () => new Razorpay({
  * @desc    Create a razorpay order
  * @route   POST /api/payments/create-order
  * @access  Private
- * body: { amount, currency, type: 'job_post_fee'|'daily_job_advance'|'subscription', jobId?, planId? }
+ * body: { amount, currency, type: 'job_post_fee'|'daily_job_advance'|'subscription'|'service_package', jobId?, planId?, applicationId?, packageType? }
  */
 const createOrder = async (req, res) => {
     try {
-        const { amount, currency = 'INR', type, jobId, planId } = req.body;
+        const { amount, currency = 'INR', type, jobId, planId, applicationId, packageType } = req.body;
 
         const razorpay = getRazorpay();
         const order = await razorpay.orders.create({
@@ -35,7 +37,9 @@ const createOrder = async (req, res) => {
             relatedJob: jobId || undefined,
             relatedPlan: planId || undefined,
             description: type === 'daily_job_advance' ? 'Daily job 25% advance' :
-                type === 'subscription' ? 'Subscription purchase' : 'Job post fee ₹299'
+                type === 'subscription' ? 'Subscription purchase' :
+                type === 'service_package' ? `${packageType} Service Package` :
+                'Job post fee ₹299'
         };
         if (isCustomer) txnData.customer = req.admin._id;
         else txnData.user = req.admin._id;
@@ -52,11 +56,11 @@ const createOrder = async (req, res) => {
  * @desc    Verify a razorpay payment
  * @route   POST /api/payments/verify
  * @access  Private
- * body: { razorpay_order_id, razorpay_payment_id, razorpay_signature, type, planId?, jobId? }
+ * body: { razorpay_order_id, razorpay_payment_id, razorpay_signature, type, planId?, jobId?, applicationId?, packageType? }
  */
 const verifyPayment = async (req, res) => {
     try {
-        const { razorpay_order_id, razorpay_payment_id, razorpay_signature, planId, jobId, type } = req.body;
+        const { razorpay_order_id, razorpay_payment_id, razorpay_signature, planId, jobId, type, applicationId, packageType } = req.body;
 
         const expectedSignature = crypto
             .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
@@ -71,13 +75,62 @@ const verifyPayment = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Invalid signature. Payment verification failed' });
         }
 
-        // Update transaction to success
         await Transaction.findOneAndUpdate(
             { razorpayOrderId: razorpay_order_id },
             { status: 'success', razorpayPaymentId: razorpay_payment_id }
         );
 
         let message = 'Payment verified successfully';
+
+        // Handle service package payment
+        if (type === 'service_package' && applicationId && packageType) {
+            const ServicePackage = require('../models/ServicePackage');
+            const servicePackage = await ServicePackage.findOne({ name: packageType, isActive: true });
+            
+            if (!servicePackage) {
+                return res.status(404).json({ success: false, message: 'Service package not found' });
+            }
+
+            const application = await Application.findById(applicationId);
+            if (!application) {
+                return res.status(404).json({ success: false, message: 'Application not found' });
+            }
+
+            // Create service package payment record
+            const packagePayment = await ServicePackagePayment.create({
+                application: applicationId,
+                customer: req.admin._id,
+                packageType: packageType,
+                amount: servicePackage.price,
+                replacementLimit: servicePackage.replacementLimit,
+                status: 'paid',
+                razorpayOrderId: razorpay_order_id,
+                razorpayPaymentId: razorpay_payment_id,
+                paidDate: new Date()
+            });
+
+            // Update application
+            application.servicePackagePaymentId = packagePayment._id;
+            application.servicePackagePaid = true;
+            application.packagePaidDate = new Date();
+            application.status = 'Package Paid';
+            await application.save();
+
+            message = `${packageType} Service Package payment confirmed. Demo can now be scheduled.`;
+
+            // Notify customer
+            const notificationController = require('./notificationController');
+            notificationController.sendNotificationToUser({
+                userId: req.admin._id,
+                userModel: 'User',
+                title: '💳 Service Package Payment Confirmed',
+                message: `${packageType} package payment confirmed. You can now schedule a demo.`,
+                type: 'payment',
+                relatedId: application._id,
+                relatedModel: 'Application',
+                actionUrl: '/applications'
+            }).catch(err => console.error('Error sending payment confirmation notification:', err));
+        }
 
         // Handle subscription activation
         if (type === 'subscription' && planId) {
@@ -232,7 +285,6 @@ const checkJobPostPayment = async (req, res) => {
             });
         }
 
-        // No plan or limit exceeded or category not in plan
         if (reqCat === 'daily') {
             return res.status(200).json({
                 success: true,
@@ -255,4 +307,23 @@ const checkJobPostPayment = async (req, res) => {
     }
 };
 
-module.exports = { createOrder, verifyPayment, getTransactionHistory, checkJobPostPayment };
+/**
+ * @desc    Get service package details and pricing
+ * @route   GET /api/payments/service-packages
+ * @access  Private
+ */
+const getServicePackages = async (req, res) => {
+    try {
+        const ServicePackage = require('../models/ServicePackage');
+        const packages = await ServicePackage.find({ isActive: true }).sort({ price: 1 });
+
+        res.status(200).json({
+            success: true,
+            packages
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+module.exports = { createOrder, verifyPayment, getTransactionHistory, checkJobPostPayment, getServicePackages };

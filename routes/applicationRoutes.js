@@ -5,6 +5,7 @@ const {
     getApplications,
     getMyApplications,
     updateApplicationStatus,
+    selectServicePackage,
     scheduleDemo,
     rescheduleDemo,
     hireCook,
@@ -28,7 +29,10 @@ router.get('/:id', protect, getApplicationById);
 // Update application status
 router.patch('/:id/status', protect, updateApplicationStatus);
 
-// Schedule demo
+// Select service package
+router.post('/:id/select-package', protect, selectServicePackage);
+
+// Schedule demo (only after package payment)
 router.post('/:id/schedule-demo', protect, scheduleDemo);
 
 // Reschedule demo

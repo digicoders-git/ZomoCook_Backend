@@ -1,6 +1,8 @@
 const Application = require('../models/Application');
 const Job = require('../models/Job');
 const Candidate = require('../models/Candidate');
+const ServicePackagePayment = require('../models/ServicePackagePayment');
+const ServicePackage = require('../models/ServicePackage');
 
 const syncCandidateApplication = async (application) => {
     if (!application || !application.candidate || !application.job) return;
@@ -43,7 +45,6 @@ const applyJob = async (req, res) => {
         const { jobId, applicationData } = req.body;
         const candidateId = req.admin._id;
 
-        // Return success immediately for the mock test job
         if (jobId === 'dummy-nearby-job-001' || jobId === '657e2d9b62649a15f0123456') {
             return res.status(201).json({
                 success: true,
@@ -51,7 +52,6 @@ const applyJob = async (req, res) => {
             });
         }
 
-        // Get job and candidate details
         const job = await Job.findById(jobId);
         if (!job) return res.status(404).json({ success: false, message: 'Job not found' });
 
@@ -77,13 +77,11 @@ const applyJob = async (req, res) => {
         }
         if (!candidate) return res.status(404).json({ success: false, message: 'Candidate not found' });
 
-        // Check if already applied
         const existingApp = await Application.findOne({ job: jobId, candidate: candidate._id });
         if (existingApp) {
             return res.status(400).json({ success: false, message: 'You have already applied for this job' });
         }
 
-        // Create application with form data
         const application = await Application.create({
             job: jobId,
             candidate: candidate._id,
@@ -93,7 +91,6 @@ const applyJob = async (req, res) => {
             appliedDate: new Date()
         });
 
-        // Send push notification to the customer/chef who posted the job
         const notificationController = require('./notificationController');
         notificationController.sendNotificationToUser({
             userId: job.createdBy,
@@ -106,7 +103,6 @@ const applyJob = async (req, res) => {
             actionUrl: '/applications'
         }).catch(err => console.error('Error sending job apply push notification:', err));
 
-        // Add to candidate's applications array (for backward compatibility)
         await syncCandidateApplication(application);
 
         res.status(201).json({
@@ -131,7 +127,6 @@ const getApplications = async (req, res) => {
 
         let query = {};
 
-        // Check if user is customer (User) or admin
         const isCustomer = req.admin.constructor.modelName === 'User';
         
         if (isCustomer) {
@@ -191,7 +186,6 @@ const getMyApplications = async (req, res) => {
         const userId = req.admin._id;
         const last10 = req.admin.phone ? req.admin.phone.slice(-10) : '';
 
-        // Candidate dhundo - phone ya createdBy se
         const candidate = await Candidate.findOne({
             $or: [
                 { _id: userId },
@@ -204,7 +198,6 @@ const getMyApplications = async (req, res) => {
         if (candidate) {
             query.candidate = candidate._id;
         } else {
-            // Fallback: User ID se directly applications dhundo
             query.candidate = userId;
         }
         if (status) query.status = status;
@@ -234,7 +227,7 @@ const updateApplicationStatus = async (req, res) => {
         const { status } = req.body;
         const applicationId = req.params.id;
 
-        const validStatuses = ['Applied', 'Shortlisted', 'Demo Scheduled', 'Reschedule Requested', 'Hired', 'Rejected', 'On Hold', 'Not Interested', 'Cancelled'];
+        const validStatuses = ['Applied', 'Shortlisted', 'Profile Reviewed', 'Package Selected', 'Package Paid', 'Demo Scheduled', 'Reschedule Requested', 'Hired', 'Rejected', 'On Hold', 'Not Interested', 'Cancelled'];
         if (!validStatuses.includes(status)) {
             return res.status(400).json({ success: false, message: 'Invalid status' });
         }
@@ -249,7 +242,6 @@ const updateApplicationStatus = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Application not found' });
         }
 
-        // Notify cook/candidate about status update with exact messages per status
         if (application.candidate) {
             const notificationController = require('./notificationController');
 
@@ -260,6 +252,18 @@ const updateApplicationStatus = async (req, res) => {
                 case 'Shortlisted':
                     notifTitle = '🌟 Profile Shortlisted';
                     notifMessage = 'Your profile has been shortlisted by the employer.';
+                    break;
+                case 'Profile Reviewed':
+                    notifTitle = '👀 Profile Under Review';
+                    notifMessage = 'Your profile is being reviewed by the employer.';
+                    break;
+                case 'Package Selected':
+                    notifTitle = '📦 Service Package Selected';
+                    notifMessage = 'Employer has selected a service package for your profile.';
+                    break;
+                case 'Package Paid':
+                    notifTitle = '💳 Service Package Paid';
+                    notifMessage = 'Service package payment confirmed. Demo will be scheduled soon.';
                     break;
                 case 'Hired':
                     notifTitle = '🎉 Congratulations!';
@@ -293,7 +297,6 @@ const updateApplicationStatus = async (req, res) => {
                 actionUrl: status === 'Hired' ? '/bookings' : '/applications'
             }).catch(err => console.error('Error sending application status update push notification:', err));
 
-            // Notify Customer (Employer) that a cook has been assigned (shortlisted or hired)
             if (status === 'Shortlisted' || status === 'Hired') {
                 const customerTitle = status === 'Shortlisted' ? '🌟 Cook Shortlisted' : '🎉 Cook Hired';
                 const customerMessage = `"${application.candidate?.name || 'A candidate'}" has been ${status === 'Shortlisted' ? 'shortlisted' : 'hired'} for your job "${application.job?.title || 'hiring requirement'}".`;
@@ -313,7 +316,6 @@ const updateApplicationStatus = async (req, res) => {
 
         await syncCandidateApplication(application);
 
-        // Auto-create booking record when status becomes 'Hired'
         if (status === 'Hired') {
             const Booking = require('../models/Booking');
             const existingBooking = await Booking.findOne({
@@ -322,7 +324,7 @@ const updateApplicationStatus = async (req, res) => {
             });
             
             if (!existingBooking) {
-                let amount = 15000; // default fallback
+                let amount = 15000;
                 if (application.job && application.job.salaryRange) {
                     const match = application.job.salaryRange.match(/\d+/);
                     if (match) {
@@ -356,7 +358,59 @@ const updateApplicationStatus = async (req, res) => {
 };
 
 /**
- * @desc    Schedule demo
+ * @desc    Select service package for application
+ * @route   POST /api/applications/:id/select-package
+ * @access  Private (Customer)
+ */
+const selectServicePackage = async (req, res) => {
+    try {
+        const { packageType } = req.body;
+        const applicationId = req.params.id;
+
+        if (!['Basic', 'Standard', 'Premium'].includes(packageType)) {
+            return res.status(400).json({ success: false, message: 'Invalid package type' });
+        }
+
+        const application = await Application.findById(applicationId);
+        if (!application) {
+            return res.status(404).json({ success: false, message: 'Application not found' });
+        }
+
+        const servicePackage = await ServicePackage.findOne({ name: packageType, isActive: true });
+        if (!servicePackage) {
+            return res.status(404).json({ success: false, message: 'Service package not found' });
+        }
+
+        application.servicePackage = packageType;
+        application.status = 'Package Selected';
+        application.packageSelectedDate = new Date();
+        await application.save();
+
+        const notificationController = require('./notificationController');
+        notificationController.sendNotificationToUser({
+            userId: application.customer,
+            userModel: 'User',
+            title: '📦 Package Selected',
+            message: `You have selected ${packageType} package for "${application.candidate?.name}". Proceed to payment.`,
+            type: 'application_status',
+            relatedId: application._id,
+            relatedModel: 'Application',
+            actionUrl: '/applications'
+        }).catch(err => console.error('Error sending package selected notification:', err));
+
+        res.status(200).json({
+            success: true,
+            message: 'Service package selected successfully',
+            application,
+            packageDetails: servicePackage
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+/**
+ * @desc    Schedule demo - ONLY after service package is paid
  * @route   POST /api/applications/:id/schedule-demo
  * @access  Private (Customer)
  */
@@ -369,35 +423,37 @@ const scheduleDemo = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Demo date and time are required' });
         }
 
-        const application = await Application.findByIdAndUpdate(
-            applicationId,
-            {
-                status: 'Demo Scheduled',
-                demoDate,
-                demoTime,
-                meetingLink
-            },
-            { new: true }
-        ).populate('candidate').populate('job');
-
+        const application = await Application.findById(applicationId).populate('candidate').populate('job');
         if (!application) {
             return res.status(404).json({ success: false, message: 'Application not found' });
         }
 
-        // Notify cook/candidate about demo scheduled
-        if (application.candidate) {
-            const notificationController = require('./notificationController');
-            notificationController.sendNotificationToUser({
-                userId: application.candidate._id,
-                userModel: 'Candidate',
-                title: '📅 Demo Scheduled',
-                message: `Your demo for "${application.job?.title}" is scheduled on ${demoDate} at ${demoTime}.`,
-                type: 'demo_scheduled',
-                relatedId: application._id,
-                relatedModel: 'Application',
-                actionUrl: '/bookings'
-            }).catch(err => console.error('Error sending demo scheduled push notification:', err));
+        // ENFORCE: Service package must be paid before scheduling demo
+        if (!application.servicePackagePaid) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Service package payment is required before scheduling demo',
+                requiresPayment: true
+            });
         }
+
+        application.status = 'Demo Scheduled';
+        application.demoDate = demoDate;
+        application.demoTime = demoTime;
+        application.meetingLink = meetingLink;
+        await application.save();
+
+        const notificationController = require('./notificationController');
+        notificationController.sendNotificationToUser({
+            userId: application.candidate._id,
+            userModel: 'Candidate',
+            title: '📅 Demo Scheduled',
+            message: `Your demo for "${application.job?.title}" is scheduled on ${demoDate} at ${demoTime}.`,
+            type: 'demo_scheduled',
+            relatedId: application._id,
+            relatedModel: 'Application',
+            actionUrl: '/bookings'
+        }).catch(err => console.error('Error sending demo scheduled push notification:', err));
 
         await syncCandidateApplication(application);
 
@@ -440,12 +496,10 @@ const rescheduleDemo = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Application not found' });
         }
 
-        // Determine who requested the reschedule and notify the other party
         const notificationController = require('./notificationController');
         const isChef = req.admin && req.admin.role && req.admin.role.name && req.admin.role.name.toLowerCase() !== 'cook';
         
         if (isChef) {
-            // Chef rescheduled -> notify Cook
             if (application.candidate) {
                 notificationController.sendNotificationToUser({
                     userId: application.candidate._id,
@@ -459,7 +513,6 @@ const rescheduleDemo = async (req, res) => {
                 }).catch(err => console.error('Error sending reschedule demo push notification:', err));
             }
         } else {
-            // Cook rescheduled -> notify Chef/Customer
             notificationController.sendNotificationToUser({
                 userId: application.customer,
                 userModel: 'User',
@@ -506,13 +559,11 @@ const hireCook = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Application not found' });
         }
 
-        // Update application status
         application.status = 'Hired';
         application.joiningDate = joiningDate;
         await application.save();
         await syncCandidateApplication(application);
 
-        // Notify cook/candidate about being hired with exact message
         if (application.candidate) {
             const notificationController = require('./notificationController');
             notificationController.sendNotificationToUser({
@@ -526,7 +577,6 @@ const hireCook = async (req, res) => {
                 actionUrl: '/bookings'
             }).catch(err => console.error('Error sending hired push notification:', err));
 
-            // Notify Customer (Employer) that a cook has been hired
             const customerTitle = '🎉 Cook Hired';
             const customerMessage = `"${application.candidate?.name || 'A candidate'}" has been hired for your job "${application.job?.title || 'hiring requirement'}".`;
             
@@ -542,8 +592,7 @@ const hireCook = async (req, res) => {
             }).catch(err => console.error('Error sending hired push notification to customer:', err));
         }
 
-        // Auto-create booking record
-        let amount = 15000; // default fallback
+        let amount = 15000;
         if (application.job && application.job.salaryRange) {
             const match = application.job.salaryRange.match(/\d+/);
             if (match) {
@@ -577,7 +626,7 @@ const hireCook = async (req, res) => {
 };
 
 /**
- * @desc    Reject application
+ * @desc    Reject application and handle replacement
  * @route   POST /api/applications/:id/reject
  * @access  Private (Customer)
  */
@@ -586,20 +635,30 @@ const rejectApplication = async (req, res) => {
         const { rejectionReason } = req.body;
         const applicationId = req.params.id;
 
-        const application = await Application.findByIdAndUpdate(
-            applicationId,
-            {
-                status: 'Rejected',
-                rejectionReason: rejectionReason || 'Not selected'
-            },
-            { new: true }
-        ).populate('candidate').populate('job');
+        const application = await Application.findById(applicationId)
+            .populate('candidate')
+            .populate('job')
+            .populate('servicePackagePaymentId');
 
         if (!application) {
             return res.status(404).json({ success: false, message: 'Application not found' });
         }
 
-        // Notify cook/candidate about rejection
+        application.status = 'Rejected';
+        application.rejectionReason = rejectionReason || 'Not selected';
+        await application.save();
+
+        // Check replacement limit
+        if (application.servicePackagePaymentId) {
+            const payment = application.servicePackagePaymentId;
+            const canReplace = payment.replacementsUsed < payment.replacementLimit;
+
+            if (canReplace) {
+                payment.replacementsUsed += 1;
+                await payment.save();
+            }
+        }
+
         if (application.candidate) {
             const notificationController = require('./notificationController');
             notificationController.sendNotificationToUser({
@@ -619,7 +678,12 @@ const rejectApplication = async (req, res) => {
         res.status(200).json({
             success: true,
             message: 'Application rejected',
-            application
+            application,
+            replacementInfo: application.servicePackagePaymentId ? {
+                replacementsUsed: application.servicePackagePaymentId.replacementsUsed,
+                replacementLimit: application.servicePackagePaymentId.replacementLimit,
+                canReplace: application.servicePackagePaymentId.replacementsUsed < application.servicePackagePaymentId.replacementLimit
+            } : null
         });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -636,25 +700,24 @@ const getApplicationById = async (req, res) => {
         const application = await Application.findById(req.params.id)
             .populate('job')
             .populate('candidate')
-            .populate('customer');
+            .populate('customer')
+            .populate('servicePackagePaymentId');
 
         if (!application) {
             return res.status(404).json({ success: false, message: 'Application not found' });
         }
 
-        // If viewed by the customer/job poster, mark as viewed and notify cook
         if (req.admin && req.admin.constructor.modelName === 'User') {
             const wasAlreadyViewed = application.isViewedByClient;
             application.isViewedByClient = true;
             await application.save();
 
-            // Notify cook that their profile was viewed (only first time)
             if (!wasAlreadyViewed && application.candidate) {
                 const notificationController = require('./notificationController');
                 notificationController.sendNotificationToUser({
                     userId: application.candidate._id,
                     userModel: 'Candidate',
-                    title: '\uD83D\uDC40 Profile Viewed',
+                    title: '👀 Profile Viewed',
                     message: 'Your profile has been shortlisted by the employer.',
                     type: 'application_status',
                     relatedId: application._id,
@@ -678,6 +741,7 @@ module.exports = {
     getApplications,
     getMyApplications,
     updateApplicationStatus,
+    selectServicePackage,
     scheduleDemo,
     rescheduleDemo,
     hireCook,
