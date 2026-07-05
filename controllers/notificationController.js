@@ -36,13 +36,14 @@ const sendFCMToAll = async (title, message, notificationType, relatedId, actionU
         User.find({ fcmToken: { $ne: null } }).select('fcmToken')
     ]);
     const tokens = [...admins, ...users].map(u => u.fcmToken).filter(Boolean);
-    if (!tokens.length) return;
+    const uniqueTokens = [...new Set(tokens)];
+    if (!uniqueTokens.length) return;
 
     const payload = buildFCMPayload(title, message, notificationType, relatedId, actionUrl);
     try {
         const chunkSize = 500;
-        for (let i = 0; i < tokens.length; i += chunkSize) {
-            const chunk = tokens.slice(i, i + chunkSize);
+        for (let i = 0; i < uniqueTokens.length; i += chunkSize) {
+            const chunk = uniqueTokens.slice(i, i + chunkSize);
             await admin.messaging().sendEachForMulticast({ tokens: chunk, ...payload });
         }
         console.log(`[FCM] Broadcast sent to ${tokens.length} tokens`);
