@@ -14,8 +14,74 @@ const candidateSchema = new mongoose.Schema({
     city: { type: String, trim: true },
     address: { type: String, trim: true },
     languages: [{ type: String }],
-    profileImage: { type: String }, // Path to image
-    cv: { type: String }, // Path to CV file (PDF/Doc)
+    profileImage: { type: String },
+    cv: { type: String },
+
+    // ✅ NEW: PROFILE VERIFICATION & APPROVAL WORKFLOW
+    profileVerification: {
+        // Overall profile status
+        status: {
+            type: String,
+            enum: ['pending_approval', 'approved', 'rejected', 'active'],
+            default: 'pending_approval'
+        },
+        
+        // Photo verification
+        photoVerified: {
+            type: Boolean,
+            default: false
+        },
+        photoVerificationDate: Date,
+        photoRejectionReason: String,
+        
+        // ID verification
+        idVerified: {
+            type: Boolean,
+            default: false
+        },
+        idVerificationDate: Date,
+        idRejectionReason: String,
+        
+        // Can apply for jobs (only true if approved)
+        canApplyForJobs: {
+            type: Boolean,
+            default: false
+        },
+        
+        // Admin approval details
+        approvedBy: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Admin'
+        },
+        approvalDate: Date,
+        approvalNotes: String,
+        
+        // Rejection details
+        rejectedBy: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Admin'
+        },
+        rejectionDate: Date,
+        rejectionReason: String,
+        
+        // Resubmission tracking
+        submissionCount: {
+            type: Number,
+            default: 0
+        },
+        lastSubmissionDate: Date,
+        
+        // Verification checklist
+        verificationChecklist: {
+            photoAppropriate: Boolean,
+            photoClarity: Boolean,
+            idProofValid: Boolean,
+            nameMatches: Boolean,
+            ageVerified: Boolean,
+            addressVerified: Boolean,
+            backgroundCheckPassed: Boolean
+        }
+    },
 
     // Status
     kycStatus: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
@@ -23,8 +89,8 @@ const candidateSchema = new mongoose.Schema({
 
     // Job Preference
     jobPreference: {
-        jobCategory: [{ type: String }], // hotel, home, daily
-        jobType: [{ type: String }], // full-time, part-time, live-in
+        jobCategory: [{ type: String }],
+        jobType: [{ type: String }],
         experience: {
             value: { type: String, default: '0' },
             unit: { type: String, enum: ['years', 'months'], default: 'years' }
@@ -39,35 +105,39 @@ const candidateSchema = new mongoose.Schema({
     skills: [{ type: String }],
     about: { type: String, trim: true },
 
-    // Additional Sections (Future expansions)
+    // Additional Sections
     cookingSkills: { type: Object, default: {} },
     workExperience: {
-    lastCompany: {
-      name: String,
-      workplaceType: String,
-      role: String,
-      duration: String,
-      experienceType: String,
-      reasonForLeaving: String
+        lastCompany: {
+            name: String,
+            workplaceType: String,
+            role: String,
+            duration: String,
+            experienceType: String,
+            reasonForLeaving: String
+        },
+        experiences: [(
+            {
+                position: String,
+                from: String,
+                to: String,
+                jobProfile: String,
+                shortDetail: String
+            }
+        )]
     },
-    experiences: [({
-      position: String,
-      from: String,
-      to: String,
-      jobProfile: String,
-      shortDetail: String
-    })]
-  },
-  education: [{
-    title: String,
-    from: String,
-    to: String,
-    shortDetail: String
-  }],
+    education: [
+        {
+            title: String,
+            from: String,
+            to: String,
+            shortDetail: String
+        }
+    ],
     careerHighlights: {
-      aboutMe: String,
-      highlights: [String],
-      whyChooseMe: [String]
+        aboutMe: String,
+        highlights: [String],
+        whyChooseMe: [String]
     },
     documents: {
         idProofType: String,
@@ -78,29 +148,36 @@ const candidateSchema = new mongoose.Schema({
         academicCertificate: String,
         experienceCertificate: String
     },
-    socialMedia: [{
-        platform: String,
-        url: String
-    }],
+    socialMedia: [
+        {
+            platform: String,
+            url: String
+        }
+    ],
     photoGallery: [{ type: String }],
 
-    // Saved Jobs (NEW)
-    savedJobs: [{ 
-        type: mongoose.Schema.Types.ObjectId, 
-        ref: 'Job'
-    }],
+    // Saved Jobs
+    savedJobs: [
+        {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Job'
+        }
+    ],
 
     // Applications tracking
-    applications: [{
-        job: { type: mongoose.Schema.Types.ObjectId, ref: 'Job' },
-        status: { 
-            type: String, 
-            enum: ['Applied', 'Shortlisted', 'Demo Scheduled', 'Reschedule Requested', 'Hired', 'Rejected', 'On Hold', 'Not Interested'],
-            default: 'Applied'
-        },
-        remarks: { type: String },
-        appliedDate: { type: Date, default: Date.now }
-    }],
+    applications: [
+        {
+            job: { type: mongoose.Schema.Types.ObjectId, ref: 'Job' },
+            status: {
+                type: String,
+                enum: ['Applied', 'Shortlisted', 'Demo Scheduled', 'Reschedule Requested', 'Hired', 'Rejected', 'On Hold', 'Not Interested'],
+                default: 'Applied'
+            },
+            remarks: { type: String },
+            appliedDate: { type: Date, default: Date.now }
+        }
+    ],
+    
     createdBy: {
         type: mongoose.Schema.Types.ObjectId,
         refPath: 'creatorModel'
@@ -113,5 +190,7 @@ const candidateSchema = new mongoose.Schema({
 
 // Indexing for search
 candidateSchema.index({ name: 'text', phone: 'text', email: 'text' });
+candidateSchema.index({ 'profileVerification.status': 1 });
+candidateSchema.index({ 'profileVerification.canApplyForJobs': 1 });
 
 module.exports = mongoose.model('Candidate', candidateSchema);

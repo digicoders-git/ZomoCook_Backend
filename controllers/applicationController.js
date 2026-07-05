@@ -72,10 +72,24 @@ const applyJob = async (req, res) => {
                 address: req.admin.address,
                 profileImage: req.admin.profilePic,
                 createdBy: req.admin._id,
-                creatorModel: req.admin.constructor.modelName
+                creatorModel: req.admin.constructor.modelName,
+                profileVerification: {
+                    status: 'pending_approval',
+                    canApplyForJobs: false
+                }
             });
         }
         if (!candidate) return res.status(404).json({ success: false, message: 'Candidate not found' });
+
+        // ✅ CHECK PROFILE APPROVAL BEFORE ALLOWING JOB APPLICATION
+        if (!candidate.profileVerification?.canApplyForJobs) {
+            return res.status(403).json({
+                success: false,
+                message: 'Your profile is pending admin approval. You cannot apply for jobs until your profile is approved.',
+                profileStatus: candidate.profileVerification?.status || 'pending_approval',
+                requiresApproval: true
+            });
+        }
 
         const existingApp = await Application.findOne({ job: jobId, candidate: candidate._id });
         if (existingApp) {
@@ -116,7 +130,7 @@ const applyJob = async (req, res) => {
 };
 
 /**
- * @desc    Get all applications (for admin/customer)
+ * @desc    Get all applications (for admin/customer) - ONLY SHOW APPROVED COOK PROFILES
  * @route   GET /api/applications
  * @access  Private
  */
@@ -160,15 +174,22 @@ const getApplications = async (req, res) => {
         if (candidateId) query.candidate = candidateId;
 
         const applications = await Application.find(query)
-            .populate('candidate', 'name phone city profileImage jobPreference')
+            .populate({
+                path: 'candidate',
+                select: 'name phone city profileImage jobPreference profileVerification',
+                match: { 'profileVerification.status': 'approved' }
+            })
             .populate('job', 'title jobCategory jobType city state salaryRange outletName joiningType jobPosition')
             .populate('customer', 'name email phone outletName')
             .sort({ appliedDate: -1 });
 
+        // Filter out applications where candidate is null (not approved)
+        const filteredApplications = applications.filter(app => app.candidate !== null);
+
         res.status(200).json({
             success: true,
-            count: applications.length,
-            applications
+            count: filteredApplications.length,
+            applications: filteredApplications
         });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -391,7 +412,7 @@ const selectServicePackage = async (req, res) => {
             userId: application.customer,
             userModel: 'User',
             title: '📦 Package Selected',
-            message: `You have selected ${packageType} package for "${application.candidate?.name}". Proceed to payment.`,
+            message: `You have selected ${packageType} package. Proceed to payment.`,
             type: 'application_status',
             relatedId: application._id,
             relatedModel: 'Application',
@@ -428,7 +449,6 @@ const scheduleDemo = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Application not found' });
         }
 
-        // ENFORCE: Service package must be paid before scheduling demo
         if (!application.servicePackagePaid) {
             return res.status(400).json({ 
                 success: false, 
@@ -648,7 +668,6 @@ const rejectApplication = async (req, res) => {
         application.rejectionReason = rejectionReason || 'Not selected';
         await application.save();
 
-        // Check replacement limit
         if (application.servicePackagePaymentId) {
             const payment = application.servicePackagePaymentId;
             const canReplace = payment.replacementsUsed < payment.replacementLimit;
