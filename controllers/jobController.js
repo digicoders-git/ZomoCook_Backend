@@ -188,6 +188,7 @@ const getJobs = async (req, res) => {
         }
 
         const Application = require('../models/Application');
+        const User = require('../models/User');
         const jobsWithCounts = await Promise.all(jobs.map(async (job) => {
             const apps = await Application.find({ job: job._id });
             const assignedCandidates = apps.filter(app => app.status === 'Applied').length;
@@ -195,8 +196,22 @@ const getJobs = async (req, res) => {
             const rejected = apps.filter(app => ['Rejected', 'Not Interested', 'On Hold'].includes(app.status)).length;
             const selected = apps.filter(app => app.status === 'Hired').length;
 
+            let customerData = job.customer;
+            if (!customerData && job.toObject().customer) {
+                const userDoc = await User.findById(job.toObject().customer).select('name email phone');
+                if (userDoc) {
+                    customerData = {
+                        _id: userDoc._id,
+                        name: userDoc.name,
+                        email: userDoc.email,
+                        contactPhone: userDoc.phone
+                    };
+                }
+            }
+
             return {
                 ...job.toObject(),
+                customer: customerData,
                 assignedCandidates,
                 interviews,
                 rejected,
@@ -253,8 +268,23 @@ const getJob = async (req, res) => {
         const rejected = apps.filter(app => ['Rejected', 'Not Interested', 'On Hold'].includes(app.status)).length;
         const selected = apps.filter(app => app.status === 'Hired').length;
 
+        let customerData = job.customer;
+        if (!customerData && job.toObject().customer) {
+            const User = require('../models/User');
+            const userDoc = await User.findById(job.toObject().customer).select('name email phone');
+            if (userDoc) {
+                customerData = {
+                    _id: userDoc._id,
+                    name: userDoc.name,
+                    email: userDoc.email,
+                    contactPhone: userDoc.phone
+                };
+            }
+        }
+
         const jobWithCounts = {
             ...job.toObject(),
+            customer: customerData,
             assignedCandidates,
             interviews,
             rejected,
