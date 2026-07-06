@@ -27,7 +27,8 @@ router.get('/profile', getProfile);
 router.put('/profile', upload.single('profilePic'), updateProfile);
 
 router.route('/')
-    .get(getUsers);
+    .get(getUsers)
+    .post(upload.single('profilePic'), createUser);
 
 router.route('/:id')
     .get(getUserById)
