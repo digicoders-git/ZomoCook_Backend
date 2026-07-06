@@ -206,7 +206,29 @@ const toggleCandidateStatus = async (req, res) => {
         const update = {};
         if (type === 'kyc') update.kycStatus = value;
         else if (type === 'profile') update.profileStatus = value;
+        
+        const candidateBefore = await Candidate.findById(req.params.id);
+        if (!candidateBefore) return res.status(404).json({ success: false, message: 'Candidate not found' });
+        
+        const wasApproved = candidateBefore.kycStatus === 'approved';
+        
         const candidate = await Candidate.findByIdAndUpdate(req.params.id, update, { new: true });
+        
+        // Trigger notification if KYC status changed to approved
+        if (type === 'kyc' && !wasApproved && value === 'approved') {
+            const notificationController = require('./notificationController');
+            notificationController.sendNotificationToUser({
+                userId: candidate._id,
+                userModel: 'Candidate',
+                title: '🎉 Congratulations! Your Profile Has Been Activated',
+                message: 'Your profile is activated. You can now apply for jobs.',
+                type: 'profile_status',
+                relatedId: candidate._id,
+                relatedModel: 'Candidate',
+                actionUrl: '/jobs'
+            }).catch(err => console.error('Error sending profile activation notification:', err));
+        }
+
         res.status(200).json({ success: true, message: 'Status updated', candidate });
     } catch (error) { res.status(500).json({ success: false, message: error.message }); }
 };
@@ -280,6 +302,7 @@ const getApplications = async (req, res) => {
                     preferredCities: candidate.jobPreference?.preferredCities || [],
                     profileImage: candidate.profileImage,
                     candidateCV: candidate.cv || candidate.documents?.resume,
+                    candidateKycStatus: candidate.kycStatus || 'pending',
                     candidate,
                     jobTitle: job.title,
                     jobId: job._id,
