@@ -25,7 +25,7 @@ const notificationSchema = new mongoose.Schema({
   },
   relatedModel: {
     type: String,
-    enum: ['Job', 'Application', 'Booking', 'Candidate', 'Customer'],
+    enum: ['Job', 'Application', 'Booking', 'Candidate', 'Customer'], 
     default: 'Candidate'
   },
   actionUrl: {
