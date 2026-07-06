@@ -89,9 +89,8 @@ exports.deletePlan = async (req, res) => {
             return res.status(404).json({ success: false, error: 'Plan not found' });
         }
 
-        // Instead of hard deleting, we might just deactivate it so history is maintained
-        plan.isActive = false;
-        await plan.save();
+        // Hard delete the plan from database
+        await Plan.findByIdAndDelete(req.params.id);
 
         res.status(200).json({ success: true, data: {} });
     } catch (error) {
