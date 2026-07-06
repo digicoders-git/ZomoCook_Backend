@@ -53,7 +53,12 @@ const customerSchema = new mongoose.Schema({
     creatorModel: {
         type: String,
         enum: ['Admin', 'User']
-    }
+    },
+    notes: [{
+        content: String,
+        addedBy: String,
+        createdAt: { type: Date, default: Date.now }
+    }]
 }, {
     timestamps: true
 });

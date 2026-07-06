@@ -9,7 +9,8 @@ const {
     updateCustomer,
     deleteCustomer,
     toggleCustomerStatus,
-    getCustomerDashboard
+    getCustomerDashboard,
+    addCustomerNote
 } = require('../controllers/customerController');
 const { protect } = require('../middleware/authMiddleware');
 
@@ -38,6 +39,7 @@ router.route('/:id')
     .delete(deleteCustomer);
 
 router.get('/:id/dashboard', getCustomerDashboard);
+router.post('/:id/notes', addCustomerNote);
 
 router.patch('/:id/status', toggleCustomerStatus);
 

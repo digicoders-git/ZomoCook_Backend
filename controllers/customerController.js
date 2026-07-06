@@ -3,6 +3,7 @@ const Job = require('../models/Job');
 const Application = require('../models/Application');
 const Transaction = require('../models/Transaction');
 const SubscriptionHistory = require('../models/SubscriptionHistory');
+const Booking = require('../models/Booking');
 
 /**
  * @desc    Create new customer
@@ -228,6 +229,25 @@ const getCustomerDashboard = async (req, res) => {
             status: 'Active'
         }).populate('plan');
 
+        // 6. Get Bookings
+        const bookings = await Booking.find({ job: { $in: jobIds } })
+            .populate('cook', 'name profilePic')
+            .populate('job', 'title')
+            .sort({ createdAt: -1 });
+
+        // 7. Assemble Recent Activity Timeline
+        let recentActivity = [];
+        jobs.forEach(job => recentActivity.push({ type: 'job_posted', date: job.createdAt, details: job }));
+        applications.filter(app => app.status === 'Hired').forEach(app => recentActivity.push({ type: 'candidate_hired', date: app.updatedAt, details: app }));
+        applications.filter(app => app.status === 'Demo Scheduled').forEach(app => recentActivity.push({ type: 'demo_scheduled', date: app.updatedAt, details: app }));
+        transactions.forEach(txn => recentActivity.push({ type: 'payment_received', date: txn.createdAt, details: txn }));
+        activeSubscriptions.forEach(sub => recentActivity.push({ type: 'package_renewed', date: sub.createdAt, details: sub }));
+
+        recentActivity.sort((a, b) => new Date(b.date) - new Date(a.date));
+        
+        // Limit to 20 recent activities
+        recentActivity = recentActivity.slice(0, 20);
+
         res.status(200).json({
             success: true,
             dashboard: {
@@ -235,15 +255,44 @@ const getCustomerDashboard = async (req, res) => {
                 jobs,
                 applications,
                 transactions,
-                totalSpent,
+                bookings,
                 activeSubscriptions,
+                recentActivity,
                 stats: {
                     totalJobs: jobs.length,
                     totalAssignedCandidates: applications.length,
+                    totalBookings: bookings.length,
                     totalSpent
                 }
             }
         });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+/**
+ * @desc    Add note to customer
+ * @route   POST /api/customers/:id/notes
+ * @access  Private (Admin)
+ */
+const addCustomerNote = async (req, res) => {
+    try {
+        const { content } = req.body;
+        if (!content) return res.status(400).json({ success: false, message: 'Note content is required' });
+
+        const customer = await Customer.findById(req.params.id);
+        if (!customer) return res.status(404).json({ success: false, message: 'Customer not found' });
+
+        customer.notes.push({
+            content,
+            addedBy: req.admin.name || 'Admin',
+            createdAt: Date.now()
+        });
+
+        await customer.save();
+
+        res.status(200).json({ success: true, message: 'Note added successfully', notes: customer.notes });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
@@ -256,5 +305,6 @@ module.exports = {
     updateCustomer,
     deleteCustomer,
     toggleCustomerStatus,
-    getCustomerDashboard
+    getCustomerDashboard,
+    addCustomerNote
 };
