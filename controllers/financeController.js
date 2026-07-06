@@ -70,35 +70,76 @@ const getFinanceStats = async (req, res) => {
         const packageSeries = [packageSeriesMap.Basic, packageSeriesMap.Standard, packageSeriesMap.Premium, packageSeriesMap.Others];
 
         // 6. Lead Manager breakdown
-        // Since we don't have lead managers assigned to payments in these models right now,
-        // we will mock this distribution based on total revenue just so the chart isn't empty.
-        // In a real app, you'd group by `managerId` after doing a $lookup on `Customer`.
-        const managerSeries = [
-            Math.round(totalRevenue * 0.35) || 0,
-            Math.round(totalRevenue * 0.25) || 0,
-            Math.round(totalRevenue * 0.20) || 0,
-            Math.round(totalRevenue * 0.15) || 0,
-            Math.round(totalRevenue * 0.05) || 0,
-        ];
-
+        // Currently, transactions aren't directly linked to a manager in the schema, 
+        // so we will show 'Direct App' as 100% of revenue for now.
+        const managerSeries = [totalRevenue, 0, 0, 0, 0];
+        
         // 7. Monthly Trends (Last 6 months)
         const months = [];
-        const txMonthly = [];
-        const spMonthly = [];
-        const totalMonthly = [];
+        const txMonthly = [0, 0, 0, 0, 0, 0];
+        const spMonthly = [0, 0, 0, 0, 0, 0];
+        const totalMonthly = [0, 0, 0, 0, 0, 0];
+
+        const sixMonthsAgo = new Date();
+        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
+        sixMonthsAgo.setDate(1); // Start of the 6th month ago
+        sixMonthsAgo.setHours(0, 0, 0, 0);
 
         for (let i = 5; i >= 0; i--) {
             const dateStr = new Date();
             dateStr.setMonth(dateStr.getMonth() - i);
             months.push(dateStr.toLocaleString('default', { month: 'short', year: 'numeric' }));
-            
-            // Mocking trend data based on current totals to keep charts looking realistic.
-            // A true aggregation would group by month ($month, $year).
-            const factor = 1 - (i * 0.1); // Older months have less revenue
-            txMonthly.push(Math.round(hiringFee * factor) || 0);
-            spMonthly.push(Math.round(spRevenue * factor) || 0);
-            totalMonthly.push(Math.round(totalRevenue * factor) || 0);
         }
+
+        // Helper to map month/year to array index
+        const getMonthIndex = (month, year) => {
+            for (let i = 0; i < 6; i++) {
+                const d = new Date();
+                d.setMonth(d.getMonth() - (5 - i));
+                if (d.getMonth() + 1 === month && d.getFullYear() === year) return i;
+            }
+            return -1;
+        };
+
+        const realTxAgg = await Transaction.aggregate([
+            { $match: { ...matchTx, createdAt: { $gte: sixMonthsAgo } } },
+            { $group: { _id: { month: { $month: "$createdAt" }, year: { $year: "$createdAt" }, type: "$type" }, total: { $sum: "$amount" } } }
+        ]);
+
+        const realSpAgg = await ServicePackagePayment.aggregate([
+            { $match: { ...matchSp, createdAt: { $gte: sixMonthsAgo } } },
+            { $group: { _id: { month: { $month: "$createdAt" }, year: { $year: "$createdAt" } }, total: { $sum: "$amount" } } }
+        ]);
+
+        const realSubAgg = await SubscriptionHistory.aggregate([
+            { $match: { createdAt: { $gte: sixMonthsAgo } } },
+            { $group: { _id: { month: { $month: "$createdAt" }, year: { $year: "$createdAt" } }, total: { $sum: "$amountPaid" } } }
+        ]);
+
+        realTxAgg.forEach(item => {
+            const idx = getMonthIndex(item._id.month, item._id.year);
+            if (idx !== -1) {
+                if (item._id.type === 'job_post_fee' || item._id.type === 'daily_job_advance') {
+                    txMonthly[idx] += item.total;
+                }
+                totalMonthly[idx] += item.total;
+            }
+        });
+
+        realSpAgg.forEach(item => {
+            const idx = getMonthIndex(item._id.month, item._id.year);
+            if (idx !== -1) {
+                spMonthly[idx] += item.total;
+                totalMonthly[idx] += item.total;
+            }
+        });
+
+        realSubAgg.forEach(item => {
+            const idx = getMonthIndex(item._id.month, item._id.year);
+            if (idx !== -1) {
+                totalMonthly[idx] += item.total;
+            }
+        });
 
         // 8. Recent Transactions Table Data
         // We'll fetch the latest 10 from each, combine and sort.
