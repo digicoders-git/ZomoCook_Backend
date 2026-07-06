@@ -22,12 +22,24 @@ const getOffers = async (req, res) => {
 // @access  Private/Admin
 const createOffer = async (req, res) => {
   try {
-    const { code, title, subtitle, discountPercent, isActive } = req.body;
+    const { 
+      code, title, subtitle, offerType, discountValue, applicableOn, 
+      minOrderValue, usageLimitTotal, usageLimitPerUser, validFrom, validTo, status, isActive 
+    } = req.body;
+    
     const newOffer = new Offer({
       code,
       title,
       subtitle,
-      discountPercent,
+      offerType,
+      discountValue,
+      applicableOn,
+      minOrderValue,
+      usageLimitTotal,
+      usageLimitPerUser,
+      validFrom,
+      validTo,
+      status,
       isActive: isActive !== undefined ? isActive : true
     });
     await newOffer.save();
