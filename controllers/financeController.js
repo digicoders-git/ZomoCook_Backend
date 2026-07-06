@@ -102,19 +102,21 @@ const getFinanceStats = async (req, res) => {
 
         // 8. Recent Transactions Table Data
         // We'll fetch the latest 10 from each, combine and sort.
-        const recentTx = await Transaction.find(matchTx).sort({ createdAt: -1 }).limit(10).populate('customer', 'name phone');
-        const recentSp = await ServicePackagePayment.find(matchSp).sort({ createdAt: -1 }).limit(10).populate('customer', 'name phone');
+        const recentTx = await Transaction.find(matchTx).sort({ createdAt: -1 }).limit(10).populate('customer', 'name phone').populate('user', 'name phone');
+        const recentSp = await ServicePackagePayment.find(matchSp).sort({ createdAt: -1 }).limit(10).populate('customer', 'name phone').populate('user', 'name phone');
+        const recentSub = await SubscriptionHistory.find(matchSub).sort({ createdAt: -1 }).limit(10).populate('customer', 'name phone').populate('user', 'name phone');
         
         let allTransactions = [];
 
         recentTx.forEach(t => {
+            const client = t.customer || t.user || {};
             allTransactions.push({
                 date: t.createdAt,
                 id: t.razorpayOrderId || t._id.toString().slice(-8).toUpperCase(),
-                customer: t.customer ? t.customer.name : 'Unknown',
-                phone: t.customer ? t.customer.phone : '-',
+                customer: client.name || 'Unknown',
+                phone: client.phone || '-',
                 type: t.type === 'job_post_fee' ? 'Job Post Fee' : t.type === 'daily_job_advance' ? 'Daily Job Advance' : 'Subscription',
-                desc: t.description || 'Service Fee',
+                desc: t.description || (t.type === 'job_post_fee' ? 'Job post fee' : 'Transaction'),
                 package: '-',
                 manager: 'Unassigned', // Placeholder
                 amount: t.amount,
@@ -123,17 +125,34 @@ const getFinanceStats = async (req, res) => {
         });
 
         recentSp.forEach(s => {
+            const client = s.customer || s.user || {};
             allTransactions.push({
                 date: s.createdAt,
                 id: s.razorpayOrderId || s._id.toString().slice(-8).toUpperCase(),
-                customer: s.customer ? s.customer.name : 'Unknown',
-                phone: s.customer ? s.customer.phone : '-',
+                customer: client.name || 'Unknown',
+                phone: client.phone || '-',
                 type: 'Activated Package',
-                desc: `${s.packageType} Package`,
-                package: s.packageType,
+                desc: `${s.packageType || 'Service'} Package`,
+                package: s.packageType || 'Custom',
                 manager: 'Unassigned', // Placeholder
                 amount: s.amount,
                 status: s.status === 'paid' ? 'Paid' : s.status
+            });
+        });
+
+        recentSub.forEach(s => {
+            const client = s.customer || s.user || {};
+            allTransactions.push({
+                date: s.createdAt,
+                id: s.razorpayOrderId || s._id.toString().slice(-8).toUpperCase(),
+                customer: client.name || 'Unknown',
+                phone: client.phone || '-',
+                type: 'Subscription',
+                desc: 'Subscription purchase',
+                package: '-',
+                manager: 'Unassigned', // Placeholder
+                amount: s.amountPaid,
+                status: s.status === 'Active' || s.status === 'Expired' ? 'Paid' : s.status
             });
         });
 
