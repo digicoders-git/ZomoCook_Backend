@@ -1,5 +1,6 @@
 const Job = require('../models/Job');
 const Candidate = require('../models/Candidate');
+const WebSetting = require('../models/WebSetting');
 
 const normalizeCategory = (cat) => {
     if (!cat) return '';
@@ -60,13 +61,17 @@ const createJob = async (req, res) => {
                         };
                     }
                 } else {
-                    // Regular job: must have paid ₹299
-                    if (req.body.paymentStatus !== 'paid') {
+                    // Regular job: Check WebSetting for dynamic fee
+                    const settings = await WebSetting.findOne() || {};
+                    const isFeeActive = settings.jobPostFeeStatus !== undefined ? settings.jobPostFeeStatus : true;
+                    const feeAmount = settings.jobPostFee !== undefined ? settings.jobPostFee : 299;
+
+                    if (isFeeActive && req.body.paymentStatus !== 'paid') {
                         requiresPayment = true;
                         paymentInfo = {
                             paymentType: 'job_post_fee',
-                            amount: 299,
-                            message: 'Please pay ₹299 to post this job.'
+                            amount: feeAmount,
+                            message: `Please pay ₹${feeAmount} to post this job.`
                         };
                     }
                 }

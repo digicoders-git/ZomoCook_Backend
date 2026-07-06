@@ -20,7 +20,12 @@ const WebSettingSchema = new mongoose.Schema({
   linkedinUrl: { type: String },
   youtubeUrl: { type: String },
   importantInstruction: { type: String },
-  rescheduleMessage: { type: String }
+  rescheduleMessage: { type: String },
+  
+  // Hiring Processing Fee
+  jobPostFee: { type: Number, default: 299 },
+  jobPostFeeStatus: { type: Boolean, default: true },
+  jobPostFeeDescription: { type: String, default: 'Hiring processing fee is a one-time amount charged from customers while posting a job. This amount is non-refundable.' }
 }, { timestamps: true });
 
 module.exports = mongoose.model('WebSetting', WebSettingSchema);

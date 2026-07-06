@@ -39,7 +39,7 @@ const createOrder = async (req, res) => {
             description: type === 'daily_job_advance' ? 'Daily job 25% advance' :
                 type === 'subscription' ? 'Subscription purchase' :
                 type === 'service_package' ? `${packageType} Service Package` :
-                'Job post fee ₹299'
+                `Job post fee ₹${amount}`
         };
         if (isCustomer) txnData.customer = req.admin._id;
         else txnData.user = req.admin._id;
@@ -295,12 +295,21 @@ const checkJobPostPayment = async (req, res) => {
             });
         }
 
+        const WebSetting = require('../models/WebSetting');
+        const settings = await WebSetting.findOne() || {};
+        const feeAmount = settings.jobPostFee !== undefined ? settings.jobPostFee : 299;
+        const isFeeActive = settings.jobPostFeeStatus !== undefined ? settings.jobPostFeeStatus : true;
+
+        if (!isFeeActive) {
+            return res.status(200).json({ success: true, requiresPayment: false });
+        }
+
         return res.status(200).json({
             success: true,
             requiresPayment: true,
             paymentType: 'job_post_fee',
-            amount: 299,
-            message: 'Job post requires ₹299 payment'
+            amount: feeAmount,
+            message: `Job post requires ₹${feeAmount} payment`
         });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
