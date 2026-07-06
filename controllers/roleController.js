@@ -1,7 +1,7 @@
 const Role = require('../models/Role');
 
 const Admin = require('../models/Admin');
-
+const User = require('../models/User');
 exports.getRoles = async (req, res) => {
     try {
         const { search } = req.query;
@@ -12,7 +12,7 @@ exports.getRoles = async (req, res) => {
         
         // Map to include user counts
         const rolesWithCounts = await Promise.all(roles.map(async (role) => {
-            const userCount = await Admin.countDocuments({ role: role._id });
+            const userCount = await User.countDocuments({ role: role._id });
             return {
                 ...role._doc,
                 userCount
