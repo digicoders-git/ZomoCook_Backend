@@ -1,5 +1,7 @@
 const Role = require('../models/Role');
 
+const Admin = require('../models/Admin');
+
 exports.getRoles = async (req, res) => {
     try {
         const { search } = req.query;
@@ -7,7 +9,17 @@ exports.getRoles = async (req, res) => {
         if (search) query.name = new RegExp(search, 'i');
 
         const roles = await Role.find(query).sort({ createdAt: -1 });
-        res.status(200).json({ success: true, count: roles.length, roles });
+        
+        // Map to include user counts
+        const rolesWithCounts = await Promise.all(roles.map(async (role) => {
+            const userCount = await Admin.countDocuments({ role: role._id });
+            return {
+                ...role._doc,
+                userCount
+            };
+        }));
+
+        res.status(200).json({ success: true, count: rolesWithCounts.length, roles: rolesWithCounts });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
