@@ -120,7 +120,24 @@ const updateCandidate = async (req, res) => {
             }
         });
 
+        const wasApproved = candidate.kycStatus === 'approved';
         const updatedCandidate = await Candidate.findByIdAndUpdate(req.params.id, updateData, { new: true });
+        
+        // Send notification if KYC status changed to approved
+        if (!wasApproved && updateData.kycStatus === 'approved') {
+            const notificationController = require('./notificationController');
+            notificationController.sendNotificationToUser({
+                userId: updatedCandidate._id,
+                userModel: 'Candidate',
+                title: '🎉 Congratulations! Your Profile Has Been Activated',
+                message: 'Your profile is activated. You can now apply for jobs.',
+                type: 'profile_status',
+                relatedId: updatedCandidate._id,
+                relatedModel: 'Candidate',
+                actionUrl: '/jobs'
+            }).catch(err => console.error('Error sending profile activation notification:', err));
+        }
+
         res.status(200).json({ success: true, message: 'Candidate updated successfully', candidate: updatedCandidate });
     } catch (error) {
         res.status(400).json({ success: false, message: error.message });
