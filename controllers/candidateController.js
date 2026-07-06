@@ -121,6 +121,17 @@ const updateCandidate = async (req, res) => {
         });
 
         const wasApproved = candidate.kycStatus === 'approved';
+        
+        if (updateData.kycStatus === 'approved') {
+            updateData['profileVerification.status'] = 'approved';
+            updateData['profileVerification.canApplyForJobs'] = true;
+            updateData['profileVerification.approvalDate'] = new Date();
+        } else if (updateData.kycStatus === 'rejected') {
+            updateData['profileVerification.status'] = 'rejected';
+            updateData['profileVerification.canApplyForJobs'] = false;
+            updateData['profileVerification.rejectionDate'] = new Date();
+        }
+        
         const updatedCandidate = await Candidate.findByIdAndUpdate(req.params.id, updateData, { new: true });
         
         // Send notification if KYC status changed to approved
@@ -204,7 +215,18 @@ const toggleCandidateStatus = async (req, res) => {
     try {
         const { type, value } = req.body;
         const update = {};
-        if (type === 'kyc') update.kycStatus = value;
+        if (type === 'kyc') {
+            update.kycStatus = value;
+            if (value === 'approved') {
+                update['profileVerification.status'] = 'approved';
+                update['profileVerification.canApplyForJobs'] = true;
+                update['profileVerification.approvalDate'] = new Date();
+            } else if (value === 'rejected') {
+                update['profileVerification.status'] = 'rejected';
+                update['profileVerification.canApplyForJobs'] = false;
+                update['profileVerification.rejectionDate'] = new Date();
+            }
+        }
         else if (type === 'profile') update.profileStatus = value;
         
         const candidateBefore = await Candidate.findById(req.params.id);
