@@ -36,7 +36,9 @@ exports.getUsers = async (req, res) => {
                 name: { $regex: new RegExp('^(user|cook|customer)$', 'i') } 
             });
             if (excludedRoles.length > 0) {
-                query.role = { $nin: excludedRoles.map(r => r._id) };
+                query.role = { $nin: excludedRoles.map(r => r._id), $exists: true, $ne: null };
+            } else {
+                query.role = { $exists: true, $ne: null };
             }
         }
 
