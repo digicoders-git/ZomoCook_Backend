@@ -1,4 +1,8 @@
 const Customer = require('../models/Customer');
+const Job = require('../models/Job');
+const Application = require('../models/Application');
+const Transaction = require('../models/Transaction');
+const SubscriptionHistory = require('../models/SubscriptionHistory');
 
 /**
  * @desc    Create new customer
@@ -184,11 +188,73 @@ const toggleCustomerStatus = async (req, res) => {
     }
 };
 
+/**
+ * @desc    Get customer dashboard details
+ * @route   GET /api/customers/:id/dashboard
+ * @access  Private (Admin)
+ */
+const getCustomerDashboard = async (req, res) => {
+    try {
+        const customerId = req.params.id;
+        
+        // 1. Get Customer Basic Details
+        const customer = await Customer.findById(customerId);
+        if (!customer) {
+            return res.status(404).json({ success: false, message: 'Customer not found' });
+        }
+
+        // 2. Get Jobs Posted by this Customer
+        const jobs = await Job.find({ customer: customerId }).sort({ createdAt: -1 });
+
+        // 3. Get Applications (Assigned Candidates)
+        // Note: Application model has customer field, or we can find by job ids
+        const jobIds = jobs.map(job => job._id);
+        const applications = await Application.find({ 
+            job: { $in: jobIds },
+            status: { $in: ['Hired', 'Profile Reviewed', 'Package Selected', 'Package Paid', 'Demo Scheduled'] } 
+        }).populate('candidate', 'name phone email profilePic').populate('job', 'title');
+
+        // 4. Get Transactions
+        const transactions = await Transaction.find({ 
+            customer: customerId,
+            status: 'success'
+        }).sort({ createdAt: -1 });
+
+        const totalSpent = transactions.reduce((sum, txn) => sum + txn.amount, 0);
+
+        // 5. Get Active Subscription/Package
+        const activeSubscriptions = await SubscriptionHistory.find({
+            customer: customerId,
+            status: 'Active'
+        }).populate('plan');
+
+        res.status(200).json({
+            success: true,
+            dashboard: {
+                customer,
+                jobs,
+                applications,
+                transactions,
+                totalSpent,
+                activeSubscriptions,
+                stats: {
+                    totalJobs: jobs.length,
+                    totalAssignedCandidates: applications.length,
+                    totalSpent
+                }
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
 module.exports = {
     createCustomer,
     getCustomers,
     getCustomer,
     updateCustomer,
     deleteCustomer,
-    toggleCustomerStatus
+    toggleCustomerStatus,
+    getCustomerDashboard
 };
