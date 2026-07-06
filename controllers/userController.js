@@ -85,8 +85,11 @@ exports.getUserById = async (req, res) => {
 exports.createUser = async (req, res) => {
     try {
         const { name, email, phone, password, role, status, jobActions } = req.body;
-        const userExists = await User.findOne({ email });
-        if (userExists) return res.status(400).json({ success: false, message: 'User already exists' });
+        
+        if (email) {
+            const userExists = await User.findOne({ email });
+            if (userExists) return res.status(400).json({ success: false, message: 'User with this email already exists' });
+        }
 
         const userData = { name, email, phone, password, role, status, jobActions };
         if (req.file) userData.profilePic = req.file.path;
