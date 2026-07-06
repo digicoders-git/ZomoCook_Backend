@@ -13,6 +13,19 @@ exports.getPlans = async (req, res) => {
     }
 };
 
+// @desc    Get all plans (including inactive)
+// @route   GET /api/plans/admin/all
+// @access  Private/Admin
+exports.getAllPlansAdmin = async (req, res) => {
+    try {
+        const plans = await Plan.find();
+        res.status(200).json({ success: true, count: plans.length, data: plans });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ success: false, error: 'Server Error' });
+    }
+};
+
 // @desc    Get single plan by ID
 // @route   GET /api/plans/:id
 // @access  Private/Admin

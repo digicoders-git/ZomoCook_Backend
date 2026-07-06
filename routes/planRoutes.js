@@ -4,6 +4,7 @@ const { protect } = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
+router.get('/admin/all', protect, require('../controllers/planController').getAllPlansAdmin);
 router.get('/', getPlans);
 router.get('/:id', protect, getPlan);
 router.post('/', protect, createPlan);
