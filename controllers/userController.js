@@ -27,7 +27,19 @@ exports.getUsers = async (req, res) => {
                 { phone: new RegExp(search, 'i') }
             ];
         }
-        if (role) query.role = role;
+        if (role) {
+            query.role = role;
+        } else {
+            // Exclude app users from the panel user list
+            const Role = require('../models/Role');
+            const excludedRoles = await Role.find({ 
+                name: { $regex: new RegExp('^(user|cook|customer)$', 'i') } 
+            });
+            if (excludedRoles.length > 0) {
+                query.role = { $nin: excludedRoles.map(r => r._id) };
+            }
+        }
+
         if (status) query.status = status;
 
         const users = await User.find(query).populate('role').sort({ createdAt: -1 });
