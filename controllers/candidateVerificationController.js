@@ -17,7 +17,7 @@ const getPendingCookApprovals = async (req, res) => {
         const skip = (page - 1) * limit;
 
         const candidates = await Candidate.find(query)
-            .select('name email phone city profileImage documents profileVerification createdAt')
+            .select('name email phone city state address profileImage documents profileVerification createdAt')
             .skip(skip)
             .limit(parseInt(limit))
             .sort({ createdAt: -1 });
