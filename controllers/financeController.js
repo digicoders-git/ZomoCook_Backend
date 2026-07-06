@@ -9,13 +9,47 @@ const ServicePackagePayment = require('../models/ServicePackagePayment');
  */
 const getFinanceStats = async (req, res) => {
     try {
-        const { date, manager } = req.query;
-        // In a real scenario, you'd filter by date range and manager if data supports it.
-        // Currently, we'll fetch all successful transactions and aggregate.
+        const { date, period, manager } = req.query;
+        // In a real scenario, you'd filter by manager if data supports it.
+        // We will apply the date and period filters.
 
         const matchTx = { status: 'success' };
         const matchSp = { status: 'paid' };
         const matchSub = {};
+
+        let startDate, endDate;
+        if (date) {
+            startDate = new Date(date);
+            startDate.setHours(0, 0, 0, 0);
+            endDate = new Date(date);
+            endDate.setHours(23, 59, 59, 999);
+        } else if (period) {
+            const now = new Date();
+            if (period === 'today') {
+                startDate = new Date();
+                startDate.setHours(0, 0, 0, 0);
+                endDate = new Date();
+                endDate.setHours(23, 59, 59, 999);
+            } else if (period === 'this_week') {
+                startDate = new Date();
+                const day = startDate.getDay() || 7; 
+                startDate.setDate(startDate.getDate() - (day - 1));
+                startDate.setHours(0, 0, 0, 0);
+                endDate = new Date();
+            } else if (period === 'this_month') {
+                startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+                endDate = new Date();
+            } else if (period === 'this_year') {
+                startDate = new Date(now.getFullYear(), 0, 1);
+                endDate = new Date();
+            }
+        }
+
+        if (startDate && endDate) {
+            matchTx.createdAt = { $gte: startDate, $lte: endDate };
+            matchSp.createdAt = { $gte: startDate, $lte: endDate };
+            matchSub.createdAt = { $gte: startDate, $lte: endDate };
+        }
 
         // 1. Total Revenue calculations
         const txAgg = await Transaction.aggregate([
