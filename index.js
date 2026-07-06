@@ -52,6 +52,7 @@ app.use('/uploads', express.static('uploads'));
 // Routes
 app.use('/api/admin/users', require('./routes/userRoutes'));
 app.use('/api/admin', require('./routes/adminRoutes'));
+app.use('/api', require('./routes/candidateVerificationRoutes'));
 app.use('/api/customers', require('./routes/customerRoutes'));
 app.use('/api/jobs', require('./routes/jobRoutes'));
 app.use('/api/candidates', require('./routes/candidateRoutes'));
