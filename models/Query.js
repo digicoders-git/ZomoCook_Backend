@@ -20,6 +20,15 @@ const querySchema = new mongoose.Schema({
     type: String,
     required: [true, 'Please add a message'],
     trim: true
+  },
+  status: {
+    type: String,
+    enum: ['New', 'Assigned', 'In Progress', 'Waiting for Customer', 'Waiting for Candidate', 'Escalated', 'Resolved', 'Closed'],
+    default: 'New'
+  },
+  assignedTo: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
   }
 }, {
   timestamps: true
