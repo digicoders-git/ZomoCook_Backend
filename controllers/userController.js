@@ -327,33 +327,57 @@ exports.updateProfile = async (req, res) => {
         if (user.role && user.role.name && user.role.name.toLowerCase() === 'cook') {
             candidate = await Candidate.findOne({ phone: user.phone });
 
-            const candidateData = {
-                name: user.name,
-                email: user.email,
-                phone: user.phone,
-                dob: dob ? new Date(dob) : undefined,
-                gender: gender || undefined,
-                languages: parseJsonField(languages),
-                maritalStatus: maritalStatus || undefined,
-                state: state || undefined,
-                city: city || undefined,
-                address: address || undefined,
-                profileImage: user.profilePic,
-                jobPreference: {
-                    jobCategory: parseJsonField(jobCategory) || [],
-                    jobType: parseJsonField(jobType) || [],
-                    jobPositions: parseJsonField(jobPositions) || [],
-                    preferredCities: parseJsonField(preferredCities) || [],
-                    experience: {
-                        value: experienceValue || '0',
-                        unit: experienceUnit || 'years'
-                    },
-                    currentSalary: currentSalary || undefined,
-                    expectedSalary: expectedSalary || undefined
-                },
-                createdBy: user._id,
-                creatorModel: 'User'
-            };
+            const candidateData = {};
+            
+            if (user.name) candidateData.name = user.name;
+            if (user.email) candidateData.email = user.email;
+            if (user.phone) candidateData.phone = user.phone;
+            if (req.body.dob) candidateData.dob = new Date(req.body.dob);
+            if (req.body.gender) candidateData.gender = req.body.gender;
+            if (req.body.languages) candidateData.languages = parseJsonField(req.body.languages);
+            if (req.body.maritalStatus) candidateData.maritalStatus = req.body.maritalStatus;
+            if (req.body.state) candidateData.state = req.body.state;
+            if (req.body.city) candidateData.city = req.body.city;
+            if (req.body.address) candidateData.address = req.body.address;
+            if (user.profilePic) candidateData.profileImage = user.profilePic;
+
+            // Handle complex fields if passed as JSON strings or arrays directly
+            const complexFields = ['cookingSkills', 'workExperience', 'education', 'careerHighlights', 'socialMedia', 'skills', 'documents'];
+            complexFields.forEach(field => {
+                if (req.body[field]) {
+                    if (typeof req.body[field] === 'string') {
+                        try {
+                            candidateData[field] = JSON.parse(req.body[field]);
+                        } catch (e) {
+                            console.log(`Field ${field} is not valid JSON`);
+                        }
+                    } else {
+                        candidateData[field] = req.body[field];
+                    }
+                }
+            });
+
+            // Handle jobPreference if passed either as object or flat fields
+            if (req.body.jobPreference) {
+                candidateData.jobPreference = typeof req.body.jobPreference === 'string' ? JSON.parse(req.body.jobPreference) : req.body.jobPreference;
+            } else if (req.body.jobCategory || req.body.jobType || req.body.jobPositions || req.body.preferredCities || req.body.experienceValue) {
+                candidateData.jobPreference = candidate && candidate.jobPreference ? { ...candidate.jobPreference } : {};
+                if (req.body.jobCategory) candidateData.jobPreference.jobCategory = parseJsonField(req.body.jobCategory);
+                if (req.body.jobType) candidateData.jobPreference.jobType = parseJsonField(req.body.jobType);
+                if (req.body.jobPositions) candidateData.jobPreference.jobPositions = parseJsonField(req.body.jobPositions);
+                if (req.body.preferredCities) candidateData.jobPreference.preferredCities = parseJsonField(req.body.preferredCities);
+                if (req.body.currentSalary) candidateData.jobPreference.currentSalary = req.body.currentSalary;
+                if (req.body.expectedSalary) candidateData.jobPreference.expectedSalary = req.body.expectedSalary;
+                if (req.body.experienceValue || req.body.experienceUnit) {
+                    candidateData.jobPreference.experience = {
+                        value: req.body.experienceValue || candidateData.jobPreference.experience?.value || '0',
+                        unit: req.body.experienceUnit || candidateData.jobPreference.experience?.unit || 'years'
+                    };
+                }
+            }
+
+            candidateData.createdBy = user._id;
+            candidateData.creatorModel = 'User';
 
             if (!candidate) {
                 candidate = await Candidate.create(candidateData);
