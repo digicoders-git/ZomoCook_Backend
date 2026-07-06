@@ -36,16 +36,27 @@ exports.getUsers = async (req, res) => {
                 name: { $regex: new RegExp('^(user|cook|customer)$', 'i') } 
             });
             if (excludedRoles.length > 0) {
-                query.role = { $nin: excludedRoles.map(r => r._id), $exists: true, $ne: null };
-            } else {
-                query.role = { $exists: true, $ne: null };
+                query.role = { $nin: excludedRoles.map(r => r._id) };
             }
         }
 
         if (status) query.status = status;
 
-        const users = await User.find(query).populate('role').sort({ createdAt: -1 });
-        res.status(200).json({ success: true, count: users.length, users });
+        const page = parseInt(req.query.page, 10) || 1;
+        const limit = parseInt(req.query.limit, 10) || 10;
+        const startIndex = (page - 1) * limit;
+
+        const total = await User.countDocuments(query);
+        const users = await User.find(query).populate('role').sort({ createdAt: -1 }).skip(startIndex).limit(limit);
+        
+        res.status(200).json({ 
+            success: true, 
+            count: users.length, 
+            total,
+            page,
+            totalPages: Math.ceil(total / limit),
+            users 
+        });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
