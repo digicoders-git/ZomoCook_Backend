@@ -62,6 +62,7 @@ app.use('/api/roles', require('./routes/roleRoutes'));
 app.use('/api/masters', require('./routes/masterRoutes'));
 app.use('/api/settings', require('./routes/webSettingRoutes'));
 app.use('/api/dashboard', require('./routes/dashboardRoutes'));
+app.use('/api/finance', require('./routes/financeRoutes'));
 app.use('/api/banners', require('./routes/bannerRoutes'));
 app.use('/api/applications', require('./routes/applicationRoutes'));
 app.use('/api/bookings', require('./routes/bookingRoutes'));
