@@ -33,6 +33,17 @@ exports.getUsers = async (req, res) => {
 
         if (status) query.status = status;
 
+        if (!role) {
+            // Exclude app roles (Cook, User, Customer) from Staff User List
+            const rolesToExclude = await Role.find({ 
+                name: { $in: [new RegExp('^cook$', 'i'), new RegExp('^user$', 'i'), new RegExp('^customer$', 'i')] } 
+            });
+            const excludedRoleIds = rolesToExclude.map(r => r._id);
+            if (excludedRoleIds.length > 0) {
+                query.role = { $nin: excludedRoleIds };
+            }
+        }
+
         const page = parseInt(req.query.page, 10) || 1;
         const limit = parseInt(req.query.limit, 10) || 10;
         const startIndex = (page - 1) * limit;
@@ -180,8 +191,11 @@ exports.verifyOtp = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Please provide phone and OTP' });
         }
 
-        // Default role to 'User' if not provided
-        const roleName = requestedRole || 'User';
+        // Default role to 'Customer' if not provided or if 'User' is requested (to map app users to customers)
+        let roleName = requestedRole || 'Customer';
+        if (roleName.toLowerCase() === 'user') {
+            roleName = 'Customer';
+        }
 
         // Find or create the Role document
         let roleDoc = await Role.findOne({ name: { $regex: new RegExp(`^${roleName}$`, 'i') } });
@@ -221,6 +235,18 @@ exports.verifyOtp = async (req, res) => {
             user = await User.create(userData);
             // Populate role for response consistency
             user = await User.findById(user._id).populate('role');
+            
+            // If the role is Customer, create a Customer record so they appear in CustomerList
+            if (roleDoc.name.toLowerCase() === 'customer') {
+                const Customer = require('../models/Customer');
+                await Customer.create({
+                    name: defaultName,
+                    contactName: defaultName,
+                    contactPhone: phone,
+                    createdBy: user._id,
+                    creatorModel: 'User'
+                });
+            }
         } else {
             // Existing user
             // If user has no role assigned, assign the requested role
@@ -388,6 +414,29 @@ exports.updateProfile = async (req, res) => {
                 candidate = await Candidate.create(candidateData);
             } else {
                 candidate = await Candidate.findByIdAndUpdate(candidate._id, candidateData, { new: true });
+            }
+        } else if (user.role && user.role.name && user.role.name.toLowerCase() === 'customer') {
+            const Customer = require('../models/Customer');
+            let customerDoc = await Customer.findOne({ contactPhone: user.phone });
+            
+            const customerData = {
+                createdBy: user._id,
+                creatorModel: 'User'
+            };
+            if (user.name) {
+                customerData.name = user.name;
+                customerData.contactName = user.name;
+            }
+            if (user.email) customerData.email = user.email;
+            if (user.phone) customerData.contactPhone = user.phone;
+            if (user.propertyCategory) customerData.propertyCategory = user.propertyCategory;
+            if (user.address) customerData.contactAddress = user.address;
+            if (user.profilePic) customerData.profilePic = user.profilePic;
+
+            if (!customerDoc) {
+                await Customer.create(customerData);
+            } else {
+                await Customer.findByIdAndUpdate(customerDoc._id, customerData, { new: true });
             }
         }
 

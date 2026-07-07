@@ -8,29 +8,30 @@ const customerSchema = new mongoose.Schema({
     },
     propertyCategory: {
         type: String,
-        required: [true, 'Please select a property category']
+        required: false
     },
     email: {
         type: String,
-        required: [true, 'Please add an email'],
-        unique: true
+        unique: true,
+        sparse: true,
+        required: false
     },
     password: {
         type: String,
-        required: [true, 'Please add a password'],
-        select: false
+        select: false,
+        required: false
     },
     contactName: {
         type: String,
-        required: [true, 'Please add a contact name']
+        required: false
     },
     contactPhone: {
         type: String,
-        required: [true, 'Please add a contact phone number']
+        required: false
     },
     contactAddress: {
         type: String,
-        required: [true, 'Please add a contact address']
+        required: false
     },
     profilePic: {
         type: String,
