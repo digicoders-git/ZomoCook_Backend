@@ -31,6 +31,18 @@ const replacementSchema = new mongoose.Schema({
     assignTo: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Admin'
+    },
+    job: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Job'
+    },
+    assignedCandidate: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Candidate'
+    },
+    newJob: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Job'
     }
 }, {
     timestamps: true
