@@ -8,13 +8,17 @@ const {
     getReplacementCandidates,
     assignCandidate,
     resolveReplacement,
-    postReplacementJob
+    postReplacementJob,
+    getMyReplacements
 } = require('../controllers/replacementController');
 const { protect, admin } = require('../middleware/authMiddleware');
 
 router.route('/')
     .post(protect, createReplacement)
     .get(protect, getReplacements); // Assuming protect allows admins too
+
+router.route('/my-replacements')
+    .get(protect, getMyReplacements);
 
 router.route('/:id')
     .put(protect, updateReplacement)

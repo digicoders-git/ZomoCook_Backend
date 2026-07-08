@@ -87,6 +87,27 @@ exports.getReplacements = async (req, res) => {
     }
 };
 
+// @desc    Get logged in user's replacements
+// @route   GET /api/replacements/my-replacements
+// @access  Private (User)
+exports.getMyReplacements = async (req, res) => {
+    try {
+        const replacements = await Replacement.find({ customer: req.admin._id })
+            .populate('assignedCandidate', 'name phone profileImage')
+            .populate('job', 'title')
+            .populate('newJob', 'title')
+            .sort('-createdAt');
+
+        res.status(200).json({
+            success: true,
+            data: replacements
+        });
+    } catch (error) {
+        console.error('Error fetching my replacements:', error);
+        res.status(500).json({ success: false, message: 'Server Error', error: error.message });
+    }
+};
+
 // @desc    Update a replacement status or assign to
 // @route   PUT /api/replacements/:id
 // @access  Private (Admin)
@@ -198,6 +219,19 @@ exports.assignCandidate = async (req, res) => {
         replacement.status = 'In Progress';
         
         await replacement.save();
+        
+        // Send notification to candidate via FCM
+        const notificationController = require('./notificationController');
+        notificationController.sendNotificationToUser({
+            userId: candidateId,
+            userModel: 'Candidate',
+            title: '🌟 New Job Assignment',
+            message: 'You have been assigned as a replacement for a job. Please check your profile.',
+            type: 'candidate_assigned',
+            relatedId: replacement._id,
+            relatedModel: 'Replacement',
+            actionUrl: '/applications'
+        }).catch(err => console.error('Error sending candidate assigned push notification:', err));
         
         res.status(200).json({
             success: true,
