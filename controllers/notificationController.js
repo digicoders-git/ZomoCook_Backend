@@ -298,15 +298,22 @@ exports.sendNotificationToUser = async ({
         } else {
             recipientDoc = await User.findById(userId).select('fcmToken');
             if (!recipientDoc) {
-                // Try finding Candidate first, then find corresponding User
-                const Candidate = require('../models/Candidate');
-                const candidateDoc = await Candidate.findById(userId);
-                if (candidateDoc && candidateDoc.phone) {
-                    const last10 = candidateDoc.phone.slice(-10);
-                    recipientDoc = await User.findOne({ phone: new RegExp(last10 + '$') }).select('fcmToken');
-                    if (recipientDoc) {
-                        resolvedRecipientId = recipientDoc._id;
-                        resolvedRecipientModel = 'User';
+                // Try Admin first
+                recipientDoc = await Admin.findById(userId).select('fcmToken');
+                if (recipientDoc) {
+                    resolvedRecipientId = recipientDoc._id;
+                    resolvedRecipientModel = 'Admin';
+                } else {
+                    // Try finding Candidate first, then find corresponding User
+                    const Candidate = require('../models/Candidate');
+                    const candidateDoc = await Candidate.findById(userId);
+                    if (candidateDoc && candidateDoc.phone) {
+                        const last10 = candidateDoc.phone.slice(-10);
+                        recipientDoc = await User.findOne({ phone: new RegExp(last10 + '$') }).select('fcmToken');
+                        if (recipientDoc) {
+                            resolvedRecipientId = recipientDoc._id;
+                            resolvedRecipientModel = 'User';
+                        }
                     }
                 }
             }
