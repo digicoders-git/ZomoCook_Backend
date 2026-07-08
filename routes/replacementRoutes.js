@@ -17,19 +17,19 @@ router.route('/')
     .get(protect, getReplacements); // Assuming protect allows admins too
 
 router.route('/:id')
-    .put(protect, admin, updateReplacement)
-    .delete(protect, admin, deleteReplacement);
+    .put(protect, updateReplacement)
+    .delete(protect, deleteReplacement);
 
 router.route('/:id/candidates')
-    .get(protect, admin, getReplacementCandidates);
+    .get(protect, getReplacementCandidates);
 
 router.route('/:id/assign-candidate')
-    .put(protect, admin, assignCandidate);
+    .put(protect, assignCandidate);
 
 router.route('/:id/resolve')
-    .put(protect, admin, resolveReplacement);
+    .put(protect, resolveReplacement);
 
 router.route('/:id/post-job')
-    .post(protect, admin, postReplacementJob);
+    .post(protect, postReplacementJob);
 
 module.exports = router;
