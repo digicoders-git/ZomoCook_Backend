@@ -8,6 +8,17 @@ exports.getQueries = async (req, res) => {
     try {
         const { search } = req.query;
         let query = {};
+        
+        const isSuperAdmin = req.admin.constructor.modelName === 'Admin';
+        if (!isSuperAdmin) {
+            query.$and = query.$and || [];
+            query.$and.push({
+                $or: [
+                    { createdBy: req.admin._id },
+                    { assignedTo: req.admin._id }
+                ]
+            });
+        }
 
         if (search) {
             query.$or = [

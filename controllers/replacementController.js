@@ -62,7 +62,13 @@ exports.createReplacement = async (req, res) => {
 // @access  Private (Admin)
 exports.getReplacements = async (req, res) => {
     try {
-        const replacements = await Replacement.find()
+        let query = {};
+        const isSuperAdmin = req.admin.constructor.modelName === 'Admin';
+        if (!isSuperAdmin) {
+            query.assignTo = req.admin._id;
+        }
+
+        const replacements = await Replacement.find(query)
             .populate({
                 path: 'customer',
                 select: 'name phone address propertyCategory activePlan',

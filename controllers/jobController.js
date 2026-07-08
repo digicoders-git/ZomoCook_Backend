@@ -144,9 +144,14 @@ const getJobs = async (req, res) => {
         // Role-based data isolation
         const isSuperAdmin = req.admin.constructor.modelName === 'Admin';
         const isCook = req.admin.role && req.admin.role.name && req.admin.role.name.toLowerCase() === 'cook';
-
         if (!isSuperAdmin && !isCook) {
-            query.createdBy = req.admin._id;
+            query.$and = query.$and || [];
+            query.$and.push({
+                $or: [
+                    { createdBy: req.admin._id },
+                    { leadManager: req.admin._id.toString() }
+                ]
+            });
         }
 
         // Search filter
