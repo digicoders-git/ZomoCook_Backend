@@ -84,25 +84,29 @@ const loginAdmin = async (req, res) => {
     }
 };
 
-/**
- * @desc    Get admin profile
- * @route   GET /api/admin/profile
- * @access  Private
- */
 const getAdminProfile = async (req, res) => {
     try {
-        const admin = await Admin.findById(req.admin._id);
-        if (admin) {
+        let account = await Admin.findById(req.admin._id).populate('role');
+        let type = 'admin';
+
+        if (!account) {
+            account = await User.findById(req.admin._id).populate('role');
+            type = 'user';
+        }
+
+        if (account) {
             res.json({
                 success: true,
-                _id: admin._id,
-                name: admin.name,
-                email: admin.email,
-                phone: admin.phone,
-                profilePic: admin.profilePic,
+                _id: account._id,
+                name: account.name,
+                email: account.email,
+                phone: account.phone,
+                profilePic: account.profilePic,
+                role: account.role,
+                type: type
             });
         } else {
-            res.status(404).json({ success: false, message: 'Admin not found' });
+            res.status(404).json({ success: false, message: 'Account not found' });
         }
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
