@@ -71,7 +71,7 @@ app.use('/api/plans', require('./routes/planRoutes'));
 app.use('/api/subscriptions', require('./routes/subscriptionRoutes'));
 app.use('/api/offers', require('./routes/offerRoutes'));
 app.use('/api/chats', require('./routes/messageRoutes'));
-
+app.use('/api/replacements', require('./routes/replacementRoutes'));
 app.get('/', (req, res) => {
   res.send('ZomoCook API is running...');
 });
