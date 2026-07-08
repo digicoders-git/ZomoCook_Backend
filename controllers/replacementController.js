@@ -225,13 +225,27 @@ exports.assignCandidate = async (req, res) => {
         notificationController.sendNotificationToUser({
             userId: candidateId,
             userModel: 'Candidate',
-            title: '🌟 New Job Assignment',
-            message: 'You have been assigned as a replacement for a job. Please check your profile.',
+            title: '🌟 Job Application',
+            message: 'You have been applied for this job as a replacement.',
             type: 'candidate_assigned',
             relatedId: replacement._id,
             relatedModel: 'Replacement',
             actionUrl: '/applications'
         }).catch(err => console.error('Error sending candidate assigned push notification:', err));
+        
+        // Send notification to Customer (Book a Chef app) via FCM
+        if (replacement.customer) {
+            notificationController.sendNotificationToUser({
+                userId: replacement.customer,
+                userModel: 'User',
+                title: '✅ Replacement Assigned',
+                message: 'Your replacement request has been accepted and a candidate has been assigned.',
+                type: 'replacement_assigned',
+                relatedId: replacement._id,
+                relatedModel: 'Replacement',
+                actionUrl: '/replacement_history'
+            }).catch(err => console.error('Error sending customer replacement push notification:', err));
+        }
         
         res.status(200).json({
             success: true,
