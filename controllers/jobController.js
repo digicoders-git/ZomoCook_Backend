@@ -84,6 +84,22 @@ const createJob = async (req, res) => {
             finalPaymentStatus = 'pending';
         }
 
+        let assignedManagerId = '';
+        try {
+            const Role = require('../models/Role');
+            const Admin = require('../models/Admin');
+            const leadManagerRole = await Role.findOne({ name: { $regex: /lead manager/i } });
+            if (leadManagerRole) {
+                const leadManagers = await Admin.find({ role: leadManagerRole._id, status: 'Active' });
+                if (leadManagers.length > 0) {
+                    const randomManager = leadManagers[Math.floor(Math.random() * leadManagers.length)];
+                    assignedManagerId = randomManager._id.toString();
+                }
+            }
+        } catch (e) {
+            console.error('Error auto-assigning lead manager:', e);
+        }
+
         const jobData = {
             ...req.body,
             jobCode,
@@ -92,7 +108,8 @@ const createJob = async (req, res) => {
             paymentStatus: finalPaymentStatus,
             image: req.file ? req.file.path : undefined,
             createdBy: req.admin._id,
-            creatorModel: req.admin.constructor.modelName
+            creatorModel: req.admin.constructor.modelName,
+            leadManager: assignedManagerId || ''
         };
 
         const job = await Job.create(jobData);
