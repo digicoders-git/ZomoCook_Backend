@@ -165,18 +165,21 @@ const getJobs = async (req, res) => {
         
         if (isLeadManager) {
             query.$and = query.$and || [];
+            const escapedName = req.admin.name ? req.admin.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';
             query.$and.push({
                 $or: [
                     { leadManager: req.admin._id.toString() },
-                    { leadManager: req.admin.name }
+                    { leadManager: new RegExp(`^\\s*${escapedName}\\s*$`, 'i') }
                 ]
             });
         } else if (!isSuperAdmin && !isCook) {
             query.$and = query.$and || [];
+            const escapedName = req.admin.name ? req.admin.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';
             query.$and.push({
                 $or: [
                     { createdBy: req.admin._id },
-                    { leadManager: req.admin._id.toString() }
+                    { leadManager: req.admin._id.toString() },
+                    { leadManager: new RegExp(`^\\s*${escapedName}\\s*$`, 'i') }
                 ]
             });
         }
