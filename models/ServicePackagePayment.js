@@ -36,6 +36,7 @@ const servicePackagePaymentSchema = new mongoose.Schema({
     razorpayOrderId: String,
     razorpayPaymentId: String,
     paidDate: Date,
+    supportExpiryDate: Date,
     createdAt: {
         type: Date,
         default: Date.now

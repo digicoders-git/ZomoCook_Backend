@@ -5,7 +5,7 @@ const ServicePackage = require('./models/ServicePackage');
 
 const seedServicePackages = async () => {
     try {
-        await mongoose.connect(process.env.MONGODB_URI);
+        await mongoose.connect(process.env.MONGO_URI || process.env.MONGODB_URI);
         console.log('Connected to MongoDB');
 
         // Clear existing packages
@@ -17,11 +17,13 @@ const seedServicePackages = async () => {
                 price: 499,
                 replacementLimit: 1,
                 demoLimit: 1,
+                supportDurationMonths: 3,
                 features: [
                     '1 cook profile review',
                     '1 demo/trial',
                     '1 replacement if rejected',
-                    'Masked calling'
+                    'Masked calling',
+                    '3 Months replacement support'
                 ],
                 description: 'Perfect for trying out our service',
                 isActive: true
@@ -31,12 +33,14 @@ const seedServicePackages = async () => {
                 price: 999,
                 replacementLimit: 2,
                 demoLimit: 2,
+                supportDurationMonths: 6,
                 features: [
                     'Up to 3 cook profiles',
                     '2 demos/trials',
                     '2 replacements if rejected',
                     'Masked calling',
-                    'Priority support'
+                    'Priority support',
+                    '6 Months replacement support'
                 ],
                 description: 'Most popular choice for regular hiring',
                 isActive: true
@@ -46,6 +50,7 @@ const seedServicePackages = async () => {
                 price: 1999,
                 replacementLimit: 5,
                 demoLimit: 5,
+                supportDurationMonths: 11,
                 features: [
                     'Unlimited cook profiles',
                     '5 demos/trials',
@@ -53,7 +58,8 @@ const seedServicePackages = async () => {
                     'Masked calling',
                     'Priority support',
                     'Direct contact after hire',
-                    'Dedicated account manager'
+                    'Dedicated account manager',
+                    '11 Months replacement support'
                 ],
                 description: 'Best for high-volume hiring',
                 isActive: true

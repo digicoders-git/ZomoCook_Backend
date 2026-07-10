@@ -181,6 +181,7 @@ const getApplications = async (req, res) => {
             })
             .populate('job', 'title jobCategory jobType city state salaryRange outletName joiningType jobPosition')
             .populate('customer', 'name email phone outletName')
+            .populate('servicePackagePaymentId')
             .sort({ appliedDate: -1 });
 
         // Filter out applications where candidate is null (not approved)

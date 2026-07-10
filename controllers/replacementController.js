@@ -18,16 +18,39 @@ exports.createReplacement = async (req, res) => {
         // Attempt to find the relevant job this replacement is for
         // First try to find a job where this staffName was hired
         let linkedJobId = null;
+        let packagePayment = null;
+        
         const hiredApp = await Application.findOne({
             customer: req.admin._id,
             status: 'Hired'
         }).populate({
             path: 'candidate',
-            match: { name: staffName }
-        }).sort('-updatedAt');
+            match: { name: new RegExp('^' + String(staffName || '').trim() + '$', 'i') }
+        }).populate('servicePackagePaymentId').sort('-updatedAt');
 
         if (hiredApp && hiredApp.candidate) {
             linkedJobId = hiredApp.job;
+            if (hiredApp.servicePackagePaymentId) {
+                const payment = hiredApp.servicePackagePaymentId;
+                
+                // 1. Check support expiry date
+                if (payment.supportExpiryDate && new Date(payment.supportExpiryDate) < new Date()) {
+                    return res.status(400).json({
+                        success: false,
+                        message: `Your replacement support validity for this staff expired on ${new Date(payment.supportExpiryDate).toLocaleDateString('en-IN')}.`
+                    });
+                }
+                
+                // 2. Check replacement limit
+                if (payment.replacementsUsed >= payment.replacementLimit) {
+                    return res.status(400).json({
+                        success: false,
+                        message: `You have reached the limit of ${payment.replacementLimit} replacements allowed for this hiring package.`
+                    });
+                }
+                
+                packagePayment = payment;
+            }
         } else {
             // Fallback: get the customer's most recent job
             const recentJob = await Job.findOne({ customer: req.admin._id }).sort('-createdAt');
@@ -45,6 +68,12 @@ exports.createReplacement = async (req, res) => {
             status: 'Pending',
             job: linkedJobId
         });
+
+        // Increment replacementsUsed
+        if (packagePayment) {
+            packagePayment.replacementsUsed = (packagePayment.replacementsUsed || 0) + 1;
+            await packagePayment.save();
+        }
 
         res.status(201).json({
             success: true,
@@ -83,9 +112,26 @@ exports.getReplacements = async (req, res) => {
             .populate('assignedCandidate', 'name phone')
             .sort('-createdAt');
 
+        // Look up the service package details from Application for each replacement
+        const enrichedReplacements = await Promise.all(replacements.map(async (rep) => {
+            const repObj = rep.toObject();
+            if (rep.job && rep.customer) {
+                const Application = require('../models/Application');
+                const app = await Application.findOne({
+                    job: rep.job._id,
+                    customer: rep.customer._id
+                }).populate('servicePackagePaymentId');
+                
+                if (app && app.servicePackagePaymentId) {
+                    repObj.servicePackage = app.servicePackagePaymentId;
+                }
+            }
+            return repObj;
+        }));
+
         res.status(200).json({
             success: true,
-            data: replacements
+            data: enrichedReplacements
         });
     } catch (error) {
         console.error('Error fetching replacements:', error);

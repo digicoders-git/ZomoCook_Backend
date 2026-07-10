@@ -21,6 +21,11 @@ const servicePackageSchema = new mongoose.Schema({
         required: true,
         description: 'Number of demos allowed'
     },
+    supportDurationMonths: {
+        type: Number,
+        required: true,
+        default: 3
+    },
     features: {
         type: [String],
         default: []

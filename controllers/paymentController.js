@@ -96,6 +96,11 @@ const verifyPayment = async (req, res) => {
                 return res.status(404).json({ success: false, message: 'Application not found' });
             }
 
+            // Calculate support validity expiry date based on the package's supportDurationMonths (e.g. 3, 6, 11 months)
+            const duration = servicePackage.supportDurationMonths || 3;
+            const expiry = new Date();
+            expiry.setMonth(expiry.getMonth() + duration);
+
             // Create service package payment record
             const packagePayment = await ServicePackagePayment.create({
                 application: applicationId,
@@ -106,7 +111,8 @@ const verifyPayment = async (req, res) => {
                 status: 'paid',
                 razorpayOrderId: razorpay_order_id,
                 razorpayPaymentId: razorpay_payment_id,
-                paidDate: new Date()
+                paidDate: new Date(),
+                supportExpiryDate: expiry
             });
 
             // Update application
@@ -352,7 +358,8 @@ const checkJobPostPayment = async (req, res) => {
 const getServicePackages = async (req, res) => {
     try {
         const ServicePackage = require('../models/ServicePackage');
-        const packages = await ServicePackage.find({ isActive: true }).sort({ price: 1 });
+        // Fetch all packages (even inactive ones) for admin viewing
+        const packages = await ServicePackage.find().sort({ price: 1 });
 
         res.status(200).json({
             success: true,
@@ -363,4 +370,39 @@ const getServicePackages = async (req, res) => {
     }
 };
 
-module.exports = { createOrder, verifyPayment, getTransactionHistory, checkJobPostPayment, getServicePackages };
+/**
+ * @desc    Update a service package details
+ * @route   PUT /api/payments/service-packages/:id
+ * @access  Private (Admin)
+ */
+const updateServicePackage = async (req, res) => {
+    try {
+        const ServicePackage = require('../models/ServicePackage');
+        const { price, replacementLimit, demoLimit, supportDurationMonths, features, description, isActive } = req.body;
+        
+        let pkg = await ServicePackage.findById(req.params.id);
+        if (!pkg) {
+            return res.status(404).json({ success: false, message: 'Service package not found' });
+        }
+
+        if (price !== undefined) pkg.price = Number(price);
+        if (replacementLimit !== undefined) pkg.replacementLimit = Number(replacementLimit);
+        if (demoLimit !== undefined) pkg.demoLimit = Number(demoLimit);
+        if (supportDurationMonths !== undefined) pkg.supportDurationMonths = Number(supportDurationMonths);
+        if (features !== undefined) pkg.features = features;
+        if (description !== undefined) pkg.description = description;
+        if (isActive !== undefined) pkg.isActive = isActive;
+
+        await pkg.save();
+
+        res.status(200).json({
+            success: true,
+            message: 'Service package updated successfully',
+            package: pkg
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+module.exports = { createOrder, verifyPayment, getTransactionHistory, checkJobPostPayment, getServicePackages, updateServicePackage };
