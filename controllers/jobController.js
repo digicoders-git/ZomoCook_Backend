@@ -494,6 +494,25 @@ const toggleJobStatus = async (req, res) => {
             { $set: updateDoc }
         );
 
+        // Send push notification to the job creator
+        if (job.createdBy) {
+            const notificationController = require('./notificationController');
+            const statusLabel = newStatus ? '✅ Job Activated' : '⏸️ Job Deactivated';
+            const statusMsg = newStatus
+                ? `Your job "${job.title}" has been activated and is now live.`
+                : `Your job "${job.title}" has been deactivated by admin.`;
+            notificationController.sendNotificationToUser({
+                userId: job.createdBy,
+                userModel: job.creatorModel || 'User',
+                title: statusLabel,
+                message: statusMsg,
+                type: 'job_status',
+                relatedId: job._id,
+                relatedModel: 'Job',
+                actionUrl: '/jobs'
+            }).catch(err => console.error('Error sending toggle status notification:', err));
+        }
+
         res.status(200).json({
             success: true,
             message: `Job status updated to ${newStatus ? 'New' : 'Inactive'}`,
@@ -521,13 +540,35 @@ const updateJobStatus = async (req, res) => {
             updateDoc.isActive = false;
         }
 
-        const result = await Job.updateOne(
+        const job = await Job.findById(req.params.id);
+        if (!job) {
+            return res.status(404).json({ success: false, message: 'Job not found' });
+        }
+
+        await Job.updateOne(
             { _id: req.params.id },
             { $set: updateDoc }
         );
 
-        if (result.matchedCount === 0) {
-            return res.status(404).json({ success: false, message: 'Job not found' });
+        // Send push notification to the job creator about status change
+        if (job.createdBy) {
+            const notificationController = require('./notificationController');
+            const statusEmoji = {
+                'Active': '✅', 'New': '🆕', 'Urgent': '🚨', 'Open': '🔓',
+                'In Progress': '🔄', 'Inactive': '⏸️', 'Cancelled': '❌',
+                'Expired': '⏰', 'Closed': '🔒', 'Hold': '⏳'
+            };
+            const emoji = statusEmoji[status] || '📋';
+            notificationController.sendNotificationToUser({
+                userId: job.createdBy,
+                userModel: job.creatorModel || 'User',
+                title: `${emoji} Job Status Updated`,
+                message: `Your job "${job.title}" status has been changed to "${status}".`,
+                type: 'job_status',
+                relatedId: job._id,
+                relatedModel: 'Job',
+                actionUrl: '/jobs'
+            }).catch(err => console.error('Error sending status update notification:', err));
         }
 
         res.status(200).json({
