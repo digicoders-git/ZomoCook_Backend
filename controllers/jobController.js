@@ -164,19 +164,23 @@ const getJobs = async (req, res) => {
                 req.admin.email === 'zomocookadmin@gmail.com' ||
                 (req.admin.role && req.admin.role.name && req.admin.role.name.toLowerCase() === 'super admin')
             );
-        const isCook = req.admin.role && req.admin.role.name && req.admin.role.name.toLowerCase() === 'cook';
-        const isCustomer = req.admin.constructor.modelName === 'User';
+        // Role name detection
+        const roleName = (req.admin.role && req.admin.role.name) ? req.admin.role.name.toLowerCase() : '';
+        const isCook = roleName === 'cook';
+        // isCustomer = mobile app user (no admin panel role, just a regular app user)
+        // Staff users (Lead Manager, Telecaller etc) are in User collection but HAVE a role assigned
+        const isCustomer = req.admin.constructor.modelName === 'User' && 
+            (!req.admin.role || roleName === 'user' || roleName === 'customer');
 
         if (isCustomer) {
             query.createdBy = req.admin._id;
         } else if (!isSuperAdmin && !isCook) {
-            // Staff User (Lead Manager, Telecaller, etc.)
+            // Staff User (Lead Manager, Telecaller, Accounts etc) — show only assigned leads
             query.$and = query.$and || [];
-            const cleanStr = (s) => String(s || '').toLowerCase().replace(/[\s_-]/g, '').split('');
             const makeFlexibleRegex = (s) => {
-                const chars = cleanStr(s);
-                if (chars.length === 0) return new RegExp('^$');
-                const pattern = '^\\s*' + chars.map(c => c.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')).join('[\\s_-]*') + '\\s*$';
+                const cleaned = String(s || '').toLowerCase().replace(/[\s_-]/g, '');
+                if (!cleaned) return new RegExp('^$');
+                const pattern = '^[\\s_-]*' + cleaned.split('').map(c => c.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')).join('[\\s_-]*') + '[\\s_-]*$';
                 return new RegExp(pattern, 'i');
             };
             query.$and.push({
@@ -319,9 +323,14 @@ const getJob = async (req, res) => {
                 req.admin.email === 'zomocookadmin@gmail.com' ||
                 (req.admin.role && req.admin.role.name && req.admin.role.name.toLowerCase() === 'super admin')
             );
-        const isCook = req.admin.role && req.admin.role.name && req.admin.role.name.toLowerCase() === 'cook';
+        const gJobRoleName = (req.admin.role && req.admin.role.name) ? req.admin.role.name.toLowerCase() : '';
+        const isCook = gJobRoleName === 'cook';
+        // isCustomer = only actual mobile app users (no role, or role is "user"/"customer")
+        const isCustomerUser = req.admin.constructor.modelName === 'User' && 
+            (!req.admin.role || gJobRoleName === 'user' || gJobRoleName === 'customer');
         
-        if (!isSuperAdmin && !isCook) {
+        if (!isSuperAdmin && !isCook && !isCustomerUser) {
+            // Staff user - check they have access to this lead
             const cleanStr = (s) => String(s || '').toLowerCase().replace(/[\s_-]/g, '');
             const lm = cleanStr(job.leadManager);
             const meName = cleanStr(req.admin.name);
