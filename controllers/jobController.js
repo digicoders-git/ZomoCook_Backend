@@ -415,6 +415,17 @@ const deleteJob = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Job not found' });
         }
 
+        const isLeadManager = req.admin.role && req.admin.role.name && req.admin.role.name.toLowerCase().includes('lead manager');
+
+        if (isLeadManager) {
+            job.leadManager = undefined;
+            await job.save();
+            return res.status(200).json({
+                success: true,
+                message: "Job unassigned successfully (removed from your panel)"
+            });
+        }
+
         await job.deleteOne();
 
         res.status(200).json({
