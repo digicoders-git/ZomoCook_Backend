@@ -157,35 +157,43 @@ const getJobs = async (req, res) => {
     try {
         const { jobCategory, city, state, status, isActive, search, jobType, jobPosition, salaryRange, experienceRange, serviceCategory, minSalary, maxSalary, limit = 50, skip = 0, paymentStatus, leadManager } = req.query;
         let query = {};
-        const isSuperAdmin = 
-            req.admin.email === 'zomocookadmin@gmail.com' || 
-            (req.admin.role && req.admin.role.name && req.admin.role.name.toLowerCase() === 'super admin');
+        // Super Admin: has type='admin' OR is the hardcoded super admin email OR has super admin role
+        const isSuperAdmin =
+            req.admin.constructor.modelName === 'Admin' && (
+                !req.admin.role ||
+                req.admin.email === 'zomocookadmin@gmail.com' ||
+                (req.admin.role && req.admin.role.name && req.admin.role.name.toLowerCase() === 'super admin')
+            );
         const isCook = req.admin.role && req.admin.role.name && req.admin.role.name.toLowerCase() === 'cook';
-        const isCustomer = req.admin.role && req.admin.role.name && req.admin.role.name.toLowerCase() === 'user';
-        
+        const isCustomer = req.admin.constructor.modelName === 'User';
+
         if (isCustomer) {
             query.createdBy = req.admin._id;
         } else if (!isSuperAdmin && !isCook) {
-            // Staff User (Lead Manager, Telecaller, etc.)
-            query.$and = query.$and || [];
+            // Staff User (Lead Manager, Telecaller, etc.) — filter by assigned leadManager
             const escapedName = req.admin.name ? req.admin.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';
             const escapedEmail = req.admin.email ? req.admin.email.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';
-            query.$and.push({
+            const leadManagerFilter = {
                 $or: [
                     { leadManager: req.admin._id.toString() },
-                    { leadManager: new RegExp(`^\\s*${escapedName}\\s*$`, 'i') },
-                    { leadManager: new RegExp(`^\\s*${escapedEmail}\\s*$`, 'i') }
+                    ...(escapedName ? [{ leadManager: new RegExp(`^\\s*${escapedName}\\s*$`, 'i') }] : []),
+                    ...(escapedEmail ? [{ leadManager: new RegExp(`^\\s*${escapedEmail}\\s*$`, 'i') }] : [])
                 ]
-            });
+            };
+            query.$and = query.$and || [];
+            query.$and.push(leadManagerFilter);
         }
 
-        // Search filter
+        // Search filter — use $and to avoid conflict with leadManager $or
         if (search) {
-            query.$or = [
-                { title: new RegExp(search, 'i') },
-                { overview: new RegExp(search, 'i') },
-                { responsibilities: new RegExp(search, 'i') }
-            ];
+            query.$and = query.$and || [];
+            query.$and.push({
+                $or: [
+                    { title: new RegExp(search, 'i') },
+                    { overview: new RegExp(search, 'i') },
+                    { responsibilities: new RegExp(search, 'i') }
+                ]
+            });
         }
 
         if (jobCategory) query.jobCategory = jobCategory;
@@ -301,9 +309,12 @@ const getJob = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Job not found' });
         }
 
-        const isSuperAdmin = 
-            req.admin.email === 'zomocookadmin@gmail.com' || 
-            (req.admin.role && req.admin.role.name && req.admin.role.name.toLowerCase() === 'super admin');
+        const isSuperAdmin =
+            req.admin.constructor.modelName === 'Admin' && (
+                !req.admin.role ||
+                req.admin.email === 'zomocookadmin@gmail.com' ||
+                (req.admin.role && req.admin.role.name && req.admin.role.name.toLowerCase() === 'super admin')
+            );
         const isCook = req.admin.role && req.admin.role.name && req.admin.role.name.toLowerCase() === 'cook';
         
         if (!isSuperAdmin && !isCook) {
@@ -318,7 +329,6 @@ const getJob = async (req, res) => {
 
         // Check if cook has saved this job
         let isSaved = false;
-        const isCook = req.admin.role && req.admin.role.name && req.admin.role.name.toLowerCase() === 'cook';
         if (isCook) {
             const last10 = req.admin.phone ? req.admin.phone.slice(-10) : '';
             const candidate = await Candidate.findOne({
