@@ -159,9 +159,19 @@ const getJobs = async (req, res) => {
         let query = {};
 
         // Role-based data isolation
-        const isSuperAdmin = req.admin.constructor.modelName === 'Admin';
+        const isLeadManager = req.admin.role && req.admin.role.name && req.admin.role.name.toLowerCase().includes('lead manager');
+        const isSuperAdmin = req.admin.constructor.modelName === 'Admin' && !isLeadManager;
         const isCook = req.admin.role && req.admin.role.name && req.admin.role.name.toLowerCase() === 'cook';
-        if (!isSuperAdmin && !isCook) {
+        
+        if (isLeadManager) {
+            query.$and = query.$and || [];
+            query.$and.push({
+                $or: [
+                    { leadManager: req.admin._id.toString() },
+                    { leadManager: req.admin.name }
+                ]
+            });
+        } else if (!isSuperAdmin && !isCook) {
             query.$and = query.$and || [];
             query.$and.push({
                 $or: [
@@ -288,6 +298,11 @@ const getJob = async (req, res) => {
 
         if (!job) {
             return res.status(404).json({ success: false, message: 'Job not found' });
+        }
+
+        const isLeadManager = req.admin.role && req.admin.role.name && req.admin.role.name.toLowerCase().includes('lead manager');
+        if (isLeadManager && job.leadManager !== req.admin._id.toString() && job.leadManager !== req.admin.name) {
+            return res.status(403).json({ success: false, message: 'Access denied to this job lead.' });
         }
 
         // Check if cook has saved this job
