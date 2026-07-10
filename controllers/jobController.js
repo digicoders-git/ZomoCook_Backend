@@ -251,15 +251,18 @@ const getJobs = async (req, res) => {
             const selected = apps.filter(app => app.status === 'Hired').length;
 
             let customerData = job.customer;
-            if (!customerData && job.toObject().customer) {
-                const userDoc = await User.findById(job.toObject().customer).select('name email phone');
-                if (userDoc) {
-                    customerData = {
-                        _id: userDoc._id,
-                        name: userDoc.name,
-                        email: userDoc.email,
-                        contactPhone: userDoc.phone
-                    };
+            if (!customerData) {
+                const targetId = job.toObject().customer || (job.creatorModel === 'User' ? job.createdBy : null);
+                if (targetId) {
+                    const userDoc = await User.findById(targetId).select('name email phone');
+                    if (userDoc) {
+                        customerData = {
+                            _id: userDoc._id,
+                            name: userDoc.name,
+                            email: userDoc.email,
+                            contactPhone: userDoc.phone
+                        };
+                    }
                 }
             }
 
@@ -328,16 +331,19 @@ const getJob = async (req, res) => {
         const selected = apps.filter(app => app.status === 'Hired').length;
 
         let customerData = job.customer;
-        if (!customerData && job.toObject().customer) {
-            const User = require('../models/User');
-            const userDoc = await User.findById(job.toObject().customer).select('name email phone');
-            if (userDoc) {
-                customerData = {
-                    _id: userDoc._id,
-                    name: userDoc.name,
-                    email: userDoc.email,
-                    contactPhone: userDoc.phone
-                };
+        if (!customerData) {
+            const targetId = job.toObject().customer || (job.creatorModel === 'User' ? job.createdBy : null);
+            if (targetId) {
+                const User = require('../models/User');
+                const userDoc = await User.findById(targetId).select('name email phone');
+                if (userDoc) {
+                    customerData = {
+                        _id: userDoc._id,
+                        name: userDoc.name,
+                        email: userDoc.email,
+                        contactPhone: userDoc.phone
+                    };
+                }
             }
         }
 
