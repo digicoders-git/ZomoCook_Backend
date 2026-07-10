@@ -170,18 +170,22 @@ const getJobs = async (req, res) => {
         if (isCustomer) {
             query.createdBy = req.admin._id;
         } else if (!isSuperAdmin && !isCook) {
-            // Staff User (Lead Manager, Telecaller, etc.) — filter by assigned leadManager
-            const escapedName = req.admin.name ? req.admin.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';
-            const escapedEmail = req.admin.email ? req.admin.email.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';
-            const leadManagerFilter = {
+            // Staff User (Lead Manager, Telecaller, etc.)
+            query.$and = query.$and || [];
+            const cleanStr = (s) => String(s || '').toLowerCase().replace(/[\s_-]/g, '').split('');
+            const makeFlexibleRegex = (s) => {
+                const chars = cleanStr(s);
+                if (chars.length === 0) return new RegExp('^$');
+                const pattern = '^\\s*' + chars.map(c => c.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')).join('[\\s_-]*') + '\\s*$';
+                return new RegExp(pattern, 'i');
+            };
+            query.$and.push({
                 $or: [
                     { leadManager: req.admin._id.toString() },
-                    ...(escapedName ? [{ leadManager: new RegExp(`^\\s*${escapedName}\\s*$`, 'i') }] : []),
-                    ...(escapedEmail ? [{ leadManager: new RegExp(`^\\s*${escapedEmail}\\s*$`, 'i') }] : [])
+                    { leadManager: makeFlexibleRegex(req.admin.name) },
+                    { leadManager: makeFlexibleRegex(req.admin.email) }
                 ]
-            };
-            query.$and = query.$and || [];
-            query.$and.push(leadManagerFilter);
+            });
         }
 
         // Search filter — use $and to avoid conflict with leadManager $or
@@ -318,10 +322,11 @@ const getJob = async (req, res) => {
         const isCook = req.admin.role && req.admin.role.name && req.admin.role.name.toLowerCase() === 'cook';
         
         if (!isSuperAdmin && !isCook) {
-            const lm = String(job.leadManager || '').toLowerCase().trim();
-            const meName = String(req.admin.name || '').toLowerCase().trim();
-            const meId = String(req.admin._id || '').toLowerCase().trim();
-            const meEmail = String(req.admin.email || '').toLowerCase().trim();
+            const cleanStr = (s) => String(s || '').toLowerCase().replace(/[\s_-]/g, '');
+            const lm = cleanStr(job.leadManager);
+            const meName = cleanStr(req.admin.name);
+            const meId = cleanStr(req.admin._id);
+            const meEmail = cleanStr(req.admin.email);
             if (lm !== meName && lm !== meId && lm !== meEmail) {
                 return res.status(403).json({ success: false, message: 'Access denied to this job lead.' });
             }
