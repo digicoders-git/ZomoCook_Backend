@@ -352,10 +352,17 @@ const getJob = async (req, res) => {
             assignedCount: assignedCandidates
         };
 
+        const Transaction = require('../models/Transaction');
+        const transaction = await Transaction.findOne({
+            relatedJob: job._id,
+            status: 'success'
+        }).populate('user', 'name phone').populate('customer', 'name phone');
+
         res.status(200).json({
             success: true,
             job: jobWithCounts,
-            isSaved
+            isSaved,
+            transaction: transaction || null
         });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -690,6 +697,34 @@ const completePayment = async (req, res) => {
         job.status = 'New';
         job.isActive = true;
         await job.save();
+
+        // Ensure a success transaction is logged (especially for manual/offline admin approvals)
+        const txnType = job.jobType === 'daily' ? 'daily_job_advance' : 'job_post_fee';
+        const Transaction = require('../models/Transaction');
+        const existingTxn = await Transaction.findOne({
+            relatedJob: jobId,
+            type: txnType,
+            status: 'success'
+        });
+
+        if (!existingTxn) {
+            const isCustomer = req.admin.constructor.modelName === 'Customer';
+            const txnData = {
+                type: txnType,
+                amount: job.jobPostFee || 299,
+                status: 'success',
+                relatedJob: jobId,
+                razorpayOrderId: 'OFFLINE_' + Date.now(),
+                razorpayPaymentId: 'MANUAL_' + Date.now(),
+                description: `Offline Payment marked by: ${req.admin.name || 'Staff'}`
+            };
+            if (isCustomer) {
+                txnData.customer = req.admin._id;
+            } else {
+                txnData.user = req.admin._id;
+            }
+            await Transaction.create(txnData);
+        }
 
         // Send push notification to all cooks now that payment is complete
         const notificationController = require('./notificationController');

@@ -199,14 +199,42 @@ const verifyPayment = async (req, res) => {
 const getTransactionHistory = async (req, res) => {
     try {
         const { type, status, limit = 20, skip = 0 } = req.query;
-        const isCustomer = req.admin.constructor.modelName === 'Customer';
-        const query = isCustomer ? { customer: req.admin._id } : { user: req.admin._id };
+        
+        const isLeadManager = req.admin.role && req.admin.role.name && req.admin.role.name.toLowerCase().includes('lead manager');
+        const isSuperAdmin = req.admin.constructor.modelName === 'Admin' && !isLeadManager;
+        
+        let query = {};
+        if (isSuperAdmin) {
+            query = {};
+        } else if (isLeadManager) {
+            const Job = require('../models/Job');
+            const assignedJobs = await Job.find({
+                $or: [
+                    { leadManager: req.admin._id.toString() },
+                    { leadManager: req.admin.name }
+                ]
+            }).select('_id');
+            const jobIds = assignedJobs.map(j => j._id);
+            
+            query = {
+                $or: [
+                    { user: req.admin._id },
+                    { relatedJob: { $in: jobIds } }
+                ]
+            };
+        } else {
+            const isCustomer = req.admin.constructor.modelName === 'Customer';
+            query = isCustomer ? { customer: req.admin._id } : { user: req.admin._id };
+        }
+
         if (type) query.type = type;
         if (status) query.status = status;
 
         const transactions = await Transaction.find(query)
             .populate('relatedJob', 'title jobCategory city')
             .populate('relatedPlan', 'name price')
+            .populate('customer', 'name phone')
+            .populate('user', 'name phone')
             .sort({ createdAt: -1 })
             .limit(parseInt(limit))
             .skip(parseInt(skip));
