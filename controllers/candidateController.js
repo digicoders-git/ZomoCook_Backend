@@ -1,5 +1,6 @@
 const Candidate = require('../models/Candidate');
 const Application = require('../models/Application');
+const Job = require('../models/Job');
 const fs = require('fs');
 const path = require('path');
 
@@ -186,7 +187,20 @@ const getCandidates = async (req, res) => {
         const isSuperAdmin = req.admin.constructor.modelName === 'Admin';
         const isUser = req.admin.constructor.modelName === 'User';
         if (!isSuperAdmin && !isUser) {
-            query.createdBy = req.admin._id;
+            // Staff user — show candidates from their assigned jobs only
+            const escapedName = req.admin.name ? req.admin.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';
+            const escapedEmail = req.admin.email ? req.admin.email.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';
+            const assignedJobs = await Job.find({
+                $or: [
+                    { leadManager: req.admin._id.toString() },
+                    { leadManager: new RegExp(`^\\s*${escapedName}\\s*$`, 'i') },
+                    { leadManager: new RegExp(`^\\s*${escapedEmail}\\s*$`, 'i') }
+                ]
+            }).select('_id');
+            const assignedJobIds = assignedJobs.map(j => j._id);
+            const assignedApps = await Application.find({ job: { $in: assignedJobIds } }).select('candidate');
+            const candidateIds = [...new Set(assignedApps.map(a => a.candidate?.toString()).filter(Boolean))];
+            query._id = { $in: candidateIds };
         }
 
         if (isUser) {
@@ -282,7 +296,18 @@ const getApplications = async (req, res) => {
         } else if (isUser) {
             query.customer = req.admin._id;
         } else if (!isSuperAdmin) {
-            query.customer = req.admin._id;
+            // Staff user (Lead Manager, Telecaller, etc.) — show applications for their assigned jobs only
+            const escapedName = req.admin.name ? req.admin.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';
+            const escapedEmail = req.admin.email ? req.admin.email.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';
+            const assignedJobs = await Job.find({
+                $or: [
+                    { leadManager: req.admin._id.toString() },
+                    { leadManager: new RegExp(`^\\s*${escapedName}\\s*$`, 'i') },
+                    { leadManager: new RegExp(`^\\s*${escapedEmail}\\s*$`, 'i') }
+                ]
+            }).select('_id');
+            const assignedJobIds = assignedJobs.map(j => j._id);
+            query.job = { $in: assignedJobIds };
         }
 
         if (status) query.status = status;
