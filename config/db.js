@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const connectDB = async () => {
   try {
     const dbUri = process.env.MONGO_URI || 'mongodb://localhost:27017/ZomoCook';
+    console.log(`Connecting to database URI: ${dbUri}`);
     const conn = await mongoose.connect(dbUri);
     console.log(`MongoDB Connected: ${conn.connection.host}`);
   } catch (error) {

@@ -155,7 +155,7 @@ const createJob = async (req, res) => {
  */
 const getJobs = async (req, res) => {
     try {
-        const { jobCategory, city, state, status, isActive, search, jobType, jobPosition, salaryRange, experienceRange, serviceCategory, minSalary, maxSalary, limit = 50, skip = 0, paymentStatus, leadManager } = req.query;
+        const { jobCategory, city, state, status, isActive, search, jobType, jobPosition, salaryRange, experienceRange, serviceCategory, minSalary, maxSalary, limit = 100000, skip = 0, paymentStatus, leadManager } = req.query;
         let query = {};
         // Super Admin: has type='admin' OR is the hardcoded super admin email OR has super admin role
         const isSuperAdmin =
