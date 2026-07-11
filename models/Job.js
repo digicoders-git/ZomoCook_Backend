@@ -63,7 +63,7 @@ const jobSchema = new mongoose.Schema({
   image: String,
   status: {
     type: String,
-    enum: ['Urgent', 'New', 'Active', 'Inactive', 'Cancelled', 'Expired', 'Open', 'In Progress', 'Closed', 'Hold'],
+    enum: ['Urgent', 'New', 'Assigned', 'Active', 'Inactive', 'Cancelled', 'Expired', 'Open', 'In Progress', 'Closed', 'Hold'],
     default: 'New'
   },
   jobType: {
