@@ -181,7 +181,8 @@ const verifyPayment = async (req, res) => {
             const updateData = {
                 paymentStatus: 'paid',
                 isActive: true,
-                status: 'New'
+                status: 'New',
+                createdAt: new Date() // Reset creation time to when it was actually paid/posted
             };
             if (type === 'daily_job_advance') {
                 const job = await Job.findById(jobId);

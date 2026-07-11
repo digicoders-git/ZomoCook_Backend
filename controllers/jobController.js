@@ -786,6 +786,7 @@ const completePayment = async (req, res) => {
         job.paymentStatus = 'paid';
         job.status = 'New';
         job.isActive = true;
+        job.createdAt = new Date(); // Reset creation time to when it was actually paid/posted
         await job.save();
 
         // Ensure a success transaction is logged (especially for manual/offline admin approvals)
