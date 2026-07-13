@@ -73,13 +73,12 @@ customerSchema.pre('save', function (next) {
 });
 
 // Encrypt password using bcrypt
-customerSchema.pre('save', async function (next) {
+customerSchema.pre('save', async function () {
     if (!this.isModified('password')) {
-        return next();
+        return;
     }
     const salt = await bcrypt.genSalt(10);
     this.password = await bcrypt.hash(this.password, salt);
-    next();
 });
 
 module.exports = mongoose.model('Customer', customerSchema);
