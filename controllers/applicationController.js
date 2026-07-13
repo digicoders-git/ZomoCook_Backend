@@ -453,7 +453,7 @@ const scheduleDemo = async (req, res) => {
         let isPaid = application.servicePackagePaid;
         if (!isPaid) {
             const User = require('../models/User');
-            const jobCreator = await User.findById(application.job?.createdBy || application.job?.customer);
+            const jobCreator = await User.findById(application.customer);
             if (jobCreator && jobCreator.activePlan && new Date(jobCreator.planExpiryDate) > new Date()) {
                 isPaid = true;
                 application.servicePackagePaid = true;
