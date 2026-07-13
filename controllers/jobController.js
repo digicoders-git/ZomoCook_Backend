@@ -753,6 +753,26 @@ const resendJobNotification = async (req, res) => {
         }
 
         const notificationController = require('./notificationController');
+
+        // If the job is pending payment, send payment reminder to the customer/employer
+        if (job.paymentStatus === 'pending' || job.status === 'hold') {
+            await notificationController.sendNotificationToUser({
+                userId: job.createdBy,
+                userModel: 'User',
+                title: '⚠️ Plan Activation Required',
+                message: `Please complete the payment for your job post "${job.title}" to activate it and start receiving applications.`,
+                type: 'job_status',
+                relatedId: job._id,
+                relatedModel: 'Job',
+                actionUrl: '/jobs'
+            });
+
+            return res.status(200).json({
+                success: true,
+                message: "Payment reminder notification sent successfully to the customer"
+            });
+        }
+
         const salaryText = job.salaryRange ? `Salary ${job.salaryRange}` : 'Good Salary';
         const cityText = job.city ? `in ${job.city}` : '';
         

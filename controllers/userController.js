@@ -235,18 +235,6 @@ exports.verifyOtp = async (req, res) => {
             user = await User.create(userData);
             // Populate role for response consistency
             user = await User.findById(user._id).populate('role');
-            
-            // If the role is Customer, create a Customer record so they appear in CustomerList
-            if (roleDoc.name.toLowerCase() === 'customer') {
-                const Customer = require('../models/Customer');
-                await Customer.create({
-                    name: defaultName,
-                    contactName: defaultName,
-                    contactPhone: phone,
-                    createdBy: user._id,
-                    creatorModel: 'User'
-                });
-            }
         } else {
             // Existing user
             // If user has no role assigned, assign the requested role
@@ -263,6 +251,25 @@ exports.verifyOtp = async (req, res) => {
                     user.fcmToken = fcmToken;
                     await user.save();
                 }
+            }
+        }
+
+        // Ensure Customer record exists if the role is Customer (so they appear in CustomerList)
+        if (roleDoc.name.toLowerCase() === 'customer') {
+            const Customer = require('../models/Customer');
+            let customerDoc = await Customer.findOne({ contactPhone: phone });
+            if (!customerDoc) {
+                await Customer.create({
+                    name: user.name || `User_${phone.slice(-4)}`,
+                    contactName: user.name || `User_${phone.slice(-4)}`,
+                    contactPhone: phone,
+                    createdBy: user._id,
+                    creatorModel: 'User'
+                });
+            } else if (!customerDoc.createdBy) {
+                customerDoc.createdBy = user._id;
+                customerDoc.creatorModel = 'User';
+                await customerDoc.save();
             }
         }
 
