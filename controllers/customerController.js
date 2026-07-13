@@ -66,8 +66,30 @@ const getCustomers = async (req, res) => {
         
         // Role-based data isolation
         const isSuperAdmin = req.admin.constructor.modelName === 'Admin';
-        if (!isSuperAdmin) {
+        const isManager = req.admin.role && ['manager', 'super admin', 'admin'].includes(req.admin.role.name.toLowerCase());
+        const isInternalStaff = isSuperAdmin || (
+            req.admin.role && 
+            !['cook', 'user', 'customer'].includes(req.admin.role.name.toLowerCase())
+        );
+
+        if (!isInternalStaff) {
             query.createdBy = req.admin._id;
+        } else if (!isSuperAdmin && !isManager) {
+            // Restricted staff user — show customers associated with their assigned jobs
+            const Job = require('../models/Job');
+            const escapedName = req.admin.name ? req.admin.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';
+            const escapedEmail = req.admin.email ? req.admin.email.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';
+            
+            const assignedJobs = await Job.find({
+                $or: [
+                    { leadManager: req.admin._id.toString() },
+                    { leadManager: new RegExp(`^\\s*${escapedName}\\s*$`, 'i') },
+                    { leadManager: new RegExp(`^\\s*${escapedEmail}\\s*$`, 'i') }
+                ]
+            }).select('customer');
+            
+            const customerIds = [...new Set(assignedJobs.map(j => j.customer?.toString()).filter(Boolean))];
+            query._id = { $in: customerIds };
         }
 
         const customers = await Customer.find(query).sort({ createdAt: -1 });

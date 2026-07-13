@@ -185,8 +185,11 @@ const getCandidates = async (req, res) => {
         
         // Role-based data isolation
         const isSuperAdmin = req.admin.constructor.modelName === 'Admin';
-        const isUser = req.admin.constructor.modelName === 'User';
-        if (!isSuperAdmin && !isUser) {
+        const isClient = req.admin.role && ['user', 'customer'].includes(req.admin.role.name.toLowerCase());
+        const isStaffUser = !isSuperAdmin && req.admin.role && !['cook', 'user', 'customer'].includes(req.admin.role.name.toLowerCase());
+        const isManager = req.admin.role && ['manager', 'super admin', 'admin'].includes(req.admin.role.name.toLowerCase());
+
+        if (isStaffUser && !isManager) {
             // Staff user — show candidates from their assigned jobs only
             const escapedName = req.admin.name ? req.admin.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';
             const escapedEmail = req.admin.email ? req.admin.email.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';
@@ -203,7 +206,7 @@ const getCandidates = async (req, res) => {
             query._id = { $in: candidateIds };
         }
 
-        if (isUser) {
+        if (isClient) {
             query.profileStatus = 'active';
         }
 
@@ -277,7 +280,9 @@ const getApplications = async (req, res) => {
         // Role-based data isolation
         const isSuperAdmin = req.admin.constructor.modelName === 'Admin';
         const isCook = req.admin.role && req.admin.role.name && req.admin.role.name.toLowerCase() === 'cook';
-        const isUser = req.admin.constructor.modelName === 'User';
+        const isClient = req.admin.role && ['user', 'customer'].includes(req.admin.role.name.toLowerCase());
+        const isStaffUser = !isSuperAdmin && req.admin.role && !['cook', 'user', 'customer'].includes(req.admin.role.name.toLowerCase());
+        const isManager = req.admin.role && ['manager', 'super admin', 'admin'].includes(req.admin.role.name.toLowerCase());
         
         if (isCook) {
             const last10 = req.admin.phone ? req.admin.phone.slice(-10) : '';
@@ -293,9 +298,9 @@ const getApplications = async (req, res) => {
             } else {
                 return res.status(200).json({ success: true, count: 0, applications: [] });
             }
-        } else if (isUser) {
+        } else if (isClient) {
             query.customer = req.admin._id;
-        } else if (!isSuperAdmin) {
+        } else if (isStaffUser && !isManager) {
             // Staff user (Lead Manager, Telecaller, etc.) — show applications for their assigned jobs only
             const escapedName = req.admin.name ? req.admin.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';
             const escapedEmail = req.admin.email ? req.admin.email.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';

@@ -13,11 +13,26 @@ const getDashboardStats = async (req, res) => {
         const { category, customer, position, date } = req.query;
 
         const isSuperAdmin = req.admin.constructor.modelName === 'Admin';
+        const isManager = req.admin.role && ['manager', 'super admin', 'admin'].includes(req.admin.role.name.toLowerCase());
+        const isInternalStaff = isSuperAdmin || (
+            req.admin.role && 
+            !['cook', 'user', 'customer'].includes(req.admin.role.name.toLowerCase())
+        );
         
         // Construct dynamic filter for Jobs
         const jobFilter = {};
-        if (!isSuperAdmin) {
+        if (!isInternalStaff) {
             jobFilter.createdBy = req.admin._id;
+        } else if (!isSuperAdmin && !isManager) {
+            // Restricted staff user (like Lead Manager, Telecaller, etc.) — show their assigned jobs only
+            const escapedName = req.admin.name ? req.admin.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';
+            const escapedEmail = req.admin.email ? req.admin.email.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';
+            
+            jobFilter.$or = [
+                { leadManager: req.admin._id.toString() },
+                { leadManager: new RegExp(`^\\s*${escapedName}\\s*$`, 'i') },
+                { leadManager: new RegExp(`^\\s*${escapedEmail}\\s*$`, 'i') }
+            ];
         }
 
         if (category) jobFilter.jobCategory = category;
@@ -32,8 +47,36 @@ const getDashboardStats = async (req, res) => {
 
         // Construct dynamic filter for Candidates/Applications
         const appMatchFilter = {};
-        if (!isSuperAdmin) {
+        let candidateQuery = {};
+        let customerQuery = {};
+
+        if (!isInternalStaff) {
             appMatchFilter.createdBy = req.admin._id;
+            candidateQuery.createdBy = req.admin._id;
+            customerQuery.createdBy = req.admin._id;
+        } else if (!isSuperAdmin && !isManager) {
+            // Staff user (Lead Manager, Telecaller, etc.) — show applications for their assigned jobs only
+            const escapedName = req.admin.name ? req.admin.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';
+            const escapedEmail = req.admin.email ? req.admin.email.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';
+            
+            const assignedJobs = await Job.find({
+                $or: [
+                    { leadManager: req.admin._id.toString() },
+                    { leadManager: new RegExp(`^\\s*${escapedName}\\s*$`, 'i') },
+                    { leadManager: new RegExp(`^\\s*${escapedEmail}\\s*$`, 'i') }
+                ]
+            }).select('_id customer');
+            
+            const assignedJobIds = assignedJobs.map(j => j._id);
+            const customerIds = [...new Set(assignedJobs.map(j => j.customer?.toString()).filter(Boolean))];
+            
+            const Application = require('../models/Application');
+            const assignedApps = await Application.find({ job: { $in: assignedJobIds } }).select('candidate');
+            const candidateIds = [...new Set(assignedApps.map(a => a.candidate?.toString()).filter(Boolean))];
+            
+            appMatchFilter["applications.job"] = { $in: assignedJobIds };
+            candidateQuery._id = { $in: candidateIds };
+            customerQuery._id = { $in: customerIds };
         }
 
         if (category) appMatchFilter["jobInfo.jobCategory"] = category;
@@ -48,15 +91,16 @@ const getDashboardStats = async (req, res) => {
 
         // 1. Basic Stats
         const totalJobs = await Job.countDocuments(jobFilter);
-        const totalCandidates = await Candidate.countDocuments(!isSuperAdmin ? { createdBy: req.admin._id } : {});
-        const totalCustomers = await Customer.countDocuments(!isSuperAdmin ? { createdBy: req.admin._id } : {});
+        const totalCandidates = await Candidate.countDocuments(candidateQuery);
+        const totalCustomers = await Customer.countDocuments(customerQuery);
         const pendingCandidates = await Candidate.countDocuments({ 
             kycStatus: 'pending',
-            ...(!isSuperAdmin ? { createdBy: req.admin._id } : {})
+            ...candidateQuery
         });
 
         // 2. Application Status Counts
         const applicationStats = await Candidate.aggregate([
+            { $match: candidateQuery },
             { $unwind: "$applications" },
             {
                 $lookup: {
@@ -111,6 +155,7 @@ const getDashboardStats = async (req, res) => {
         sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
         const growthStats = await Candidate.aggregate([
+            { $match: candidateQuery },
             { $unwind: "$applications" },
             {
                 $lookup: {
@@ -162,6 +207,7 @@ const getDashboardStats = async (req, res) => {
         ]);
 
         const appCountsPerPosition = await Candidate.aggregate([
+            { $match: candidateQuery },
             { $unwind: "$applications" },
             {
                 $lookup: {
@@ -237,7 +283,7 @@ const getDashboardStats = async (req, res) => {
 
         // Daily new candidates added
         const rawDailyCandidates = await Candidate.aggregate([
-            { $match: { createdAt: { $gte: elevenDaysAgo } } },
+            { $match: { ...candidateQuery, createdAt: { $gte: elevenDaysAgo } } },
             {
                 $group: {
                     _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
@@ -248,6 +294,7 @@ const getDashboardStats = async (req, res) => {
 
         // Daily applications
         const rawDailyApplications = await Candidate.aggregate([
+            { $match: candidateQuery },
             { $unwind: '$applications' },
             { $match: { 'applications.appliedDate': { $gte: elevenDaysAgo } } },
             {
@@ -260,6 +307,7 @@ const getDashboardStats = async (req, res) => {
 
         // Daily demo scheduled
         const rawDailyDemo = await Candidate.aggregate([
+            { $match: candidateQuery },
             { $unwind: '$applications' },
             {
                 $match: {
@@ -277,6 +325,7 @@ const getDashboardStats = async (req, res) => {
 
         // Daily hired
         const rawDailyHired = await Candidate.aggregate([
+            { $match: candidateQuery },
             { $unwind: '$applications' },
             {
                 $match: {
@@ -297,6 +346,7 @@ const getDashboardStats = async (req, res) => {
         const startOfYear = new Date(currentYear, 0, 1);
 
         const rawRadarStats = await Candidate.aggregate([
+            { $match: candidateQuery },
             { $unwind: '$applications' },
             { $match: { 'applications.appliedDate': { $gte: startOfYear } } },
             {
