@@ -450,7 +450,18 @@ const scheduleDemo = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Application not found' });
         }
 
-        if (!application.servicePackagePaid) {
+        let isPaid = application.servicePackagePaid;
+        if (!isPaid) {
+            const User = require('../models/User');
+            const jobCreator = await User.findById(application.job?.createdBy || application.job?.customer);
+            if (jobCreator && jobCreator.activePlan && new Date(jobCreator.planExpiryDate) > new Date()) {
+                isPaid = true;
+                application.servicePackagePaid = true;
+                await application.save();
+            }
+        }
+
+        if (!isPaid) {
             return res.status(400).json({ 
                 success: false, 
                 message: 'Service package payment is required before scheduling demo',
