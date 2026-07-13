@@ -121,7 +121,7 @@ const createJob = async (req, res) => {
             const cityText = job.city ? `in ${job.city}` : '';
             notificationController.sendNotificationToRole({
                 roleName: 'Cook',
-                title: '🔔 New Matching Job',
+                title: 'New Matching Job',
                 message: `New Chef Requirement ${cityText}. ${salaryText}. Apply now.`,
                 type: 'job_available',
                 relatedId: job._id,
@@ -759,7 +759,7 @@ const resendJobNotification = async (req, res) => {
             await notificationController.sendNotificationToUser({
                 userId: job.createdBy,
                 userModel: 'User',
-                title: '⚠️ Plan Activation Required',
+                title: 'Plan Activation Required',
                 message: `Please complete the payment for your job post "${job.title}" to activate it and start receiving applications.`,
                 type: 'job_status',
                 relatedId: job._id,
@@ -778,7 +778,7 @@ const resendJobNotification = async (req, res) => {
         
         await notificationController.sendNotificationToRole({
             roleName: 'Cook',
-            title: '🔔 Matching Job Reminder',
+            title: 'Matching Job Reminder',
             message: `Chef Requirement ${cityText}. ${salaryText}. Apply now.`,
             type: 'job_available',
             relatedId: job._id,
@@ -843,7 +843,7 @@ const completePayment = async (req, res) => {
         const cityText = job.city ? `in ${job.city}` : '';
         notificationController.sendNotificationToRole({
             roleName: 'Cook',
-            title: '🔔 New Matching Job',
+            title: 'New Matching Job',
             message: `New Chef Requirement ${cityText}. ${salaryText}. Apply now.`,
             type: 'job_available',
             relatedId: job._id,
