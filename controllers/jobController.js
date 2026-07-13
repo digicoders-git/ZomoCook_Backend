@@ -259,10 +259,11 @@ const getJobs = async (req, res) => {
         const User = require('../models/User');
         const jobsWithCounts = await Promise.all(jobs.map(async (job) => {
             const apps = await Application.find({ job: job._id });
-            const assignedCandidates = apps.filter(app => app.status === 'Applied').length;
-            const interviews = apps.filter(app => ['Shortlisted', 'Demo Scheduled', 'Reschedule Requested'].includes(app.status)).length;
-            const rejected = apps.filter(app => ['Rejected', 'Not Interested', 'On Hold'].includes(app.status)).length;
-            const selected = apps.filter(app => app.status === 'Hired').length;
+            const assignedCandidates = apps.filter(app => ['Applied', 'Profile Reviewed'].includes(app.status)).length;
+            const interviews = apps.filter(app => ['Shortlisted', 'Demo Scheduled', 'Reschedule Requested', 'On Hold'].includes(app.status)).length;
+            const selected = apps.filter(app => ['Package Selected', 'Package Paid'].includes(app.status)).length;
+            const hired = apps.filter(app => app.status === 'Hired').length;
+            const rejected = apps.filter(app => ['Rejected', 'Cancelled', 'Not Interested'].includes(app.status)).length;
 
             let customerData = job.customer;
             if (!customerData) {
@@ -285,8 +286,9 @@ const getJobs = async (req, res) => {
                 customer: customerData,
                 assignedCandidates,
                 interviews,
-                rejected,
                 selected,
+                hired,
+                rejected,
                 appliedCount: apps.length,
                 assignedCount: assignedCandidates,
                 isSaved: isCook ? savedJobIds.some(id => id.toString() === job._id.toString()) : undefined
@@ -357,10 +359,11 @@ const getJob = async (req, res) => {
 
         const Application = require('../models/Application');
         const apps = await Application.find({ job: job._id });
-        const assignedCandidates = apps.filter(app => app.status === 'Applied').length;
-        const interviews = apps.filter(app => ['Shortlisted', 'Demo Scheduled', 'Reschedule Requested'].includes(app.status)).length;
-        const rejected = apps.filter(app => ['Rejected', 'Not Interested', 'On Hold'].includes(app.status)).length;
-        const selected = apps.filter(app => app.status === 'Hired').length;
+        const assignedCandidates = apps.filter(app => ['Applied', 'Profile Reviewed'].includes(app.status)).length;
+        const interviews = apps.filter(app => ['Shortlisted', 'Demo Scheduled', 'Reschedule Requested', 'On Hold'].includes(app.status)).length;
+        const selected = apps.filter(app => ['Package Selected', 'Package Paid'].includes(app.status)).length;
+        const hired = apps.filter(app => app.status === 'Hired').length;
+        const rejected = apps.filter(app => ['Rejected', 'Cancelled', 'Not Interested'].includes(app.status)).length;
 
         let customerData = job.customer;
         if (!customerData) {
@@ -384,8 +387,9 @@ const getJob = async (req, res) => {
             customer: customerData,
             assignedCandidates,
             interviews,
-            rejected,
             selected,
+            hired,
+            rejected,
             appliedCount: apps.length,
             assignedCount: assignedCandidates
         };
