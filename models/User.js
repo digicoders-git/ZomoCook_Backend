@@ -83,13 +83,22 @@ const userSchema = new mongoose.Schema({
     timestamps: true
 });
 
+// Clean up empty or null email fields before saving to prevent unique index violation
+userSchema.pre('save', function (next) {
+    if (this.email === '' || this.email === null) {
+        this.email = undefined;
+    }
+    next();
+});
+
 // Encrypt password using bcrypt
-userSchema.pre('save', async function () {
+userSchema.pre('save', async function (next) {
     if (!this.isModified('password')) {
-        return;
+        return next();
     }
     const salt = await bcrypt.genSalt(10);
     this.password = await bcrypt.hash(this.password, salt);
+    next();
 });
 
 // Match user entered password to hashed password in database

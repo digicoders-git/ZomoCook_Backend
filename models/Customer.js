@@ -64,13 +64,22 @@ const customerSchema = new mongoose.Schema({
     timestamps: true
 });
 
+// Clean up empty or null email fields before saving to prevent unique index violation
+customerSchema.pre('save', function (next) {
+    if (this.email === '' || this.email === null) {
+        this.email = undefined;
+    }
+    next();
+});
+
 // Encrypt password using bcrypt
 customerSchema.pre('save', async function (next) {
     if (!this.isModified('password')) {
-        return;
+        return next();
     }
     const salt = await bcrypt.genSalt(10);
     this.password = await bcrypt.hash(this.password, salt);
+    next();
 });
 
 module.exports = mongoose.model('Customer', customerSchema);
