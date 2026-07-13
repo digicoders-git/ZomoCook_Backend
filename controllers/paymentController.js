@@ -175,6 +175,42 @@ const verifyPayment = async (req, res) => {
             }
         }
 
+        // Handle subscription activation for daily job advance if planId is passed
+        if (type === 'daily_job_advance' && planId) {
+            const Plan = require('../models/Plan');
+            const User = require('../models/User');
+            const SubscriptionHistory = require('../models/SubscriptionHistory');
+
+            const plan = await Plan.findById(planId);
+            const isCustomer = req.admin.constructor.modelName === 'Customer';
+            const UserModel = isCustomer ? require('../models/Customer') : User;
+            const user = await UserModel.findById(req.admin._id);
+
+            if (plan && user) {
+                const expiry = new Date();
+                expiry.setDate(expiry.getDate() + plan.durationDays);
+                user.activePlan = plan._id;
+                user.planExpiryDate = expiry;
+                user.currentJobPostLimit = plan.jobPostLimit;
+                user.jobsPostedInCurrentPlan = 0;
+                user.currentHiringLimit = plan.hiringLimit;
+                user.cooksHiredInCurrentPlan = 0;
+                await user.save();
+
+                await SubscriptionHistory.create({
+                    user: isCustomer ? undefined : user._id,
+                    customer: isCustomer ? user._id : undefined,
+                    plan: plan._id,
+                    amountPaid: Math.round(plan.price * 0.25),
+                    startDate: new Date(),
+                    endDate: expiry,
+                    status: 'Active',
+                    razorpayOrderId: razorpay_order_id,
+                    razorpayPaymentId: razorpay_payment_id
+                });
+            }
+        }
+
         // Handle job post fee - activate the job
         if ((type === 'job_post_fee' || type === 'daily_job_advance') && jobId) {
             const Job = require('../models/Job');
@@ -185,11 +221,17 @@ const verifyPayment = async (req, res) => {
                 createdAt: new Date() // Reset creation time to when it was actually paid/posted
             };
             if (type === 'daily_job_advance') {
-                const job = await Job.findById(jobId);
-                if (job) updateData.advanceAmount = Math.round(job.jobPostFee * 0.25);
+                const Job = require('../models/Job');
+                const Plan = require('../models/Plan');
+                let price = 0;
+                if (planId) {
+                    const planObj = await Plan.findById(planId);
+                    if (planObj) price = planObj.price;
+                }
+                updateData.advanceAmount = Math.round((price > 0 ? price : 299) * 0.25);
             }
             await Job.findByIdAndUpdate(jobId, updateData);
-            message = type === 'daily_job_advance' ? 'Advance paid. Daily job is now live.' : 'Job post fee paid. Job is now live.';
+            message = type === 'daily_job_advance' ? 'Advance paid and Plan activated. Daily job is now live.' : 'Job post fee paid. Job is now live.';
         }
 
         res.status(200).json({ success: true, message });
