@@ -221,14 +221,19 @@ const verifyPayment = async (req, res) => {
                 createdAt: new Date() // Reset creation time to when it was actually paid/posted
             };
             if (type === 'daily_job_advance') {
-                const Job = require('../models/Job');
-                const Plan = require('../models/Plan');
-                let price = 0;
-                if (planId) {
-                    const planObj = await Plan.findById(planId);
-                    if (planObj) price = planObj.price;
+                const Transaction = require('../models/Transaction');
+                const txn = await Transaction.findOne({ razorpayOrderId: razorpay_order_id });
+                if (txn) {
+                    updateData.advanceAmount = txn.amount;
+                } else {
+                    const Plan = require('../models/Plan');
+                    let price = 0;
+                    if (planId) {
+                        const planObj = await Plan.findById(planId);
+                        if (planObj) price = planObj.price;
+                    }
+                    updateData.advanceAmount = Math.round((price > 0 ? price : 299) * 0.25);
                 }
-                updateData.advanceAmount = Math.round((price > 0 ? price : 299) * 0.25);
             }
             await Job.findByIdAndUpdate(jobId, updateData);
             message = type === 'daily_job_advance' ? 'Advance paid and Plan activated. Daily job is now live.' : 'Job post fee paid. Job is now live.';
