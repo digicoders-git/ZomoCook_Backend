@@ -259,7 +259,8 @@ const getCustomerDashboard = async (req, res) => {
         const activeSubscriptions = await SubscriptionHistory.find({
             $or: [
                 { customer: customerId }, 
-                { customer: customer.createdBy }
+                { customer: customer.createdBy },
+                { user: customer.createdBy }
             ],
             status: 'Active'
         }).populate('plan');
