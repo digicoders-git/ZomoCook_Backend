@@ -84,11 +84,10 @@ const userSchema = new mongoose.Schema({
 });
 
 // Clean up empty or null email fields before saving to prevent unique index violation
-userSchema.pre('save', function (next) {
+userSchema.pre('save', function () {
     if (this.email === '' || this.email === null) {
         this.email = undefined;
     }
-    next();
 });
 
 // Encrypt password using bcrypt
