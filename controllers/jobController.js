@@ -824,14 +824,17 @@ const completePayment = async (req, res) => {
 
         if (!existingTxn) {
             const isCustomer = req.admin.constructor.modelName === 'Customer';
+            const finalAmount = job.jobType === 'daily' ? (job.advanceAmount || 0) : (job.jobPostFee || 299);
             const txnData = {
                 type: txnType,
-                amount: job.jobPostFee || 299,
+                amount: finalAmount,
                 status: 'success',
                 relatedJob: jobId,
                 razorpayOrderId: 'OFFLINE_' + Date.now(),
                 razorpayPaymentId: 'MANUAL_' + Date.now(),
-                description: `Offline Payment marked by: ${req.admin.name || 'Staff'}`
+                description: job.jobType === 'daily' 
+                    ? `Daily job 25% advance marked by: ${req.admin.name || 'Staff'}`
+                    : `Job post fee marked by: ${req.admin.name || 'Staff'}`
             };
             if (isCustomer) {
                 txnData.customer = req.admin._id;
