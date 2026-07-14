@@ -248,7 +248,7 @@ const getCustomerDashboard = async (req, res) => {
             $or: [
                 { customer: customerId }, 
                 { customer: customer.createdBy },
-                { userId: customer.createdBy }
+                { user: customer.createdBy }
             ],
             status: 'success'
         }).sort({ createdAt: -1 });
