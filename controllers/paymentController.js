@@ -37,6 +37,7 @@ const createOrder = async (req, res) => {
             relatedJob: jobId || undefined,
             relatedPlan: planId || undefined,
             description: type === 'daily_job_advance' ? 'Daily job 25% advance' :
+                type === 'daily_job_remaining' ? 'Daily job 75% remaining' :
                 type === 'subscription' ? 'Subscription purchase' :
                 type === 'service_package' ? `${packageType} Service Package` :
                 `Job post fee ₹${amount}`
@@ -237,6 +238,8 @@ const verifyPayment = async (req, res) => {
             }
             await Job.findByIdAndUpdate(jobId, updateData);
             message = type === 'daily_job_advance' ? 'Advance paid and Plan activated. Daily job is now live.' : 'Job post fee paid. Job is now live.';
+        } else if (type === 'daily_job_remaining' && jobId) {
+            message = 'Remaining 75% payment verified successfully. You can now hire the candidate.';
         }
 
         res.status(200).json({ success: true, message });

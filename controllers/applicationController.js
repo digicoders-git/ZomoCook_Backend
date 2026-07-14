@@ -254,15 +254,37 @@ const updateApplicationStatus = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Invalid status' });
         }
 
+        const existingApp = await Application.findById(applicationId).populate('job');
+        if (!existingApp) {
+            return res.status(404).json({ success: false, message: 'Application not found' });
+        }
+
+        if (status === 'Hired' && existingApp.job) {
+            const job = existingApp.job;
+            const isDailyJob = job.jobCategory === 'daily';
+            if (isDailyJob && job.advanceAmount > 0) {
+                const remainingTxn = await Transaction.findOne({
+                    relatedJob: job._id,
+                    type: 'daily_job_remaining',
+                    status: 'success'
+                });
+                if (!remainingTxn) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Hiring blocked. Remaining 75% payment is pending for this daily job.',
+                        requiresRemainingPayment: true,
+                        remainingAmount: Math.round(job.advanceAmount * 3),
+                        jobId: job._id
+                    });
+                }
+            }
+        }
+
         const application = await Application.findByIdAndUpdate(
             applicationId,
             { status },
             { new: true }
         ).populate('candidate').populate('job');
-
-        if (!application) {
-            return res.status(404).json({ success: false, message: 'Application not found' });
-        }
 
         if (application.candidate) {
             const notificationController = require('./notificationController');
@@ -589,6 +611,27 @@ const hireCook = async (req, res) => {
 
         if (!application) {
             return res.status(404).json({ success: false, message: 'Application not found' });
+        }
+
+        if (application.job) {
+            const job = application.job;
+            const isDailyJob = job.jobCategory === 'daily';
+            if (isDailyJob && job.advanceAmount > 0) {
+                const remainingTxn = await Transaction.findOne({
+                    relatedJob: job._id,
+                    type: 'daily_job_remaining',
+                    status: 'success'
+                });
+                if (!remainingTxn) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Hiring blocked. Remaining 75% payment is pending for this daily job.',
+                        requiresRemainingPayment: true,
+                        remainingAmount: Math.round(job.advanceAmount * 3),
+                        jobId: job._id
+                    });
+                }
+            }
         }
 
         application.status = 'Hired';
