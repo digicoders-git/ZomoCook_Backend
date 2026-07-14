@@ -389,14 +389,23 @@ const getApplications = async (req, res) => {
 const getCandidateMe = async (req, res) => {
     try {
         const last10 = req.admin.phone ? req.admin.phone.slice(-10) : '';
-        const candidate = await Candidate.findOne({
+        let candidate = await Candidate.findOne({
             $or: [
                 { _id: req.admin._id },
                 { createdBy: req.admin._id },
                 { phone: last10 ? new RegExp(last10 + '$') : req.admin.phone }
             ]
         }).populate('applications.job');
-        if (!candidate) return res.status(404).json({ success: false, message: 'Candidate profile not found' });
+        
+        if (!candidate) {
+            candidate = await Candidate.create({
+                name: req.admin.name || `User_${req.admin.phone.slice(-4)}`,
+                phone: req.admin.phone,
+                email: req.admin.email || undefined,
+                createdBy: req.admin._id,
+                creatorModel: 'User'
+            });
+        }
         res.status(200).json({ success: true, candidate });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -406,14 +415,23 @@ const getCandidateMe = async (req, res) => {
 const updateCandidateMe = async (req, res) => {
     try {
         const last10 = req.admin.phone ? req.admin.phone.slice(-10) : '';
-        const candidate = await Candidate.findOne({
+        let candidate = await Candidate.findOne({
             $or: [
                 { _id: req.admin._id },
                 { createdBy: req.admin._id },
                 { phone: last10 ? new RegExp(last10 + '$') : req.admin.phone }
             ]
         });
-        if (!candidate) return res.status(404).json({ success: false, message: 'Candidate profile not found' });
+        
+        if (!candidate) {
+            candidate = await Candidate.create({
+                name: req.admin.name || `User_${req.admin.phone.slice(-4)}`,
+                phone: req.admin.phone,
+                email: req.admin.email || undefined,
+                createdBy: req.admin._id,
+                creatorModel: 'User'
+            });
+        }
 
         const updateData = { ...req.body };
         
