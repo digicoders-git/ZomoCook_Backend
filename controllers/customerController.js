@@ -226,8 +226,14 @@ const getCustomerDashboard = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Customer not found' });
         }
 
-        // 2. Get Jobs Posted by this Customer
-        const jobs = await Job.find({ customer: customerId }).sort({ createdAt: -1 });
+        // 2. Get Jobs Posted by this Customer (looking by customerId or user createdBy ID)
+        const jobs = await Job.find({ 
+            $or: [
+                { customer: customerId }, 
+                { customer: customer.createdBy }, 
+                { createdBy: customer.createdBy }
+            ] 
+        }).sort({ createdAt: -1 });
 
         // 3. Get Applications (Assigned Candidates)
         // Note: Application model has customer field, or we can find by job ids
@@ -239,7 +245,11 @@ const getCustomerDashboard = async (req, res) => {
 
         // 4. Get Transactions
         const transactions = await Transaction.find({ 
-            customer: customerId,
+            $or: [
+                { customer: customerId }, 
+                { customer: customer.createdBy },
+                { userId: customer.createdBy }
+            ],
             status: 'success'
         }).sort({ createdAt: -1 });
 
@@ -247,7 +257,10 @@ const getCustomerDashboard = async (req, res) => {
 
         // 5. Get Active Subscription/Package
         const activeSubscriptions = await SubscriptionHistory.find({
-            customer: customerId,
+            $or: [
+                { customer: customerId }, 
+                { customer: customer.createdBy }
+            ],
             status: 'Active'
         }).populate('plan');
 
