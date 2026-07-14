@@ -3,6 +3,7 @@ const Job = require('../models/Job');
 const Candidate = require('../models/Candidate');
 const ServicePackagePayment = require('../models/ServicePackagePayment');
 const ServicePackage = require('../models/ServicePackage');
+const Transaction = require('../models/Transaction');
 
 const syncCandidateApplication = async (application) => {
     if (!application || !application.candidate || !application.job) return;
