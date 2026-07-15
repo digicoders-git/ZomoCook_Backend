@@ -9,7 +9,8 @@ const {
     toggleCandidateStatus,
     getApplications,
     getCandidateMe,
-    updateCandidateMe
+    updateCandidateMe,
+    generateResumeHtml
 } = require('../controllers/candidateController');
 const { protect } = require('../middleware/authMiddleware');
 const multer = require('multer');
@@ -42,6 +43,8 @@ router.route('/')
 
 router.route('/applications')
     .get(protect, getApplications);
+
+router.get('/:id/resume-cv', generateResumeHtml);
 
 router.route('/me')
     .get(protect, getCandidateMe)

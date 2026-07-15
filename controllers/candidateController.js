@@ -483,6 +483,286 @@ const updateCandidateMe = async (req, res) => {
     }
 };
 
+const generateResumeHtml = async (req, res) => {
+    try {
+        const candidate = await Candidate.findById(req.params.id);
+        if (!candidate) {
+            return res.status(404).send('<h1>Candidate Not Found</h1>');
+        }
+
+        const expVal = candidate.jobPreference?.experience?.value || '0';
+        const expUnit = candidate.jobPreference?.experience?.unit || 'years';
+        const expText = `${expVal}+ ${expUnit.charAt(0).toUpperCase() + expUnit.slice(1)}`;
+        const titleText = candidate.jobPreference?.jobPositions?.[0] || 'Executive Chef';
+
+        const profileImageSrc = candidate.profileImage
+            ? (candidate.profileImage.startsWith('http')
+                ? candidate.profileImage
+                : '/' + candidate.profileImage.replace(/\\/g, '/'))
+            : '';
+
+        const skillsList = candidate.skills || [];
+        const personalDetails = {
+            age: candidate.age || 'N/A',
+            gender: candidate.gender ? (candidate.gender.charAt(0).toUpperCase() + candidate.gender.slice(1)) : 'N/A',
+            maritalStatus: candidate.maritalStatus ? (candidate.maritalStatus.charAt(0).toUpperCase() + candidate.maritalStatus.slice(1)) : 'Single',
+            languages: candidate.languages?.length ? candidate.languages.join(', ') : 'English, Hindi'
+        };
+
+        const experiences = candidate.workExperience?.experiences || [];
+        const lastCompany = candidate.workExperience?.lastCompany || {};
+
+        let experienceHtml = '';
+        if (experiences.length > 0) {
+            experienceHtml = experiences.map(exp => `
+                <div class="mb-4">
+                    <h4 class="font-bold text-gray-800 text-sm">${exp.position || 'Chef'}</h4>
+                    <p class="text-xs text-blue-600 font-semibold">${exp.from || ''} - ${exp.to || 'Present'}</p>
+                    <p class="text-xs text-gray-600 mt-1">${exp.shortDetail || exp.jobProfile || ''}</p>
+                </div>
+            `).join('');
+        } else if (lastCompany.name) {
+            experienceHtml = `
+                <div class="mb-4">
+                    <h4 class="font-bold text-gray-800 text-sm">${lastCompany.role || 'Chef'}</h4>
+                    <p class="text-xs text-blue-600 font-semibold">${lastCompany.duration || 'N/A'}</p>
+                    <p class="text-xs text-gray-600 mt-1">Worked at ${lastCompany.name} (${lastCompany.workplaceType || 'Hotel'})</p>
+                </div>
+            `;
+        } else {
+            experienceHtml = `
+                <div class="mb-4">
+                    <h4 class="font-bold text-gray-800 text-sm">Professional Cook / Chef</h4>
+                    <p class="text-xs text-blue-600 font-semibold">Self-Employed / Freelancer</p>
+                    <p class="text-xs text-gray-600 mt-1">Experienced in preparing delicious home & commercial meals according to client tastes and requirements.</p>
+                </div>
+            `;
+        }
+
+        const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${candidate.name} - Resume</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: #f1f5f9;
+        }
+        @media print {
+            body {
+                background-color: #ffffff;
+            }
+            .no-print {
+                display: none !important;
+            }
+            .print-container {
+                box-shadow: none !important;
+                border: none !important;
+                margin: 0 !important;
+                width: 100% !important;
+                max-width: 100% !important;
+            }
+        }
+    </style>
+</head>
+<body class="p-0 sm:p-6 flex flex-col items-center">
+
+    <!-- Action Header -->
+    <div class="no-print w-full max-w-[800px] mb-4 flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+        <span class="text-slate-600 text-sm font-semibold">📄 ZomoCook Verified Resume</span>
+        <button onclick="window.print()" class="bg-[#0056D2] hover:bg-blue-700 text-white font-bold text-sm py-2 px-5 rounded-lg shadow-sm flex items-center gap-2 transition-all">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            Download PDF / Print
+        </button>
+    </div>
+
+    <!-- Resume Container -->
+    <div class="print-container w-full max-w-[800px] bg-white shadow-lg border border-slate-200 overflow-hidden flex flex-col min-h-[1120px]">
+        
+        <!-- Top Main Layout Grid -->
+        <div class="flex-grow grid grid-cols-12">
+            
+            <!-- Left Column (White Background) -->
+            <div class="col-span-7 p-8 sm:p-10 flex flex-col justify-between">
+                <div>
+                    <!-- Name & Subtitle -->
+                    <h1 class="text-4xl font-extrabold text-[#0056D2] leading-tight tracking-tight uppercase">${candidate.name}</h1>
+                    <p class="text-md font-semibold text-slate-700 mt-2">${titleText} - ${expText} Experience</p>
+                    
+                    <!-- Summary Section -->
+                    <div class="mt-8">
+                        <h3 class="text-xs font-extrabold tracking-widest text-[#0056D2] uppercase border-b-2 border-[#0056D2] pb-1">Summary</h3>
+                        <p class="text-xs text-slate-600 leading-relaxed mt-3 font-normal">
+                            ${candidate.about || 'Dedicated and experienced culinary professional with a passion for preparing high-quality meals. Proven track record of cleanliness, flavor consistency, and excellent service standards. Committed to delivering food excellence and ensuring complete client satisfaction.'}
+                        </p>
+                    </div>
+
+                    <!-- Work Experience -->
+                    <div class="mt-8">
+                        <h3 class="text-xs font-extrabold tracking-widest text-[#0056D2] uppercase border-b-2 border-[#0056D2] pb-1">Work Experience</h3>
+                        <div class="mt-4 flex flex-col gap-2">
+                            ${experienceHtml}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Additional Details -->
+                <div class="mt-8">
+                    <h3 class="text-xs font-extrabold tracking-widest text-[#0056D2] uppercase border-b-2 border-[#0056D2] pb-1">Additional Details</h3>
+                    <div class="grid grid-cols-2 gap-y-4 gap-x-2 mt-4">
+                        <div>
+                            <span class="block text-[10px] text-slate-500 font-bold uppercase">Total Experience</span>
+                            <span class="text-xs font-extrabold text-slate-800">${expText}</span>
+                        </div>
+                        <div>
+                            <span class="block text-[10px] text-slate-500 font-bold uppercase">Expected Salary</span>
+                            <span class="text-xs font-extrabold text-slate-800">₹${candidate.jobPreference?.expectedSalary || 'N/A'}</span>
+                        </div>
+                        <div>
+                            <span class="block text-[10px] text-slate-500 font-bold uppercase">Current Salary</span>
+                            <span class="text-xs font-extrabold text-slate-800">₹${candidate.jobPreference?.currentSalary || 'N/A'}</span>
+                        </div>
+                        <div>
+                            <span class="block text-[10px] text-slate-500 font-bold uppercase">Ready to Relocate</span>
+                            <span class="text-xs font-extrabold text-slate-800">Yes</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column (Blue Background) -->
+            <div class="col-span-5 bg-[#0056D2] p-8 sm:p-10 text-white flex flex-col justify-between">
+                <div>
+                    <!-- Profile Picture Block -->
+                    <div class="flex justify-center mb-8">
+                        <div class="w-32 h-32 rounded-full border-4 border-white bg-white overflow-hidden flex items-center justify-center">
+                            ${profileImageSrc 
+                                ? `<img src="${profileImageSrc}" class="w-full h-full object-cover" alt="Profile Image" />`
+                                : `<svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 text-slate-300" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd" />
+                                   </svg>`
+                            }
+                        </div>
+                    </div>
+
+                    <!-- Contact Details -->
+                    <div class="flex flex-col gap-3 mb-8">
+                        <div class="flex items-center gap-3">
+                            <span class="w-7 h-7 bg-white/10 rounded-full flex items-center justify-center text-sm">📍</span>
+                            <span class="text-xs font-semibold">${candidate.city || 'Lucknow'}, ${candidate.state || 'Uttar Pradesh'}</span>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <span class="w-7 h-7 bg-white/10 rounded-full flex items-center justify-center text-sm">📞</span>
+                            <span class="text-xs font-semibold">${candidate.phone}</span>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <span class="w-7 h-7 bg-white/10 rounded-full flex items-center justify-center text-sm">✉️</span>
+                            <span class="text-xs font-semibold">${candidate.email || 'N/A'}</span>
+                        </div>
+                    </div>
+
+                    <!-- Core Qualifications -->
+                    <div class="mb-8">
+                        <h3 class="text-xs font-extrabold tracking-widest uppercase border-b border-white/20 pb-1 mb-3">Core Qualifications</h3>
+                        <ul class="list-disc pl-4 text-xs space-y-1.5 font-light">
+                            ${skillsList.map(skill => `<li>${skill}</li>`).join('') || `
+                                <li>Table Service</li>
+                                <li>Customer Handling</li>
+                                <li>Food & Beverage Service</li>
+                                <li>Hygiene & Cleanliness</li>
+                            `}
+                        </ul>
+                    </div>
+
+                    <!-- Personal Details -->
+                    <div class="mb-8">
+                        <h3 class="text-xs font-extrabold tracking-widest uppercase border-b border-white/20 pb-1 mb-3">Personal Details</h3>
+                        <div class="space-y-2 text-xs">
+                            <div class="flex justify-between border-b border-white/10 pb-1">
+                                <span class="opacity-80">Age</span>
+                                <span class="font-bold">${personalDetails.age} Years</span>
+                            </div>
+                            <div class="flex justify-between border-b border-white/10 pb-1">
+                                <span class="opacity-80">Gender</span>
+                                <span class="font-bold">${personalDetails.gender}</span>
+                            </div>
+                            <div class="flex justify-between border-b border-white/10 pb-1">
+                                <span class="opacity-80">Marital Status</span>
+                                <span class="font-bold">${personalDetails.maritalStatus}</span>
+                            </div>
+                            <div class="flex justify-between border-b border-white/10 pb-1">
+                                <span class="opacity-80">Languages</span>
+                                <span class="font-bold text-right">${personalDetails.languages}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Certifications -->
+                    <div>
+                        <h3 class="text-xs font-extrabold tracking-widest uppercase border-b border-white/20 pb-1 mb-3">Certifications</h3>
+                        <ul class="list-disc pl-4 text-xs space-y-1.5 font-light">
+                            <li>Verified Profile - ZomoCook</li>
+                            <li>Aadhaar & Mobile Verified</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Footer Verification Checklist Row -->
+        <div class="bg-slate-50 border-t border-b border-slate-200 py-4 px-6 flex flex-wrap justify-between items-center gap-2">
+            <div class="flex items-center gap-1.5 text-xs text-slate-800 font-semibold">
+                <span class="text-green-600 font-extrabold text-sm">✓</span> Aadhaar Verified
+            </div>
+            <div class="flex items-center gap-1.5 text-xs text-slate-800 font-semibold">
+                <span class="text-green-600 font-extrabold text-sm">✓</span> Mobile Verified
+            </div>
+            <div class="flex items-center gap-1.5 text-xs text-slate-800 font-semibold">
+                <span class="text-green-600 font-extrabold text-sm">✓</span> Address Verified
+            </div>
+            <div class="flex items-center gap-1.5 text-xs text-slate-800 font-semibold">
+                <span class="text-green-600 font-extrabold text-sm">✓</span> Experience Verified
+            </div>
+            <div class="text-xs font-extrabold text-[#0056D2] border border-[#0056D2] py-1 px-3 rounded-full">
+                Profile Reviewed by ZomoCook
+            </div>
+        </div>
+
+        <!-- Bottom Dark Corporate Bar -->
+        <div class="bg-[#002D62] text-white p-4 flex justify-between items-center px-6">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 bg-red-600 rounded flex items-center justify-center font-black text-white text-md">Z</div>
+                <div class="text-[10px] leading-tight">
+                    <p class="font-extrabold text-white">This profile has been verified by ZomoCook Recruitment Team.</p>
+                    <p class="opacity-80">We ensure trusted, skilled & professional staff for your business.</p>
+                </div>
+            </div>
+            <div class="text-xs font-bold tracking-wider opacity-90">
+                www.zomocook.com
+            </div>
+        </div>
+
+    </div>
+
+</body>
+</html>
+        `;
+        
+        res.setHeader('Content-Type', 'text/html');
+        return res.send(html);
+    } catch (error) {
+        res.status(500).send('<h1>Server Error</h1>');
+    }
+};
+
 module.exports = { 
     createCandidate, 
     getCandidates, 
@@ -492,5 +772,6 @@ module.exports = {
     toggleCandidateStatus, 
     getApplications,
     getCandidateMe,
-    updateCandidateMe
+    updateCandidateMe,
+    generateResumeHtml
 };
