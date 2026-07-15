@@ -6,8 +6,7 @@ const bannerSchema = new mongoose.Schema({
     trim: true
   },
   image: {
-    type: String,
-    required: [true, 'Please upload a banner image']
+    type: String
   },
   link: {
     type: String,

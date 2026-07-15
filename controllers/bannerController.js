@@ -21,16 +21,12 @@ const createBanner = async (req, res) => {
     try {
         const { title, link, status, targetAudience } = req.body;
         
-        if (!req.file) {
-            return res.status(400).json({ success: false, message: 'Please upload a banner image' });
-        }
-
         const bannerData = {
             title,
             link,
             status,
             targetAudience: targetAudience || 'both',
-            image: req.file.path,
+            image: req.file ? req.file.path : '',
             createdBy: req.admin?._id
         };
 
