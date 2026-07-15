@@ -394,6 +394,7 @@ const checkJobPostPayment = async (req, res) => {
             requiresPayment: true,
             paymentType: 'job_post_fee',
             amount: feeAmount,
+            description: settings.jobPostFeeDescription || '',
             message: `Job post requires ₹${feeAmount} payment`
         });
     } catch (error) {
