@@ -21,6 +21,11 @@ const querySchema = new mongoose.Schema({
     required: [true, 'Please add a message'],
     trim: true
   },
+  category: {
+    type: String,
+    enum: ['Candidate', 'Customer', 'General'],
+    default: 'General'
+  },
   status: {
     type: String,
     enum: ['New', 'Assigned', 'In Progress', 'Waiting for Customer', 'Waiting for Candidate', 'Escalated', 'Resolved', 'Closed'],

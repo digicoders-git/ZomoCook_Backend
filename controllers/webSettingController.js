@@ -34,7 +34,8 @@ const updateWebSettings = async (req, res) => {
             siteName, companyEmail, contactNumber,
             fullAddress, copyrightText, googleMapScript,
             facebookUrl, instagramUrl, twitterUrl, linkedinUrl, youtubeUrl,
-            importantInstruction, rescheduleMessage
+            importantInstruction, rescheduleMessage,
+            jobPostFee, jobPostFeeStatus, jobPostFeeDescription
         } = req.body;
 
         if (siteName !== undefined) settings.siteName = siteName;
@@ -50,6 +51,9 @@ const updateWebSettings = async (req, res) => {
         if (youtubeUrl !== undefined) settings.youtubeUrl = youtubeUrl;
         if (importantInstruction !== undefined) settings.importantInstruction = importantInstruction;
         if (rescheduleMessage !== undefined) settings.rescheduleMessage = rescheduleMessage;
+        if (jobPostFee !== undefined) settings.jobPostFee = jobPostFee;
+        if (jobPostFeeStatus !== undefined) settings.jobPostFeeStatus = jobPostFeeStatus;
+        if (jobPostFeeDescription !== undefined) settings.jobPostFeeDescription = jobPostFeeDescription;
 
         // Handle file uploads
         if (req.files) {
