@@ -19,10 +19,12 @@ const deleteFile = (filePath) => {
  */
 const createBanner = async (req, res) => {
     try {
-        const { title, link, status, targetAudience } = req.body;
+        const { title, subtitle, cta, link, status, targetAudience } = req.body;
         
         const bannerData = {
             title,
+            subtitle,
+            cta,
             link,
             status,
             targetAudience: targetAudience || 'both',
@@ -92,11 +94,13 @@ const updateBanner = async (req, res) => {
         }
 
         const title = req.body.title !== undefined ? req.body.title : banner.title;
+        const subtitle = req.body.subtitle !== undefined ? req.body.subtitle : banner.subtitle;
+        const cta = req.body.cta !== undefined ? req.body.cta : banner.cta;
         const link = req.body.link !== undefined ? req.body.link : banner.link;
         const status = req.body.status !== undefined ? req.body.status : banner.status;
         const targetAudience = req.body.targetAudience !== undefined ? req.body.targetAudience : banner.targetAudience;
 
-        const updateData = { title, link, status, targetAudience };
+        const updateData = { title, subtitle, cta, link, status, targetAudience };
 
         if (req.file) {
             deleteFile(banner.image);
