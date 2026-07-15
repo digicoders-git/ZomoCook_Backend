@@ -18,9 +18,19 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 router.get('/', protect, getWebSettings);
-router.put('/', protect, upload.fields([
-    { name: 'logo', maxCount: 1 },
-    { name: 'favicon', maxCount: 1 }
-]), updateWebSettings);
+
+const uploadSettingsFiles = (req, res, next) => {
+    const contentType = req.headers['content-type'] || '';
+    if (contentType.includes('multipart/form-data')) {
+        upload.fields([
+            { name: 'logo', maxCount: 1 },
+            { name: 'favicon', maxCount: 1 }
+        ])(req, res, next);
+    } else {
+        next();
+    }
+};
+
+router.put('/', protect, uploadSettingsFiles, updateWebSettings);
 
 module.exports = router;
