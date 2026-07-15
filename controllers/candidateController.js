@@ -548,10 +548,13 @@ const generateResumeHtml = async (req, res) => {
     <title>${candidate.name} - Resume</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <style>
         body {
             font-family: 'Outfit', sans-serif;
             background-color: #f1f5f9;
+            margin: 0;
+            padding: 0;
         }
         @media print {
             body {
@@ -560,92 +563,85 @@ const generateResumeHtml = async (req, res) => {
             .no-print {
                 display: none !important;
             }
-            .print-container {
-                box-shadow: none !important;
-                border: none !important;
-                margin: 0 !important;
-                width: 100% !important;
-                max-width: 100% !important;
-            }
         }
     </style>
 </head>
-<body class="p-0 sm:p-6 flex flex-col items-center">
+<body class="flex flex-col items-center justify-start min-h-screen py-4 sm:py-8">
 
-    <!-- Action Header -->
-    <div class="no-print w-full max-w-[800px] mb-4 flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-        <span class="text-slate-600 text-sm font-semibold">📄 ZomoCook Verified Resume</span>
-        <button onclick="window.print()" class="bg-[#0056D2] hover:bg-blue-700 text-white font-bold text-sm py-2 px-5 rounded-lg shadow-sm flex items-center gap-2 transition-all">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-            Download PDF / Print
+    <!-- Status Toast / Loader -->
+    <div id="status-container" class="w-full max-w-[794px] mb-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex justify-between items-center px-6">
+        <div class="flex items-center gap-3">
+            <div id="status-spinner" class="animate-spin rounded-full h-5 w-5 border-2 border-[#0056D2] border-t-transparent"></div>
+            <span id="status-text" class="text-slate-700 text-sm font-bold">Generating and downloading your resume PDF...</span>
+        </div>
+        <button onclick="downloadPDF()" class="bg-[#0056D2] hover:bg-blue-700 text-white font-bold text-xs py-1.5 px-4 rounded-lg shadow-sm transition-all">
+            Download Again
         </button>
     </div>
 
-    <!-- Resume Container -->
-    <div class="print-container w-full max-w-[800px] bg-white shadow-lg border border-slate-200 overflow-hidden flex flex-col min-h-[1120px]">
+    <!-- Resume A4 Frame -->
+    <div id="resume-content" class="w-[794px] h-[1122px] bg-white shadow-xl border border-slate-200 overflow-hidden flex flex-col justify-between" style="box-sizing: border-box;">
         
-        <!-- Top Main Layout Grid -->
-        <div class="flex-grow grid grid-cols-12">
+        <!-- Main Grid -->
+        <div class="flex-grow grid grid-cols-12 h-[1012px]">
             
-            <!-- Left Column (White Background) -->
-            <div class="col-span-7 p-8 sm:p-10 flex flex-col justify-between">
+            <!-- Left Column (White) -->
+            <div class="col-span-7 p-6 flex flex-col justify-between h-full" style="box-sizing: border-box;">
                 <div>
                     <!-- Name & Subtitle -->
-                    <h1 class="text-4xl font-extrabold text-[#0056D2] leading-tight tracking-tight uppercase">${candidate.name}</h1>
-                    <p class="text-md font-semibold text-slate-700 mt-2">${titleText} - ${expText} Experience</p>
+                    <h1 class="text-3xl font-extrabold text-[#0056D2] leading-tight tracking-tight uppercase">${candidate.name}</h1>
+                    <p class="text-sm font-bold text-slate-700 mt-1">${titleText} - ${expText} Experience</p>
                     
                     <!-- Summary Section -->
-                    <div class="mt-8">
-                        <h3 class="text-xs font-extrabold tracking-widest text-[#0056D2] uppercase border-b-2 border-[#0056D2] pb-1">Summary</h3>
-                        <p class="text-xs text-slate-600 leading-relaxed mt-3 font-normal">
+                    <div class="mt-6">
+                        <h3 class="text-[10px] font-extrabold tracking-widest text-[#0056D2] uppercase border-b border-[#0056D2]/30 pb-1 mb-2">Summary</h3>
+                        <p class="text-[11px] text-slate-600 leading-relaxed font-normal">
                             ${candidate.about || 'Dedicated and experienced culinary professional with a passion for preparing high-quality meals. Proven track record of cleanliness, flavor consistency, and excellent service standards. Committed to delivering food excellence and ensuring complete client satisfaction.'}
                         </p>
                     </div>
 
                     <!-- Work Experience -->
-                    <div class="mt-8">
-                        <h3 class="text-xs font-extrabold tracking-widest text-[#0056D2] uppercase border-b-2 border-[#0056D2] pb-1">Work Experience</h3>
-                        <div class="mt-4 flex flex-col gap-2">
+                    <div class="mt-6">
+                        <h3 class="text-[10px] font-extrabold tracking-widest text-[#0056D2] uppercase border-b border-[#0056D2]/30 pb-1 mb-2">Work Experience</h3>
+                        <div class="flex flex-col gap-1.5">
                             ${experienceHtml}
                         </div>
                     </div>
                 </div>
 
                 <!-- Additional Details -->
-                <div class="mt-8">
-                    <h3 class="text-xs font-extrabold tracking-widest text-[#0056D2] uppercase border-b-2 border-[#0056D2] pb-1">Additional Details</h3>
-                    <div class="grid grid-cols-2 gap-y-4 gap-x-2 mt-4">
+                <div class="mt-4 mb-2">
+                    <h3 class="text-[10px] font-extrabold tracking-widest text-[#0056D2] uppercase border-b border-[#0056D2]/30 pb-1 mb-2">Additional Details</h3>
+                    <div class="grid grid-cols-2 gap-y-3 gap-x-2">
                         <div>
-                            <span class="block text-[10px] text-slate-500 font-bold uppercase">Total Experience</span>
-                            <span class="text-xs font-extrabold text-slate-800">${expText}</span>
+                            <span class="block text-[8px] text-slate-500 font-bold uppercase tracking-wider">Total Experience</span>
+                            <span class="text-[11px] font-extrabold text-slate-800">${expText}</span>
                         </div>
                         <div>
-                            <span class="block text-[10px] text-slate-500 font-bold uppercase">Expected Salary</span>
-                            <span class="text-xs font-extrabold text-slate-800">₹${candidate.jobPreference?.expectedSalary || 'N/A'}</span>
+                            <span class="block text-[8px] text-slate-500 font-bold uppercase tracking-wider">Expected Salary</span>
+                            <span class="text-[11px] font-extrabold text-slate-800">₹${candidate.jobPreference?.expectedSalary || 'N/A'}</span>
                         </div>
                         <div>
-                            <span class="block text-[10px] text-slate-500 font-bold uppercase">Current Salary</span>
-                            <span class="text-xs font-extrabold text-slate-800">₹${candidate.jobPreference?.currentSalary || 'N/A'}</span>
+                            <span class="block text-[8px] text-slate-500 font-bold uppercase tracking-wider">Current Salary</span>
+                            <span class="text-[11px] font-extrabold text-slate-800">₹${candidate.jobPreference?.currentSalary || 'N/A'}</span>
                         </div>
                         <div>
-                            <span class="block text-[10px] text-slate-500 font-bold uppercase">Ready to Relocate</span>
-                            <span class="text-xs font-extrabold text-slate-800">Yes</span>
+                            <span class="block text-[8px] text-slate-500 font-bold uppercase tracking-wider">Ready to Relocate</span>
+                            <span class="text-[11px] font-extrabold text-slate-800">Yes</span>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Right Column (Blue Background) -->
-            <div class="col-span-5 bg-[#0056D2] p-8 sm:p-10 text-white flex flex-col justify-between">
+            <!-- Right Column (Blue) -->
+            <div class="col-span-5 bg-[#0056D2] p-6 text-white flex flex-col justify-between h-full" style="box-sizing: border-box;">
                 <div>
                     <!-- Profile Picture Block -->
-                    <div class="flex justify-center mb-8">
-                        <div class="w-32 h-32 rounded-full border-4 border-white bg-white overflow-hidden flex items-center justify-center">
+                    <div class="flex justify-center mb-6">
+                        <div class="w-24 h-24 rounded-full border-2 border-white bg-white overflow-hidden flex items-center justify-center">
                             ${profileImageSrc 
                                 ? `<img src="${profileImageSrc}" class="w-full h-full object-cover" alt="Profile Image" />`
-                                : `<svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 text-slate-300" viewBox="0 0 20 20" fill="currentColor">
+                                : `<svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-slate-300" viewBox="0 0 20 20" fill="currentColor">
                                     <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd" />
                                    </svg>`
                             }
@@ -653,26 +649,26 @@ const generateResumeHtml = async (req, res) => {
                     </div>
 
                     <!-- Contact Details -->
-                    <div class="flex flex-col gap-3 mb-8">
-                        <div class="flex items-center gap-3">
-                            <span class="w-7 h-7 bg-white/10 rounded-full flex items-center justify-center text-sm">📍</span>
-                            <span class="text-xs font-semibold">${candidate.city || 'Lucknow'}, ${candidate.state || 'Uttar Pradesh'}</span>
+                    <div class="flex flex-col gap-2 mb-6">
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs">📍</span>
+                            <span class="text-[11px] font-semibold">${candidate.city || 'Lucknow'}, ${candidate.state || 'Uttar Pradesh'}</span>
                         </div>
-                        <div class="flex items-center gap-3">
-                            <span class="w-7 h-7 bg-white/10 rounded-full flex items-center justify-center text-sm">📞</span>
-                            <span class="text-xs font-semibold">${candidate.phone}</span>
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs">📞</span>
+                            <span class="text-[11px] font-semibold">${candidate.phone}</span>
                         </div>
-                        <div class="flex items-center gap-3">
-                            <span class="w-7 h-7 bg-white/10 rounded-full flex items-center justify-center text-sm">✉️</span>
-                            <span class="text-xs font-semibold">${candidate.email || 'N/A'}</span>
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs">✉️</span>
+                            <span class="text-[11px] font-semibold">${candidate.email || 'N/A'}</span>
                         </div>
                     </div>
 
                     <!-- Core Qualifications -->
-                    <div class="mb-8">
-                        <h3 class="text-xs font-extrabold tracking-widest uppercase border-b border-white/20 pb-1 mb-3">Core Qualifications</h3>
-                        <ul class="list-disc pl-4 text-xs space-y-1.5 font-light">
-                            ${skillsList.map(skill => `<li>${skill}</li>`).join('') || `
+                    <div class="mb-6">
+                        <h3 class="text-[10px] font-extrabold tracking-widest uppercase border-b border-white/20 pb-1 mb-2">Core Qualifications</h3>
+                        <ul class="list-disc pl-4 text-[11px] space-y-1 font-light">
+                            ${skillsList.slice(0, 5).map(skill => `<li>${skill}</li>`).join('') || `
                                 <li>Table Service</li>
                                 <li>Customer Handling</li>
                                 <li>Food & Beverage Service</li>
@@ -682,22 +678,22 @@ const generateResumeHtml = async (req, res) => {
                     </div>
 
                     <!-- Personal Details -->
-                    <div class="mb-8">
-                        <h3 class="text-xs font-extrabold tracking-widest uppercase border-b border-white/20 pb-1 mb-3">Personal Details</h3>
-                        <div class="space-y-2 text-xs">
-                            <div class="flex justify-between border-b border-white/10 pb-1">
+                    <div class="mb-6">
+                        <h3 class="text-[10px] font-extrabold tracking-widest uppercase border-b border-white/20 pb-1 mb-2">Personal Details</h3>
+                        <div class="space-y-1 text-[11px]">
+                            <div class="flex justify-between border-b border-white/10 pb-0.5">
                                 <span class="opacity-80">Age</span>
                                 <span class="font-bold">${personalDetails.age} Years</span>
                             </div>
-                            <div class="flex justify-between border-b border-white/10 pb-1">
+                            <div class="flex justify-between border-b border-white/10 pb-0.5">
                                 <span class="opacity-80">Gender</span>
                                 <span class="font-bold">${personalDetails.gender}</span>
                             </div>
-                            <div class="flex justify-between border-b border-white/10 pb-1">
+                            <div class="flex justify-between border-b border-white/10 pb-0.5">
                                 <span class="opacity-80">Marital Status</span>
                                 <span class="font-bold">${personalDetails.maritalStatus}</span>
                             </div>
-                            <div class="flex justify-between border-b border-white/10 pb-1">
+                            <div class="flex justify-between border-b border-white/10 pb-0.5">
                                 <span class="opacity-80">Languages</span>
                                 <span class="font-bold text-right">${personalDetails.languages}</span>
                             </div>
@@ -706,8 +702,8 @@ const generateResumeHtml = async (req, res) => {
 
                     <!-- Certifications -->
                     <div>
-                        <h3 class="text-xs font-extrabold tracking-widest uppercase border-b border-white/20 pb-1 mb-3">Certifications</h3>
-                        <ul class="list-disc pl-4 text-xs space-y-1.5 font-light">
+                        <h3 class="text-[10px] font-extrabold tracking-widest uppercase border-b border-white/20 pb-1 mb-2">Certifications</h3>
+                        <ul class="list-disc pl-4 text-[11px] space-y-1 font-light">
                             <li>Verified Profile - ZomoCook</li>
                             <li>Aadhaar & Mobile Verified</li>
                         </ul>
@@ -718,39 +714,74 @@ const generateResumeHtml = async (req, res) => {
         </div>
 
         <!-- Footer Verification Checklist Row -->
-        <div class="bg-slate-50 border-t border-b border-slate-200 py-4 px-6 flex flex-wrap justify-between items-center gap-2">
-            <div class="flex items-center gap-1.5 text-xs text-slate-800 font-semibold">
-                <span class="text-green-600 font-extrabold text-sm">✓</span> Aadhaar Verified
+        <div class="bg-slate-50 border-t border-b border-slate-200 py-2.5 px-6 flex justify-between items-center h-[50px] w-full" style="box-sizing: border-box;">
+            <div class="flex items-center gap-1 text-[10px] text-slate-800 font-bold">
+                <span class="text-green-600 font-extrabold">✓</span> Aadhaar Verified
             </div>
-            <div class="flex items-center gap-1.5 text-xs text-slate-800 font-semibold">
-                <span class="text-green-600 font-extrabold text-sm">✓</span> Mobile Verified
+            <div class="flex items-center gap-1 text-[10px] text-slate-800 font-bold">
+                <span class="text-green-600 font-extrabold">✓</span> Mobile Verified
             </div>
-            <div class="flex items-center gap-1.5 text-xs text-slate-800 font-semibold">
-                <span class="text-green-600 font-extrabold text-sm">✓</span> Address Verified
+            <div class="flex items-center gap-1 text-[10px] text-slate-800 font-bold">
+                <span class="text-green-600 font-extrabold">✓</span> Address Verified
             </div>
-            <div class="flex items-center gap-1.5 text-xs text-slate-800 font-semibold">
-                <span class="text-green-600 font-extrabold text-sm">✓</span> Experience Verified
+            <div class="flex items-center gap-1 text-[10px] text-slate-800 font-bold">
+                <span class="text-green-600 font-extrabold">✓</span> Experience Verified
             </div>
-            <div class="text-xs font-extrabold text-[#0056D2] border border-[#0056D2] py-1 px-3 rounded-full">
+            <div class="text-[9px] font-extrabold text-[#0056D2] border border-[#0056D2] py-0.5 px-2.5 rounded-full">
                 Profile Reviewed by ZomoCook
             </div>
         </div>
 
         <!-- Bottom Dark Corporate Bar -->
-        <div class="bg-[#002D62] text-white p-4 flex justify-between items-center px-6">
-            <div class="flex items-center gap-3">
-                <div class="w-8 h-8 bg-red-600 rounded flex items-center justify-center font-black text-white text-md">Z</div>
-                <div class="text-[10px] leading-tight">
+        <div class="bg-[#002D62] text-white p-3 flex justify-between items-center px-6 h-[60px] w-full" style="box-sizing: border-box;">
+            <div class="flex items-center gap-2">
+                <div class="w-6 h-6 bg-red-600 rounded flex items-center justify-center font-black text-white text-xs">Z</div>
+                <div class="text-[8px] leading-tight">
                     <p class="font-extrabold text-white">This profile has been verified by ZomoCook Recruitment Team.</p>
                     <p class="opacity-80">We ensure trusted, skilled & professional staff for your business.</p>
                 </div>
             </div>
-            <div class="text-xs font-bold tracking-wider opacity-90">
+            <div class="text-[9px] font-bold tracking-wider opacity-90">
                 www.zomocook.com
             </div>
         </div>
 
     </div>
+
+    <!-- auto download script -->
+    <script>
+        function downloadPDF() {
+            const container = document.getElementById('status-container');
+            const spinner = document.getElementById('status-spinner');
+            const statusText = document.getElementById('status-text');
+            
+            spinner.style.display = 'block';
+            statusText.innerText = 'Generating and downloading your resume PDF...';
+            
+            const element = document.getElementById('resume-content');
+            const opt = {
+                margin:       0,
+                filename:     '${candidate.name.replace(/\s+/g, "_")}_Resume.pdf',
+                image:        { type: 'jpeg', quality: 1.0 },
+                html2canvas:  { scale: 2.5, useCORS: true, logging: false },
+                jsPDF:        { unit: 'px', format: [794, 1122], orientation: 'portrait' }
+            };
+            
+            html2pdf().set(opt).from(element).save().then(() => {
+                spinner.style.display = 'none';
+                statusText.innerText = 'Resume PDF downloaded successfully! You can close this tab.';
+            }).catch(err => {
+                spinner.style.display = 'none';
+                statusText.innerText = 'Failed to generate PDF. Click Download Again.';
+                console.error(err);
+            });
+        }
+        
+        window.onload = function() {
+            // Wait brief moment for fonts/images to settle
+            setTimeout(downloadPDF, 800);
+        };
+    </script>
 
 </body>
 </html>
