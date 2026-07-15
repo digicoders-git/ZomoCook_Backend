@@ -35,7 +35,8 @@ const updateWebSettings = async (req, res) => {
             fullAddress, copyrightText, googleMapScript,
             facebookUrl, instagramUrl, twitterUrl, linkedinUrl, youtubeUrl,
             importantInstruction, rescheduleMessage,
-            jobPostFee, jobPostFeeStatus, jobPostFeeDescription
+            jobPostFee, jobPostFeeStatus, jobPostFeeDescription,
+            responsibilities
         } = req.body;
 
         if (siteName !== undefined) settings.siteName = siteName;
@@ -54,6 +55,19 @@ const updateWebSettings = async (req, res) => {
         if (jobPostFee !== undefined) settings.jobPostFee = jobPostFee;
         if (jobPostFeeStatus !== undefined) settings.jobPostFeeStatus = jobPostFeeStatus;
         if (jobPostFeeDescription !== undefined) settings.jobPostFeeDescription = jobPostFeeDescription;
+
+        if (responsibilities !== undefined) {
+            try {
+                if (typeof responsibilities === 'string') {
+                    settings.responsibilities = JSON.parse(responsibilities);
+                } else {
+                    settings.responsibilities = responsibilities;
+                }
+                settings.markModified('responsibilities');
+            } catch (err) {
+                console.error("Error parsing responsibilities JSON:", err);
+            }
+        }
 
         // Handle file uploads
         if (req.files) {
