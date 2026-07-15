@@ -59,17 +59,10 @@ const handleStaticFiles = (req, res, next) => {
   
   // Fallback if the requested file is missing (e.g. Render server restarted)
   if (decodedPath.includes('candidate-') || decodedPath.includes('cv') || decodedPath.includes('resume')) {
-    const ext = path.extname(decodedPath).toLowerCase();
-    if (ext === '.pdf') {
-      const pdfPath = path.join(__dirname, 'uploads', 'default-resume.pdf');
-      if (fs.existsSync(pdfPath)) {
-        return res.sendFile(pdfPath);
-      }
-    } else if (['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) {
-      const imgPath = path.join(__dirname, 'uploads', 'default-resume.png');
-      if (fs.existsSync(imgPath)) {
-        return res.sendFile(imgPath);
-      }
+    const pdfPath = path.join(__dirname, 'uploads', 'default-resume.pdf');
+    if (fs.existsSync(pdfPath)) {
+      res.setHeader('Content-Type', 'application/pdf');
+      return res.sendFile(pdfPath);
     }
   }
   next();
