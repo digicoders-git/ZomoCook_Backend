@@ -46,8 +46,36 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use('/api/uploads', express.static('uploads'));
-app.use('/uploads', express.static('uploads'));
+const fs = require('fs');
+
+const handleStaticFiles = (req, res, next) => {
+  const decodedPath = decodeURIComponent(req.path);
+  const filePath = path.join(__dirname, 'uploads', decodedPath);
+  
+  if (fs.existsSync(filePath)) {
+    return res.sendFile(filePath);
+  }
+  
+  // Fallback if the requested file is missing (e.g. Render server restarted)
+  if (decodedPath.includes('candidate-') || decodedPath.includes('cv') || decodedPath.includes('resume')) {
+    const ext = path.extname(decodedPath).toLowerCase();
+    if (ext === '.pdf') {
+      const pdfPath = path.join(__dirname, 'uploads', 'default-resume.pdf');
+      if (fs.existsSync(pdfPath)) {
+        return res.sendFile(pdfPath);
+      }
+    } else if (['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) {
+      const imgPath = path.join(__dirname, 'uploads', 'default-resume.png');
+      if (fs.existsSync(imgPath)) {
+        return res.sendFile(imgPath);
+      }
+    }
+  }
+  next();
+};
+
+app.use('/api/uploads', handleStaticFiles, express.static('uploads'));
+app.use('/uploads', handleStaticFiles, express.static('uploads'));
 
 // Routes
 app.use('/api/admin/users', require('./routes/userRoutes'));
