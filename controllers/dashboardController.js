@@ -172,16 +172,41 @@ const getDashboardStats = async (req, res) => {
 
         const totalApplications = Object.values(statsMap).reduce((a, b) => a + b, 0);
 
-        // 3. Category Distribution (Jobs)
-        const categoryStats = await Job.aggregate([
-            { $match: jobFilter },
-            {
-                $group: {
-                    _id: "$jobCategory",
-                    count: { $sum: 1 }
-                }
-            }
+        // 3. Category Distribution (Jobs) - Week, Month, Year, and Global
+        const weekStart = new Date();
+        weekStart.setDate(weekStart.getDate() - 7);
+        const categoryStatsWeek = await Job.aggregate([
+            { $match: { ...jobFilter, createdAt: { $gte: weekStart } } },
+            { $group: { _id: "$jobCategory", count: { $sum: 1 } } }
         ]);
+
+        const monthStart = new Date();
+        monthStart.setDate(1);
+        monthStart.setHours(0,0,0,0);
+        const categoryStatsMonth = await Job.aggregate([
+            { $match: { ...jobFilter, createdAt: { $gte: monthStart } } },
+            { $group: { _id: "$jobCategory", count: { $sum: 1 } } }
+        ]);
+
+        const yearStart = new Date();
+        yearStart.setMonth(0, 1);
+        yearStart.setHours(0,0,0,0);
+        const categoryStatsYear = await Job.aggregate([
+            { $match: { ...jobFilter, createdAt: { $gte: yearStart } } },
+            { $group: { _id: "$jobCategory", count: { $sum: 1 } } }
+        ]);
+
+        const categoryStatsAll = await Job.aggregate([
+            { $match: jobFilter },
+            { $group: { _id: "$jobCategory", count: { $sum: 1 } } }
+        ]);
+
+        const categoryStats = {
+            week: categoryStatsWeek,
+            month: categoryStatsMonth,
+            year: categoryStatsYear,
+            all: categoryStatsAll
+        };
 
         // 4. Monthly Application Growth (Last 6 months)
         const sixMonthsAgo = new Date();
