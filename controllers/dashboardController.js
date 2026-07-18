@@ -5,6 +5,7 @@ const mongoose = require('mongoose');
 const Transaction = require('../models/Transaction');
 const SubscriptionHistory = require('../models/SubscriptionHistory');
 const ServicePackagePayment = require('../models/ServicePackagePayment');
+const Application = require('../models/Application');
 
 /**
  * @desc    Get dashboard statistics with filters
@@ -73,7 +74,6 @@ const getDashboardStats = async (req, res) => {
             const assignedJobIds = assignedJobs.map(j => j._id);
             const customerIds = [...new Set(assignedJobs.map(j => j.customer?.toString()).filter(Boolean))];
             
-            const Application = require('../models/Application');
             const assignedApps = await Application.find({ job: { $in: assignedJobIds } }).select('candidate');
             const candidateIds = [...new Set(assignedApps.map(a => a.candidate?.toString()).filter(Boolean))];
             
@@ -398,7 +398,7 @@ const getDashboardStats = async (req, res) => {
             .populate('customer', 'name');
         
         const recentJobs = await Promise.all(recentJobsRaw.map(async (j) => {
-            const appCount = await ApplicationModel.countDocuments({ job: j._id });
+            const appCount = await Application.countDocuments({ job: j._id });
             return {
                 _id: j._id,
                 title: j.title || 'Untitled Job',
