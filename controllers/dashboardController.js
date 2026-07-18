@@ -43,9 +43,24 @@ const getDashboardStats = async (req, res) => {
         if (customer) jobFilter.customer = new mongoose.Types.ObjectId(customer);
         if (position) jobFilter.jobPosition = position;
         if (date) {
-            const start = new Date(date);
-            const end = new Date(date);
-            end.setDate(end.getDate() + 1);
+            let start, end;
+            if (date === 'today') {
+                start = new Date();
+                start.setHours(0, 0, 0, 0);
+                end = new Date();
+                end.setHours(23, 59, 59, 999);
+            } else if (date === 'yesterday') {
+                start = new Date();
+                start.setDate(start.getDate() - 1);
+                start.setHours(0, 0, 0, 0);
+                end = new Date();
+                end.setDate(end.getDate() - 1);
+                end.setHours(23, 59, 59, 999);
+            } else {
+                start = new Date(date);
+                end = new Date(date);
+                end.setDate(end.getDate() + 1);
+            }
             jobFilter.createdAt = { $gte: start, $lt: end };
         }
 
@@ -86,9 +101,24 @@ const getDashboardStats = async (req, res) => {
         if (customer) appMatchFilter["jobInfo.customer"] = new mongoose.Types.ObjectId(customer);
         if (position) appMatchFilter["jobInfo.jobPosition"] = position;
         if (date) {
-            const start = new Date(date);
-            const end = new Date(date);
-            end.setDate(end.getDate() + 1);
+            let start, end;
+            if (date === 'today') {
+                start = new Date();
+                start.setHours(0, 0, 0, 0);
+                end = new Date();
+                end.setHours(23, 59, 59, 999);
+            } else if (date === 'yesterday') {
+                start = new Date();
+                start.setDate(start.getDate() - 1);
+                start.setHours(0, 0, 0, 0);
+                end = new Date();
+                end.setDate(end.getDate() - 1);
+                end.setHours(23, 59, 59, 999);
+            } else {
+                start = new Date(date);
+                end = new Date(date);
+                end.setDate(end.getDate() + 1);
+            }
             appMatchFilter["applications.appliedDate"] = { $gte: start, $lt: end };
         }
 
