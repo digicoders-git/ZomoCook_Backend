@@ -11,7 +11,7 @@ const storage = multer.diskStorage({
         cb(null, 'uploads/');
     },
     filename: function (req, file, cb) {
-        cb(null, `user-${Date.now()}${path.extname(file.originalname)}`);
+        cb(null, `${file.fieldname}-${Date.now()}${path.extname(file.originalname)}`);
     }
 });
 
@@ -24,7 +24,11 @@ router.post('/verify-otp', verifyOtp);
 router.use(protect);
 
 router.get('/profile', getProfile);
-router.put('/profile', upload.single('profilePic'), updateProfile);
+router.put('/profile', upload.fields([
+    { name: 'profilePic', maxCount: 1 },
+    { name: 'idProof', maxCount: 1 },
+    { name: 'addressProof', maxCount: 1 }
+]), updateProfile);
 
 router.route('/')
     .get(getUsers)

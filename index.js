@@ -58,8 +58,19 @@ const handleStaticFiles = (req, res, next) => {
   }
   
   // Fallback if the requested file is missing (e.g. Render server restarted)
+  const ext = path.extname(decodedPath).toLowerCase();
+  
+  // 1. Banner Fallback
+  if (decodedPath.includes('banner-') && ['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) {
+    const bannerPath = path.join(__dirname, 'uploads', 'banner-1782814802005.jpg');
+    if (fs.existsSync(bannerPath)) {
+      res.setHeader('Content-Type', 'image/jpeg');
+      return res.sendFile(bannerPath);
+    }
+  }
+  
+  // 2. Specific Candidate Resume/Photo Fallback
   if (decodedPath.includes('candidate-') || decodedPath.includes('cv') || decodedPath.includes('resume')) {
-    const ext = path.extname(decodedPath).toLowerCase();
     if (ext === '.pdf') {
       const pdfPath = path.join(__dirname, 'uploads', 'default-resume.pdf');
       if (fs.existsSync(pdfPath)) {
@@ -74,6 +85,22 @@ const handleStaticFiles = (req, res, next) => {
       }
     }
   }
+  
+  // 3. Generic Catch-all Fallback for other files to prevent 404 errors
+  if (ext === '.pdf') {
+    const pdfPath = path.join(__dirname, 'uploads', 'default-resume.pdf');
+    if (fs.existsSync(pdfPath)) {
+      res.setHeader('Content-Type', 'application/pdf');
+      return res.sendFile(pdfPath);
+    }
+  } else if (['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) {
+    const imgPath = path.join(__dirname, 'uploads', 'default-resume.png');
+    if (fs.existsSync(imgPath)) {
+      res.setHeader('Content-Type', 'image/png');
+      return res.sendFile(imgPath);
+    }
+  }
+  
   next();
 };
 

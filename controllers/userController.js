@@ -353,8 +353,12 @@ exports.updateProfile = async (req, res) => {
         if (about !== undefined) user.about = about;
         if (skills) user.skills = Array.isArray(skills) ? skills : JSON.parse(skills);
 
-        // Handle profile picture file upload
-        if (req.file) {
+        // Handle file uploads (profilePic, idProof, addressProof)
+        if (req.files) {
+            if (req.files.profilePic) {
+                user.profilePic = req.files.profilePic[0].path;
+            }
+        } else if (req.file) {
             user.profilePic = req.file.path;
         }
 
@@ -379,8 +383,21 @@ exports.updateProfile = async (req, res) => {
             if (req.body.address) candidateData.address = req.body.address;
             if (user.profilePic) candidateData.profileImage = user.profilePic;
 
+            // Handle documents upload (Aadhar Front & Back)
+            const docs = candidate && candidate.documents ? { ...candidate.documents } : {};
+            docs.idProofType = 'Aadhar';
+            if (req.files) {
+                if (req.files.idProof) {
+                    docs.idProof = req.files.idProof[0].path;
+                }
+                if (req.files.addressProof) {
+                    docs.addressProof = req.files.addressProof[0].path;
+                }
+            }
+            candidateData.documents = docs;
+
             // Handle complex fields if passed as JSON strings or arrays directly
-            const complexFields = ['cookingSkills', 'workExperience', 'education', 'careerHighlights', 'socialMedia', 'skills', 'documents'];
+            const complexFields = ['cookingSkills', 'workExperience', 'education', 'careerHighlights', 'socialMedia', 'skills'];
             complexFields.forEach(field => {
                 if (req.body[field]) {
                     if (typeof req.body[field] === 'string') {
