@@ -557,6 +557,57 @@ const getDashboardStats = async (req, res) => {
             };
         }));
 
+        // 9. Trend Overview (5 points of current month)
+        const currentMonth = new Date().getMonth();
+        const currentMonthName = new Date().toLocaleString('default', { month: 'short' });
+        
+        const intervals = [
+            { label: '1 ' + currentMonthName, start: 1, end: 7 },
+            { label: '8 ' + currentMonthName, start: 8, end: 14 },
+            { label: '15 ' + currentMonthName, start: 15, end: 21 },
+            { label: '22 ' + currentMonthName, start: 22, end: 28 },
+            { label: '31 ' + currentMonthName, start: 29, end: 31 }
+        ];
+
+        const trendOverviewSeries = {
+            hotel: [0, 0, 0, 0, 0],
+            home: [0, 0, 0, 0, 0],
+            daily: [0, 0, 0, 0, 0]
+        };
+        
+        for (let i = 0; i < intervals.length; i++) {
+            const intVal = intervals[i];
+            const startD = new Date(currentYear, currentMonth, intVal.start, 0, 0, 0, 0);
+            const endD = new Date(currentYear, currentMonth, intVal.end, 23, 59, 59, 999);
+            
+            const rawCounts = await Candidate.aggregate([
+                { $match: { ...candidateQuery } },
+                { $unwind: "$applications" },
+                { $match: { "applications.appliedDate": { $gte: startD, $lte: endD } } },
+                {
+                    $lookup: {
+                        from: "jobs",
+                        localField: "applications.job",
+                        foreignField: "_id",
+                        as: "jobInfo"
+                    }
+                },
+                { $unwind: "$jobInfo" },
+                {
+                    $group: {
+                        _id: "$jobInfo.jobCategory",
+                        count: { $sum: 1 }
+                    }
+                }
+            ]);
+            
+            rawCounts.forEach(c => {
+                if (trendOverviewSeries[c._id]) {
+                    trendOverviewSeries[c._id][i] = c.count;
+                }
+            });
+        }
+
         res.json({
             success: true,
             stats: {
@@ -579,6 +630,14 @@ const getDashboardStats = async (req, res) => {
             charts: {
                 categoryDistribution: categoryStats,
                 applicationGrowth: growthStats,
+                trendOverview: {
+                    labels: intervals.map(i => i.label),
+                    series: [
+                        { name: 'Commercial', data: trendOverviewSeries.hotel },
+                        { name: 'Domestic', data: trendOverviewSeries.home },
+                        { name: 'Daily Job', data: trendOverviewSeries.daily }
+                    ]
+                },
                 statusOverview: applicationStats,
                 successPercentage,
                 medianRatio,
