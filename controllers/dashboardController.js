@@ -2,6 +2,9 @@ const Job = require('../models/Job');
 const Candidate = require('../models/Candidate');
 const Customer = require('../models/Customer');
 const mongoose = require('mongoose');
+const Transaction = require('../models/Transaction');
+const SubscriptionHistory = require('../models/SubscriptionHistory');
+const ServicePackagePayment = require('../models/ServicePackagePayment');
 
 /**
  * @desc    Get dashboard statistics with filters
@@ -363,6 +366,197 @@ const getDashboardStats = async (req, res) => {
             return found ? found.count : 0;
         });
 
+        // --- Custom Dashboard Enhancements for Redesign ---
+        
+        // 1. Calculate total transactions sum (Revenue)
+        const txAgg = await Transaction.aggregate([
+            { $match: { status: 'success' } },
+            { $group: { _id: null, total: { $sum: "$amount" } } }
+        ]);
+        const txRevenue = txAgg.length > 0 ? txAgg[0].total : 0;
+
+        const subAgg = await SubscriptionHistory.aggregate([
+            { $group: { _id: null, total: { $sum: "$amountPaid" } } }
+        ]);
+        const subRevenue = subAgg.length > 0 ? subAgg[0].total : 0;
+
+        const spAgg = await ServicePackagePayment.aggregate([
+            { $match: { status: 'paid' } },
+            { $group: { _id: null, total: { $sum: "$amount" } } }
+        ]);
+        const spRevenue = spAgg.length > 0 ? spAgg[0].total : 0;
+
+        const totalRevenue = txRevenue + subRevenue + spRevenue;
+
+        // 2. Active Subscriptions count
+        const activeSubscriptions = await SubscriptionHistory.countDocuments({ status: 'Active' });
+
+        // 3. Recent Jobs (5)
+        const recentJobsRaw = await Job.find(jobFilter)
+            .sort({ createdAt: -1 })
+            .limit(5)
+            .populate('customer', 'name');
+        
+        const recentJobs = await Promise.all(recentJobsRaw.map(async (j) => {
+            const appCount = await ApplicationModel.countDocuments({ job: j._id });
+            return {
+                _id: j._id,
+                title: j.title || 'Untitled Job',
+                jobCategory: j.jobCategory,
+                jobType: j.jobType || 'Full Time',
+                createdAt: j.createdAt.toISOString().split('T')[0],
+                applicationsCount: appCount
+            };
+        }));
+
+        // 4. Recent Trials / Demo (5)
+        const recentTrialsRaw = await Candidate.aggregate([
+            { $match: candidateQuery },
+            { $unwind: "$applications" },
+            { $match: { "applications.status": { $in: ['Demo Scheduled', 'Reschedule Requested'] } } },
+            { $sort: { "applications.appliedDate": -1 } },
+            { $limit: 5 },
+            {
+                $lookup: {
+                    from: "jobs",
+                    localField: "applications.job",
+                    foreignField: "_id",
+                    as: "jobInfo"
+                }
+            },
+            { $unwind: { path: "$jobInfo", preserveNullAndEmptyArrays: true } }
+        ]);
+        const recentTrials = recentTrialsRaw.map(t => ({
+            title: t.jobInfo?.title || 'Unknown Job',
+            candidateName: t.name || 'Unknown Candidate',
+            trialDate: t.applications.demoDate ? t.applications.demoDate.toISOString().split('T')[0] : (t.applications.appliedDate ? t.applications.appliedDate.toISOString().split('T')[0] : '-'),
+            status: t.applications.status
+        }));
+
+        // 5. Latest Transactions (5)
+        const recentTx = await Transaction.find({ status: 'success' })
+            .sort({ createdAt: -1 })
+            .limit(5)
+            .populate('customer', 'name');
+        const recentSp = await ServicePackagePayment.find({ status: 'paid' })
+            .sort({ createdAt: -1 })
+            .limit(5)
+            .populate('customer', 'name');
+        const recentSub = await SubscriptionHistory.find()
+            .sort({ createdAt: -1 })
+            .limit(5)
+            .populate('customer', 'name');
+
+        let allTx = [];
+        recentTx.forEach(t => {
+            allTx.push({
+                invoiceNo: t.razorpayOrderId || t._id.toString().slice(-8).toUpperCase(),
+                customer: t.customer?.name || 'Walk-in Customer',
+                package: 'Job Post Fee',
+                amount: t.amount,
+                date: t.createdAt
+            });
+        });
+        recentSp.forEach(s => {
+            allTx.push({
+                invoiceNo: s.razorpayOrderId || s._id.toString().slice(-8).toUpperCase(),
+                customer: s.customer?.name || 'Walk-in Customer',
+                package: `${s.packageType} Package`,
+                amount: s.amount,
+                date: s.createdAt
+            });
+        });
+        recentSub.forEach(s => {
+            allTx.push({
+                invoiceNo: s.razorpayOrderId || s._id.toString().slice(-8).toUpperCase(),
+                customer: s.customer?.name || 'Walk-in Customer',
+                package: 'Subscription Plan',
+                amount: s.amountPaid,
+                date: s.createdAt
+            });
+        });
+        allTx.sort((a, b) => b.date - a.date);
+        const latestTransactions = allTx.slice(0, 5).map(tx => ({
+            invoiceNo: tx.invoiceNo,
+            customer: tx.customer,
+            package: tx.package,
+            amount: tx.amount,
+            date: tx.date.toISOString().split('T')[0],
+            status: 'Paid'
+        }));
+
+        // 6. Category Performance
+        const categoriesList = ['hotel', 'home', 'daily'];
+        const ApplicationModel = require('../models/Application');
+        const categoryPerformance = await Promise.all(categoriesList.map(async (cat) => {
+            const catJobFilter = { ...jobFilter, jobCategory: cat };
+            const jobsCount = await Job.countDocuments(catJobFilter);
+
+            const catAppFilter = { ...appMatchFilter, "jobInfo.jobCategory": cat };
+            const appsAgg = await Candidate.aggregate([
+                { $match: candidateQuery },
+                { $unwind: "$applications" },
+                {
+                    $lookup: {
+                        from: "jobs",
+                        localField: "applications.job",
+                        foreignField: "_id",
+                        as: "jobInfo"
+                    }
+                },
+                { $unwind: "$jobInfo" },
+                { $match: catAppFilter },
+                {
+                    $group: {
+                        _id: "$applications.status",
+                        count: { $sum: 1 }
+                    }
+                }
+            ]);
+
+            let trials = 0;
+            let hired = 0;
+            appsAgg.forEach(a => {
+                if (['Demo Scheduled', 'Reschedule Requested'].includes(a._id)) {
+                    trials += a.count;
+                } else if (a._id === 'Hired') {
+                    hired += a.count;
+                }
+            });
+
+            const catJobs = await Job.find(catJobFilter).select('_id');
+            const catJobIds = catJobs.map(j => j._id);
+
+            const catApplications = await ApplicationModel.find({ job: { $in: catJobIds } }).select('_id');
+            const catAppIds = catApplications.map(a => a._id);
+
+            const catTxAgg = await Transaction.aggregate([
+                { $match: { status: 'success', relatedJob: { $in: catJobIds } } },
+                { $group: { _id: null, total: { $sum: "$amount" } } }
+            ]);
+            const catTxRevenue = catTxAgg.length > 0 ? catTxAgg[0].total : 0;
+
+            const catSpAgg = await ServicePackagePayment.aggregate([
+                { $match: { status: 'paid', application: { $in: catAppIds } } },
+                { $group: { _id: null, total: { $sum: "$amount" } } }
+            ]);
+            const catSpRevenue = catSpAgg.length > 0 ? catSpAgg[0].total : 0;
+
+            const revenue = catTxRevenue + catSpRevenue;
+
+            let displayCategoryName = 'Commercial';
+            if (cat === 'home') displayCategoryName = 'Domestic';
+            if (cat === 'daily') displayCategoryName = 'Daily Job';
+
+            return {
+                category: displayCategoryName,
+                jobsPosted: jobsCount,
+                trials,
+                hired,
+                revenue
+            };
+        }));
+
         res.json({
             success: true,
             stats: {
@@ -378,7 +572,9 @@ const getDashboardStats = async (req, res) => {
                 hired: statsMap['Hired'],
                 rejected: statsMap['Rejected'],
                 onHold: statsMap['On Hold'],
-                notInterested: statsMap['Not Interested']
+                notInterested: statsMap['Not Interested'],
+                totalTransactions: totalRevenue,
+                activeSubscriptions: activeSubscriptions
             },
             charts: {
                 categoryDistribution: categoryStats,
@@ -395,7 +591,11 @@ const getDashboardStats = async (req, res) => {
                     dailyHired: fillDays(rawDailyHired)
                 }
             },
-            tableData
+            tableData,
+            categoryPerformance,
+            recentJobs,
+            recentTrials,
+            latestTransactions
         });
 
     } catch (error) {
