@@ -42,8 +42,8 @@ const getDashboardStats = async (req, res) => {
         if (category) jobFilter.jobCategory = category;
         if (customer) jobFilter.customer = new mongoose.Types.ObjectId(customer);
         if (position) jobFilter.jobPosition = position;
-        if (date) {
-            let start, end;
+        if (date && date !== 'all') {
+            let start = null, end = null;
             if (date === 'today') {
                 start = new Date();
                 start.setHours(0, 0, 0, 0);
@@ -56,12 +56,35 @@ const getDashboardStats = async (req, res) => {
                 end = new Date();
                 end.setDate(end.getDate() - 1);
                 end.setHours(23, 59, 59, 999);
+            } else if (date === 'week') {
+                start = new Date();
+                start.setDate(start.getDate() - 7);
+                start.setHours(0, 0, 0, 0);
+                end = new Date();
+                end.setHours(23, 59, 59, 999);
+            } else if (date === 'month') {
+                start = new Date();
+                start.setDate(1);
+                start.setHours(0, 0, 0, 0);
+                end = new Date();
+                end.setHours(23, 59, 59, 999);
+            } else if (date === 'year') {
+                start = new Date();
+                start.setMonth(0, 1);
+                start.setHours(0, 0, 0, 0);
+                end = new Date();
+                end.setHours(23, 59, 59, 999);
             } else {
-                start = new Date(date);
-                end = new Date(date);
-                end.setDate(end.getDate() + 1);
+                const parsed = new Date(date);
+                if (!isNaN(parsed.getTime())) {
+                    start = parsed;
+                    end = new Date(parsed);
+                    end.setDate(end.getDate() + 1);
+                }
             }
-            jobFilter.createdAt = { $gte: start, $lt: end };
+            if (start && end) {
+                jobFilter.createdAt = { $gte: start, $lt: end };
+            }
         }
 
         // Construct dynamic filter for Candidates/Applications
@@ -100,8 +123,8 @@ const getDashboardStats = async (req, res) => {
         if (category) appMatchFilter["jobInfo.jobCategory"] = category;
         if (customer) appMatchFilter["jobInfo.customer"] = new mongoose.Types.ObjectId(customer);
         if (position) appMatchFilter["jobInfo.jobPosition"] = position;
-        if (date) {
-            let start, end;
+        if (date && date !== 'all') {
+            let start = null, end = null;
             if (date === 'today') {
                 start = new Date();
                 start.setHours(0, 0, 0, 0);
@@ -114,12 +137,35 @@ const getDashboardStats = async (req, res) => {
                 end = new Date();
                 end.setDate(end.getDate() - 1);
                 end.setHours(23, 59, 59, 999);
+            } else if (date === 'week') {
+                start = new Date();
+                start.setDate(start.getDate() - 7);
+                start.setHours(0, 0, 0, 0);
+                end = new Date();
+                end.setHours(23, 59, 59, 999);
+            } else if (date === 'month') {
+                start = new Date();
+                start.setDate(1);
+                start.setHours(0, 0, 0, 0);
+                end = new Date();
+                end.setHours(23, 59, 59, 999);
+            } else if (date === 'year') {
+                start = new Date();
+                start.setMonth(0, 1);
+                start.setHours(0, 0, 0, 0);
+                end = new Date();
+                end.setHours(23, 59, 59, 999);
             } else {
-                start = new Date(date);
-                end = new Date(date);
-                end.setDate(end.getDate() + 1);
+                const parsed = new Date(date);
+                if (!isNaN(parsed.getTime())) {
+                    start = parsed;
+                    end = new Date(parsed);
+                    end.setDate(end.getDate() + 1);
+                }
             }
-            appMatchFilter["applications.appliedDate"] = { $gte: start, $lt: end };
+            if (start && end) {
+                appMatchFilter["applications.appliedDate"] = { $gte: start, $lt: end };
+            }
         }
 
         // 1. Basic Stats
