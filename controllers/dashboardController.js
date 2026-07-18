@@ -540,77 +540,86 @@ const getDashboardStats = async (req, res) => {
             status: 'Paid'
         }));
 
-        // 6. Category Performance
-        const categoriesList = ['hotel', 'home', 'daily'];
-        const ApplicationModel = require('../models/Application');
-        const categoryPerformance = await Promise.all(categoriesList.map(async (cat) => {
-            const catJobFilter = { ...jobFilter, jobCategory: cat };
-            const jobsCount = await Job.countDocuments(catJobFilter);
-
-            const catAppFilter = { ...appMatchFilter, "jobInfo.jobCategory": cat };
-            const appsAgg = await Candidate.aggregate([
-                { $match: candidateQuery },
-                { $unwind: "$applications" },
-                {
-                    $lookup: {
-                        from: "jobs",
-                        localField: "applications.job",
-                        foreignField: "_id",
-                        as: "jobInfo"
-                    }
-                },
-                { $unwind: "$jobInfo" },
-                { $match: catAppFilter },
-                {
-                    $group: {
-                        _id: "$applications.status",
-                        count: { $sum: 1 }
-                    }
+        // 6. Category Performance - Week, Month, Year, and Global
+        const getPerformanceStatsForRange = async (startDate) => {
+            return Promise.all(['hotel', 'home', 'daily'].map(async (cat) => {
+                const catJobFilter = { ...jobFilter, jobCategory: cat };
+                if (startDate) {
+                    catJobFilter.createdAt = { $gte: startDate };
                 }
-            ]);
-
-            let trials = 0;
-            let hired = 0;
-            appsAgg.forEach(a => {
-                if (['Demo Scheduled', 'Reschedule Requested'].includes(a._id)) {
-                    trials += a.count;
-                } else if (a._id === 'Hired') {
-                    hired += a.count;
+                const jobsCount = await Job.countDocuments(catJobFilter);
+                
+                const catJobs = await Job.find(catJobFilter).select('_id');
+                const catJobIds = catJobs.map(j => j._id);
+                
+                const candFilter = { ...candidateQuery };
+                if (startDate) {
+                    candFilter["applications.appliedDate"] = { $gte: startDate };
                 }
-            });
+                
+                // Trials: Demo Scheduled or Reschedule Requested
+                const trials = await Candidate.countDocuments({
+                    ...candFilter,
+                    "applications.job": { $in: catJobIds },
+                    "applications.status": { $in: ['Demo Scheduled', 'Reschedule Requested'] }
+                });
+                
+                // Hired
+                const hired = await Candidate.countDocuments({
+                    ...candFilter,
+                    "applications.job": { $in: catJobIds },
+                    "applications.status": 'Hired'
+                });
+                
+                const catApplications = await Application.find({ job: { $in: catJobIds } }).select('_id');
+                const catAppIds = catApplications.map(a => a._id);
+                
+                const txMatch = { status: 'success', relatedJob: { $in: catJobIds } };
+                const spMatch = { status: 'paid', application: { $in: catAppIds } };
+                if (startDate) {
+                    txMatch.createdAt = { $gte: startDate };
+                    spMatch.createdAt = { $gte: startDate };
+                }
+                
+                const catTxAgg = await Transaction.aggregate([
+                    { $match: txMatch },
+                    { $group: { _id: null, total: { $sum: "$amount" } } }
+                ]);
+                const catTxRevenue = catTxAgg.length > 0 ? catTxAgg[0].total : 0;
+                
+                const catSpAgg = await ServicePackagePayment.aggregate([
+                    { $match: spMatch },
+                    { $group: { _id: null, total: { $sum: "$amount" } } }
+                ]);
+                const catSpRevenue = catSpAgg.length > 0 ? catSpAgg[0].total : 0;
+                
+                const revenue = catTxRevenue + catSpRevenue;
+                
+                let displayCategoryName = 'Commercial';
+                if (cat === 'home') displayCategoryName = 'Domestic';
+                if (cat === 'daily') displayCategoryName = 'Daily Job';
+                
+                return {
+                    category: displayCategoryName,
+                    jobsPosted: jobsCount,
+                    trials,
+                    hired,
+                    revenue
+                };
+            }));
+        };
 
-            const catJobs = await Job.find(catJobFilter).select('_id');
-            const catJobIds = catJobs.map(j => j._id);
+        const performanceStatsWeek = await getPerformanceStatsForRange(weekStart);
+        const performanceStatsMonth = await getPerformanceStatsForRange(monthStart);
+        const performanceStatsYear = await getPerformanceStatsForRange(yearStart);
+        const performanceStatsAll = await getPerformanceStatsForRange(null);
 
-            const catApplications = await ApplicationModel.find({ job: { $in: catJobIds } }).select('_id');
-            const catAppIds = catApplications.map(a => a._id);
-
-            const catTxAgg = await Transaction.aggregate([
-                { $match: { status: 'success', relatedJob: { $in: catJobIds } } },
-                { $group: { _id: null, total: { $sum: "$amount" } } }
-            ]);
-            const catTxRevenue = catTxAgg.length > 0 ? catTxAgg[0].total : 0;
-
-            const catSpAgg = await ServicePackagePayment.aggregate([
-                { $match: { status: 'paid', application: { $in: catAppIds } } },
-                { $group: { _id: null, total: { $sum: "$amount" } } }
-            ]);
-            const catSpRevenue = catSpAgg.length > 0 ? catSpAgg[0].total : 0;
-
-            const revenue = catTxRevenue + catSpRevenue;
-
-            let displayCategoryName = 'Commercial';
-            if (cat === 'home') displayCategoryName = 'Domestic';
-            if (cat === 'daily') displayCategoryName = 'Daily Job';
-
-            return {
-                category: displayCategoryName,
-                jobsPosted: jobsCount,
-                trials,
-                hired,
-                revenue
-            };
-        }));
+        const categoryPerformance = {
+            week: performanceStatsWeek,
+            month: performanceStatsMonth,
+            year: performanceStatsYear,
+            all: performanceStatsAll
+        };
 
         // 9. Trend Overview (5 points of current month)
         const currentMonth = new Date().getMonth();
