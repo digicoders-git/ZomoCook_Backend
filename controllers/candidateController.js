@@ -490,6 +490,12 @@ const generateResumeHtml = async (req, res) => {
             return res.status(404).send('<h1>Candidate Not Found</h1>');
         }
 
+        const logoPath = path.join(__dirname, '../uploads/logo.png');
+        let logoBase64 = '';
+        if (fs.existsSync(logoPath)) {
+            logoBase64 = `data:image/png;base64,${fs.readFileSync(logoPath).toString('base64')}`;
+        }
+
         const expVal = candidate.jobPreference?.experience?.value || '0';
         const expUnit = candidate.jobPreference?.experience?.unit || 'years';
         const expText = `${expVal}+ ${expUnit.charAt(0).toUpperCase() + expUnit.slice(1)}`;
@@ -734,8 +740,13 @@ const generateResumeHtml = async (req, res) => {
 
         <!-- Bottom Dark Corporate Bar -->
         <div class="bg-[#002D62] text-white p-3 flex justify-between items-center px-6 h-[60px] w-full" style="box-sizing: border-box;">
-            <div class="flex items-center gap-2">
-                <div class="w-6 h-6 bg-red-600 rounded flex items-center justify-center font-black text-white text-xs">Z</div>
+            <div class="flex items-center gap-2.5">
+                <div class="w-7 h-7 bg-white rounded-lg flex items-center justify-center p-0.5 shadow-sm overflow-hidden flex-shrink-0">
+                    ${logoBase64 
+                        ? `<img src="${logoBase64}" class="w-full h-full object-contain" alt="ZomoCook Logo" />`
+                        : `<div class="w-full h-full bg-[#ED1C24] text-white flex items-center justify-center font-black text-xs rounded">Z</div>`
+                    }
+                </div>
                 <div class="text-[8px] leading-tight">
                     <p class="font-extrabold text-white">This profile has been verified by ZomoCook Recruitment Team.</p>
                     <p class="opacity-80">We ensure trusted, skilled & professional staff for your business.</p>
