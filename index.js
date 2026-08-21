@@ -25,9 +25,10 @@ app.use(cors({
     // Allow requests with no origin (mobile apps, curl, Postman)
     if (!origin) return callback(null, true);
     const allowed = [
+      'https://admin.zomocook.in',
+      'https://zomocook.in',
+      'https://www.zomocook.in',
       'https://zomo-cook-admin-panel.vercel.app',
-      'https://yourdomain.com',              // Production frontend
-      'https://www.yourdomain.com',
       'http://localhost:5173',        // Vite dev server
       'http://localhost:3000',        // React dev server
       'http://localhost:3001',        // Alternative port
@@ -35,6 +36,8 @@ app.use(cors({
       'http://127.0.0.1:3000',
       /^http:\/\/localhost:\d+$/,
       /^http:\/\/127\.0\.0\.1:\d+$/,
+      /^https:\/\/.*\.zomocook\.in$/,
+      /^https:\/\/.*\.vercel\.app$/,
     ];
     const isAllowed = allowed.some(p =>
       typeof p === 'string' ? p === origin : p.test(origin)
