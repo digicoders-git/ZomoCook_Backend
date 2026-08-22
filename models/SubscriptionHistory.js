@@ -31,6 +31,22 @@ const subscriptionHistorySchema = new mongoose.Schema({
         enum: ['Active', 'Expired', 'Cancelled'],
         default: 'Active'
     },
+    gateway: {
+        type: String,
+        default: 'cashfree'
+    },
+    orderId: {
+        type: String
+    },
+    paymentId: {
+        type: String
+    },
+    cfOrderId: {
+        type: String
+    },
+    cfPaymentId: {
+        type: String
+    },
     razorpayOrderId: {
         type: String
     },

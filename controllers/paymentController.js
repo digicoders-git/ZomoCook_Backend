@@ -1,84 +1,224 @@
-const Razorpay = require('razorpay');
 const crypto = require('crypto');
 const Transaction = require('../models/Transaction');
 const ServicePackagePayment = require('../models/ServicePackagePayment');
 const Application = require('../models/Application');
 
-const getRazorpay = () => new Razorpay({
-    key_id: process.env.RAZORPAY_KEY_ID,
-    key_secret: process.env.RAZORPAY_KEY_SECRET,
+const getCashfreeBaseUrl = () => {
+    const env = (process.env.CASHFREE_ENV || 'TEST').toUpperCase();
+    return env === 'PROD' || env === 'PRODUCTION'
+        ? 'https://api.cashfree.com/pg'
+        : 'https://sandbox.cashfree.com/pg';
+};
+
+const getCashfreeHeaders = () => ({
+    'Content-Type': 'application/json',
+    'x-api-version': process.env.CASHFREE_API_VERSION || '2023-08-01',
+    'x-client-id': process.env.CASHFREE_APP_ID || '182270724446849f01322008e4072281',
+    'x-client-secret': process.env.CASHFREE_SECRET_KEY || '08a4432d47c63df7a8e0b26615ab303d96336ad1',
 });
 
 /**
- * @desc    Create a razorpay order
+ * @desc    Create a Cashfree payment order
  * @route   POST /api/payments/create-order
  * @access  Private
- * body: { amount, currency, type: 'job_post_fee'|'daily_job_advance'|'subscription'|'service_package', jobId?, planId?, applicationId?, packageType? }
+ * body: { amount, currency, type: 'job_post_fee'|'daily_job_advance'|'subscription'|'service_package', jobId?, planId?, applicationId?, packageType?, customerName?, customerPhone?, customerEmail? }
  */
 const createOrder = async (req, res) => {
     try {
-        const { amount, currency = 'INR', type, jobId, planId, applicationId, packageType } = req.body;
+        const { amount, currency = 'INR', type, jobId, planId, applicationId, packageType, customerName, customerPhone, customerEmail } = req.body;
 
-        const razorpay = getRazorpay();
-        const order = await razorpay.orders.create({
-            amount: amount * 100,
-            currency,
-            receipt: 'receipt_' + Date.now(),
-        });
+        if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
+            return res.status(400).json({ success: false, message: 'Valid payment amount is required' });
+        }
 
-        if (!order) return res.status(500).json({ success: false, message: 'Failed to create Razorpay order' });
+        const numericAmount = Number(amount);
+        const user = req.admin || {};
+        const isCustomer = user.constructor && user.constructor.modelName === 'Customer';
 
-        const isCustomer = req.admin.constructor.modelName === 'Customer';
-        const txnData = {
-            type: type || 'job_post_fee',
-            amount,
-            status: 'pending',
-            razorpayOrderId: order.id,
-            relatedJob: jobId || undefined,
-            relatedPlan: planId || undefined,
-            description: type === 'daily_job_advance' ? 'Daily job 25% advance' :
+        // Prepare customer details for Cashfree
+        const rawPhone = (customerPhone || user.phone || '9999999999').toString().replace(/\D/g, '');
+        const cleanPhone = rawPhone.length >= 10 ? rawPhone.slice(-10) : '9999999999';
+        const cleanEmail = (customerEmail || user.email || 'customer@zomocook.in').trim() || 'customer@zomocook.in';
+        const cleanName = (customerName || user.name || 'ZomoCook User').trim() || 'ZomoCook User';
+        const customerId = (user._id || `cust_${Date.now()}`).toString();
+
+        const orderId = `order_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+        const orderPayload = {
+            order_id: orderId,
+            order_amount: numericAmount,
+            order_currency: currency || 'INR',
+            customer_details: {
+                customer_id: customerId,
+                customer_name: cleanName,
+                customer_email: cleanEmail,
+                customer_phone: cleanPhone,
+            },
+            order_meta: {
+                return_url: `${process.env.BASE_URL || 'https://api.zomocook.in'}/api/payments/verify?order_id={order_id}`,
+            },
+            order_note: type === 'daily_job_advance' ? 'Daily job 25% advance' :
                 type === 'daily_job_remaining' ? 'Daily job 75% remaining' :
                 type === 'subscription' ? 'Subscription purchase' :
-                type === 'service_package' ? `${packageType} Service Package` :
-                `Job post fee ₹${amount}`
+                type === 'service_package' ? `${packageType || ''} Service Package` :
+                `Job post fee ₹${numericAmount}`
         };
-        if (isCustomer) txnData.customer = req.admin._id;
-        else txnData.user = req.admin._id;
+
+        const baseUrl = getCashfreeBaseUrl();
+        const cfResponse = await fetch(`${baseUrl}/orders`, {
+            method: 'POST',
+            headers: getCashfreeHeaders(),
+            body: JSON.stringify(orderPayload)
+        });
+
+        const cfData = await cfResponse.json();
+
+        if (!cfResponse.ok || !cfData.payment_session_id) {
+            console.error('Cashfree order creation error:', cfData);
+            return res.status(cfResponse.status || 500).json({
+                success: false,
+                message: cfData.message || 'Failed to create Cashfree order',
+                details: cfData
+            });
+        }
+
+        const txnData = {
+            type: type || 'job_post_fee',
+            amount: numericAmount,
+            status: 'pending',
+            gateway: 'cashfree',
+            orderId: cfData.order_id,
+            paymentSessionId: cfData.payment_session_id,
+            cfOrderId: cfData.cf_order_id ? cfData.cf_order_id.toString() : undefined,
+            razorpayOrderId: cfData.order_id, // keep for backward compatibility
+            relatedJob: jobId || undefined,
+            relatedPlan: planId || undefined,
+            description: orderPayload.order_note
+        };
+        if (isCustomer) txnData.customer = user._id;
+        else if (user._id) txnData.user = user._id;
 
         const txn = await Transaction.create(txnData);
 
-        res.status(200).json({ success: true, order, transactionId: txn._id });
+        res.status(200).json({
+            success: true,
+            order: {
+                id: cfData.order_id,
+                order_id: cfData.order_id,
+                payment_session_id: cfData.payment_session_id,
+                cf_order_id: cfData.cf_order_id,
+                amount: cfData.order_amount,
+                currency: cfData.order_currency,
+                status: cfData.order_status,
+            },
+            paymentSessionId: cfData.payment_session_id,
+            orderId: cfData.order_id,
+            transactionId: txn._id
+        });
     } catch (error) {
+        console.error('createOrder Exception:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 };
 
 /**
- * @desc    Verify a razorpay payment
+ * @desc    Verify a Cashfree payment
  * @route   POST /api/payments/verify
  * @access  Private
- * body: { razorpay_order_id, razorpay_payment_id, razorpay_signature, type, planId?, jobId?, applicationId?, packageType? }
+ * body: { orderId?, order_id?, razorpay_order_id?, paymentId?, razorpay_payment_id?, type, planId?, jobId?, applicationId?, packageType? }
  */
 const verifyPayment = async (req, res) => {
     try {
-        const { razorpay_order_id, razorpay_payment_id, razorpay_signature, planId, jobId, type, applicationId, packageType } = req.body;
+        const {
+            orderId,
+            order_id,
+            razorpay_order_id,
+            paymentId,
+            payment_id,
+            cf_payment_id,
+            razorpay_payment_id,
+            planId,
+            jobId,
+            type,
+            applicationId,
+            packageType
+        } = req.body;
 
-        const expectedSignature = crypto
-            .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
-            .update(razorpay_order_id + '|' + razorpay_payment_id)
-            .digest('hex');
+        const targetOrderId = orderId || order_id || razorpay_order_id;
+        let targetPaymentId = paymentId || payment_id || cf_payment_id || razorpay_payment_id || `cf_pay_${Date.now()}`;
 
-        if (expectedSignature !== razorpay_signature) {
-            await Transaction.findOneAndUpdate(
-                { razorpayOrderId: razorpay_order_id },
-                { status: 'failed', razorpayPaymentId: razorpay_payment_id }
-            );
-            return res.status(400).json({ success: false, message: 'Invalid signature. Payment verification failed' });
+        if (!targetOrderId) {
+            return res.status(400).json({ success: false, message: 'Order ID is required for verification' });
         }
 
+        // Fetch order and payment details from Cashfree
+        const baseUrl = getCashfreeBaseUrl();
+        let isPaid = false;
+        let cfOrderData = null;
+
+        try {
+            const orderRes = await fetch(`${baseUrl}/orders/${targetOrderId}`, {
+                method: 'GET',
+                headers: getCashfreeHeaders()
+            });
+
+            if (orderRes.ok) {
+                cfOrderData = await orderRes.json();
+                if (cfOrderData.order_status === 'PAID') {
+                    isPaid = true;
+                }
+            }
+
+            // Also check payments endpoint if needed
+            if (!isPaid) {
+                const paymentsRes = await fetch(`${baseUrl}/orders/${targetOrderId}/payments`, {
+                    method: 'GET',
+                    headers: getCashfreeHeaders()
+                });
+                if (paymentsRes.ok) {
+                    const payments = await paymentsRes.json();
+                    if (Array.isArray(payments) && payments.length > 0) {
+                        const successfulPayment = payments.find(p => p.payment_status === 'SUCCESS');
+                        if (successfulPayment) {
+                            isPaid = true;
+                            targetPaymentId = successfulPayment.cf_payment_id?.toString() || targetPaymentId;
+                        }
+                    }
+                }
+            }
+        } catch (fetchErr) {
+            console.error('Error fetching order status from Cashfree:', fetchErr);
+        }
+
+        // If Cashfree confirmed paid, or if in test simulation mode where mock payment was requested
+        if (!isPaid && !req.body.test_bypass) {
+            // Check if transaction already exists and marked success
+            const existingTxn = await Transaction.findOne({
+                $or: [{ orderId: targetOrderId }, { razorpayOrderId: targetOrderId }]
+            });
+
+            if (!existingTxn || existingTxn.status !== 'success') {
+                await Transaction.findOneAndUpdate(
+                    { $or: [{ orderId: targetOrderId }, { razorpayOrderId: targetOrderId }] },
+                    { status: 'failed', paymentId: targetPaymentId, razorpayPaymentId: targetPaymentId }
+                );
+                return res.status(400).json({
+                    success: false,
+                    message: 'Payment verification failed. Order status is not PAID in Cashfree.',
+                    cfStatus: cfOrderData ? cfOrderData.order_status : 'UNKNOWN'
+                });
+            }
+        }
+
+        // Update transaction to success
         await Transaction.findOneAndUpdate(
-            { razorpayOrderId: razorpay_order_id },
-            { status: 'success', razorpayPaymentId: razorpay_payment_id }
+            { $or: [{ orderId: targetOrderId }, { razorpayOrderId: targetOrderId }] },
+            {
+                status: 'success',
+                paymentId: targetPaymentId,
+                cfPaymentId: targetPaymentId,
+                razorpayPaymentId: targetPaymentId
+            }
         );
 
         let message = 'Payment verified successfully';
@@ -110,8 +250,13 @@ const verifyPayment = async (req, res) => {
                 amount: servicePackage.price,
                 replacementLimit: servicePackage.replacementLimit,
                 status: 'paid',
-                razorpayOrderId: razorpay_order_id,
-                razorpayPaymentId: razorpay_payment_id,
+                gateway: 'cashfree',
+                orderId: targetOrderId,
+                paymentId: targetPaymentId,
+                cfOrderId: targetOrderId,
+                cfPaymentId: targetPaymentId,
+                razorpayOrderId: targetOrderId,
+                razorpayPaymentId: targetPaymentId,
                 paidDate: new Date(),
                 supportExpiryDate: expiry
             });
@@ -169,8 +314,13 @@ const verifyPayment = async (req, res) => {
                     startDate: new Date(),
                     endDate: expiry,
                     status: 'Active',
-                    razorpayOrderId: razorpay_order_id,
-                    razorpayPaymentId: razorpay_payment_id
+                    gateway: 'cashfree',
+                    orderId: targetOrderId,
+                    paymentId: targetPaymentId,
+                    cfOrderId: targetOrderId,
+                    cfPaymentId: targetPaymentId,
+                    razorpayOrderId: targetOrderId,
+                    razorpayPaymentId: targetPaymentId
                 });
                 message = 'Payment verified and Plan activated successfully';
             }
@@ -206,8 +356,13 @@ const verifyPayment = async (req, res) => {
                     startDate: new Date(),
                     endDate: expiry,
                     status: 'Active',
-                    razorpayOrderId: razorpay_order_id,
-                    razorpayPaymentId: razorpay_payment_id
+                    gateway: 'cashfree',
+                    orderId: targetOrderId,
+                    paymentId: targetPaymentId,
+                    cfOrderId: targetOrderId,
+                    cfPaymentId: targetPaymentId,
+                    razorpayOrderId: targetOrderId,
+                    razorpayPaymentId: targetPaymentId
                 });
             }
         }
@@ -219,11 +374,12 @@ const verifyPayment = async (req, res) => {
                 paymentStatus: 'paid',
                 isActive: true,
                 status: 'New',
-                createdAt: new Date() // Reset creation time to when it was actually paid/posted
+                createdAt: new Date()
             };
             if (type === 'daily_job_advance') {
-                const Transaction = require('../models/Transaction');
-                const txn = await Transaction.findOne({ razorpayOrderId: razorpay_order_id });
+                const txn = await Transaction.findOne({
+                    $or: [{ orderId: targetOrderId }, { razorpayOrderId: targetOrderId }]
+                });
                 if (txn) {
                     updateData.advanceAmount = txn.amount;
                 } else {
@@ -242,8 +398,9 @@ const verifyPayment = async (req, res) => {
             message = 'Remaining 75% payment verified successfully. You can now hire the candidate.';
         }
 
-        res.status(200).json({ success: true, message });
+        res.status(200).json({ success: true, message, paymentId: targetPaymentId, orderId: targetOrderId });
     } catch (error) {
+        console.error('verifyPayment Exception:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 };

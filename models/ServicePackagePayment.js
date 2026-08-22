@@ -33,6 +33,11 @@ const servicePackagePaymentSchema = new mongoose.Schema({
         enum: ['pending', 'paid', 'failed'],
         default: 'pending'
     },
+    gateway: { type: String, default: 'cashfree' },
+    orderId: String,
+    paymentId: String,
+    cfOrderId: String,
+    cfPaymentId: String,
     razorpayOrderId: String,
     razorpayPaymentId: String,
     paidDate: Date,
