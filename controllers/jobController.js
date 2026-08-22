@@ -17,14 +17,21 @@ const normalizeCategory = (cat) => {
  */
 const createJob = async (req, res) => {
     try {
-        // Generate Job Code
-        const lastJob = await Job.findOne().sort({ createdAt: -1 });
+        // Generate robust unique Job Code
         let nextNumber = 1;
-        if (lastJob && lastJob.jobCode) {
-            const lastNumber = parseInt(lastJob.jobCode.replace('ZOMO', ''));
-            if (!isNaN(lastNumber)) nextNumber = lastNumber + 1;
+        const highestJob = await Job.findOne({ jobCode: { $regex: /^ZOMO\d+$/ } }).sort({ createdAt: -1 });
+        if (highestJob && highestJob.jobCode) {
+            const num = parseInt(highestJob.jobCode.replace('ZOMO', ''), 10);
+            if (!isNaN(num)) nextNumber = num + 1;
+        } else {
+            const count = await Job.countDocuments();
+            nextNumber = count + 1;
         }
-        const jobCode = `ZOMO${nextNumber}`;
+        let jobCode = `ZOMO${nextNumber}`;
+        while (await Job.exists({ jobCode })) {
+            nextNumber++;
+            jobCode = `ZOMO${nextNumber}`;
+        }
 
         let requiresPayment = false;
         let paymentInfo = null;
@@ -39,14 +46,14 @@ const createJob = async (req, res) => {
             const fullUser = await User.findById(req.admin._id).populate('activePlan');
             const jobCategory = req.body.jobCategory;
             const reqCat = normalizeCategory(jobCategory);
-            const hasActivePlan = fullUser.activePlan && fullUser.planExpiryDate && new Date(fullUser.planExpiryDate) > new Date();
+            const hasActivePlan = fullUser && fullUser.activePlan && fullUser.planExpiryDate && new Date(fullUser.planExpiryDate) > new Date();
             const planAllowsCategory = hasActivePlan && (
                 !fullUser.activePlan.allowedJobCategories ||
                 fullUser.activePlan.allowedJobCategories.length === 0 ||
                 fullUser.activePlan.allowedJobCategories.map(c => normalizeCategory(c)).includes(reqCat)
             );
-            const jobsPosted = fullUser.jobsPostedInCurrentPlan || 0;
-            const postLimit = fullUser.currentJobPostLimit || 0;
+            const jobsPosted = fullUser ? (fullUser.jobsPostedInCurrentPlan || 0) : 0;
+            const postLimit = fullUser ? (fullUser.currentJobPostLimit || 0) : 0;
             const withinLimit = planAllowsCategory && jobsPosted < postLimit;
 
             if (!withinLimit) {
@@ -100,17 +107,33 @@ const createJob = async (req, res) => {
             console.error('Error auto-assigning lead manager:', e);
         }
 
+        const customerId = req.body.customer && req.body.customer.toString().trim() !== '' && req.body.customer !== 'null'
+            ? req.body.customer
+            : req.admin._id;
+
         const jobData = {
             ...req.body,
+            customer: customerId,
             jobCode,
             status: jobStatus,
             isActive: isActive,
             paymentStatus: finalPaymentStatus,
             image: req.file ? req.file.path : undefined,
             createdBy: req.admin._id,
-            creatorModel: req.admin.constructor.modelName,
+            creatorModel: req.admin.constructor.modelName || 'User',
             leadManager: assignedManagerId || ''
         };
+
+        // Sanitize date and number fields
+        if (!jobData.dateOfEvent || jobData.dateOfEvent === '' || jobData.dateOfEvent === 'null') {
+            delete jobData.dateOfEvent;
+        }
+        if (jobData.latitude === '' || jobData.latitude === null || isNaN(jobData.latitude)) {
+            delete jobData.latitude;
+        }
+        if (jobData.longitude === '' || jobData.longitude === null || isNaN(jobData.longitude)) {
+            delete jobData.longitude;
+        }
 
         const job = await Job.create(jobData);
 

@@ -119,7 +119,8 @@ const jobSchema = new mongoose.Schema({
   },
   creatorModel: {
     type: String,
-    enum: ['Admin', 'User']
+    enum: ['Admin', 'User', 'Customer'],
+    default: 'User'
   },
   paymentStatus: {
     type: String,
