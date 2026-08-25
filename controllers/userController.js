@@ -3,6 +3,7 @@ const Otp = require('../models/Otp');
 const Role = require('../models/Role');
 const Candidate = require('../models/Candidate');
 const jwt = require('jsonwebtoken');
+const smsService = require('../services/smsService');
 
 // Generate JWT
 const generateToken = (id) => {
@@ -158,23 +159,31 @@ exports.sendOtp = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Please provide a phone number' });
         }
 
+        const cleanedPhone = phone.toString().trim();
+
         // Generate 6 digit random OTP
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
         // Delete any existing OTP for this phone
-        await Otp.deleteMany({ phone });
+        await Otp.deleteMany({ phone: cleanedPhone });
 
-        // Save OTP to database
-        await Otp.create({ phone, otp });
+        // Save OTP to database (expires in 10 minutes)
+        await Otp.create({ phone: cleanedPhone, otp });
 
-        console.log(`[OTP Verification] Generated OTP for ${phone}: ${otp}`);
+        console.log(`[OTP Verification] Generated OTP for ${cleanedPhone}: ${otp}`);
+
+        // Send OTP SMS via Muzztech DLT SMS service
+        const smsResult = await smsService.sendOtpSms(cleanedPhone, otp);
 
         res.status(200).json({
             success: true,
             message: 'OTP sent successfully',
-            otp // Returning OTP directly for testing/development convenience
+            otp, // Returning OTP for development/testing and app compatibility
+            smsStatus: smsResult.success ? 'sent' : 'failed',
+            ...(smsResult.data && { smsData: smsResult.data })
         });
     } catch (error) {
+        console.error('[sendOtp] Error:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 };

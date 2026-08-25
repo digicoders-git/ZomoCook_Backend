@@ -26,9 +26,16 @@ Generates and sends a 6-digit verification code to the user's mobile number.
     {
       "success": true,
       "message": "OTP sent successfully",
-      "otp": "654321" // Note: Returned in response for ease of testing/development
+      "otp": "654321", // Note: Returned in response for ease of testing/development
+      "smsStatus": "sent"
     }
     ```
+*   **SMS Delivery Route & DLT Details:**
+    *   **Provider:** Muzztech (`https://connect.muzztech.com/api/sms/send`)
+    *   **Sender ID:** `ZOMOC`
+    *   **Template ID:** `1777178758492846293`
+    *   **Template Format:** `Your Zomocook verification OTP is {#num#}. This OTP is valid for 10 minutes. Do not share this OTP with anyone.`
+    *   **OTP Validity:** 10 minutes (600 seconds)
 *   **Error Response (400 Bad Request):**
     ```json
     {

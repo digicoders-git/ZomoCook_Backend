@@ -177,7 +177,6 @@ const getApplications = async (req, res) => {
         const applications = await Application.find(query)
             .populate({
                 path: 'candidate',
-                select: 'name phone city profileImage jobPreference profileVerification',
                 match: { 'profileVerification.status': 'approved' }
             })
             .populate('job', 'title jobCategory jobType city state salaryRange outletName joiningType jobPosition')
