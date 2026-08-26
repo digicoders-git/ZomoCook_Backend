@@ -40,10 +40,13 @@ router.get('/', protect, async (req, res) => {
                 applied_count: appliedCount,
                 shortlisted_count: shortlistedCount,
                 rejected_count: rejectedCount,
-                hired_count: hiredCount
             });
         }
-        res.status(200).json({ success: true, subscriptions: subs });
+        let resultSubs = subs;
+        if (req.query.status) {
+            resultSubs = subs.filter(s => s.status === req.query.status);
+        }
+        res.status(200).json({ success: true, subscriptions: resultSubs });
     } catch (e) {
         res.status(500).json({ success: false, message: e.message });
     }

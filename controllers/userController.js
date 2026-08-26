@@ -160,17 +160,27 @@ exports.sendOtp = async (req, res) => {
         }
 
         const cleanedPhone = phone.toString().trim();
+        const formattedPhone = smsService.formatPhoneNumber(cleanedPhone);
 
-        // Generate 6 digit random OTP
-        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        // Fixed OTP for test number 9696559848
+        const isFixedTestPhone = formattedPhone === '9696559848' || cleanedPhone.includes('9696559848');
+        const otp = isFixedTestPhone ? '123456' : Math.floor(100000 + Math.random() * 900000).toString();
 
         // Delete any existing OTP for this phone
-        await Otp.deleteMany({ phone: cleanedPhone });
+        await Otp.deleteMany({
+            $or: [
+                { phone: cleanedPhone },
+                { phone: formattedPhone }
+            ]
+        });
 
         // Save OTP to database (expires in 10 minutes)
         await Otp.create({ phone: cleanedPhone, otp });
+        if (formattedPhone && formattedPhone !== cleanedPhone) {
+            await Otp.create({ phone: formattedPhone, otp });
+        }
 
-        console.log(`[OTP Verification] Generated OTP for ${cleanedPhone}: ${otp}`);
+        console.log(`[OTP Verification] Generated OTP for ${cleanedPhone} (formatted: ${formattedPhone}): ${otp}`);
 
         // Send OTP SMS via Muzztech DLT SMS service
         const smsResult = await smsService.sendOtpSms(cleanedPhone, otp);
@@ -200,6 +210,14 @@ exports.verifyOtp = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Please provide phone and OTP' });
         }
 
+        const cleanedPhone = phone.toString().trim();
+        const formattedPhone = smsService.formatPhoneNumber(cleanedPhone);
+        const otpStr = otp.toString().trim();
+
+        // Fixed OTP check for test number 9696559848
+        const isFixedTestPhone = formattedPhone === '9696559848' || cleanedPhone.includes('9696559848');
+        const isFixedTestOtp = isFixedTestPhone && otpStr === '123456';
+
         // Default role to 'Customer' if not provided or if 'User' is requested (to map app users to customers)
         let roleName = requestedRole || 'Customer';
         if (roleName.toLowerCase() === 'user') {
@@ -213,27 +231,46 @@ exports.verifyOtp = async (req, res) => {
         }
 
         // Find the latest OTP record
-        const otpRecord = await Otp.findOne({ phone, otp });
-        if (!otpRecord) {
+        const otpRecord = await Otp.findOne({
+            $or: [
+                { phone: cleanedPhone, otp: otpStr },
+                { phone: formattedPhone, otp: otpStr },
+                { phone: phone, otp: otpStr }
+            ]
+        });
+
+        if (!otpRecord && !isFixedTestOtp) {
             return res.status(400).json({ success: false, message: 'Invalid or expired OTP' });
         }
 
-        // OTP verified, delete it
-        await Otp.deleteOne({ _id: otpRecord._id });
+        // OTP verified, delete any existing OTP records for this phone
+        await Otp.deleteMany({
+            $or: [
+                { phone: cleanedPhone },
+                { phone: formattedPhone },
+                { phone: phone }
+            ]
+        });
 
         // Check if user already exists
-        let user = await User.findOne({ phone }).populate('role');
+        let user = await User.findOne({
+            $or: [
+                { phone: cleanedPhone },
+                { phone: formattedPhone },
+                { phone: phone }
+            ]
+        }).populate('role');
         let isNewUser = false;
 
         if (!user) {
             isNewUser = true;
             // First time user, register
             const defaultName = roleDoc.name.toLowerCase() === 'cook'
-                ? `Cook_${phone.slice(-4)}`
-                : `User_${phone.slice(-4)}`;
+                ? `Cook_${(formattedPhone || cleanedPhone).slice(-4)}`
+                : `User_${(formattedPhone || cleanedPhone).slice(-4)}`;
 
             const userData = {
-                phone,
+                phone: formattedPhone || cleanedPhone,
                 name: defaultName,
                 status: 'Active',
                 role: roleDoc._id
@@ -266,12 +303,18 @@ exports.verifyOtp = async (req, res) => {
         // Ensure Customer record exists if the role is Customer (so they appear in CustomerList)
         if (roleDoc.name.toLowerCase() === 'customer') {
             const Customer = require('../models/Customer');
-            let customerDoc = await Customer.findOne({ contactPhone: phone });
+            let customerDoc = await Customer.findOne({
+                $or: [
+                    { contactPhone: cleanedPhone },
+                    { contactPhone: formattedPhone },
+                    { contactPhone: phone }
+                ]
+            });
             if (!customerDoc) {
                 await Customer.create({
-                    name: user.name || `User_${phone.slice(-4)}`,
-                    contactName: user.name || `User_${phone.slice(-4)}`,
-                    contactPhone: phone,
+                    name: user.name || `User_${(formattedPhone || cleanedPhone).slice(-4)}`,
+                    contactName: user.name || `User_${(formattedPhone || cleanedPhone).slice(-4)}`,
+                    contactPhone: formattedPhone || cleanedPhone,
                     createdBy: user._id,
                     creatorModel: 'User'
                 });

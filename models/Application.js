@@ -54,6 +54,8 @@ const applicationSchema = new mongoose.Schema({
     packagePaidDate: Date,
     demoDate: Date,
     demoTime: String,
+    demoMenu: [String],
+    demoNotes: String,
     meetingLink: String,
     remarks: String,
     rejectionReason: String,

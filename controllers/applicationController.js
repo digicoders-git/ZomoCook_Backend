@@ -259,6 +259,26 @@ const updateApplicationStatus = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Application not found' });
         }
 
+        if (status === 'Demo Scheduled') {
+            let isPaid = existingApp.servicePackagePaid;
+            if (!isPaid) {
+                const User = require('../models/User');
+                const jobCreator = await User.findById(existingApp.customer || req.admin._id);
+                if (jobCreator && jobCreator.activePlan && jobCreator.planExpiryDate && new Date(jobCreator.planExpiryDate) > new Date()) {
+                    isPaid = true;
+                    existingApp.servicePackagePaid = true;
+                    await existingApp.save();
+                }
+            }
+            if (!isPaid) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Active subscription plan is required before scheduling a trial.',
+                    requiresPayment: true
+                });
+            }
+        }
+
         if (status === 'Hired' && existingApp.job) {
             const job = existingApp.job;
             const isDailyJob = job.jobCategory === 'daily';
@@ -280,9 +300,19 @@ const updateApplicationStatus = async (req, res) => {
             }
         }
 
+        const updateData = { status };
+        if (req.body.demoDate) updateData.demoDate = req.body.demoDate;
+        if (req.body.demoTime) updateData.demoTime = req.body.demoTime;
+        if (req.body.demoMenu) updateData.demoMenu = Array.isArray(req.body.demoMenu) ? req.body.demoMenu : [req.body.demoMenu];
+        if (req.body.demoNotes !== undefined) updateData.demoNotes = req.body.demoNotes;
+        if (req.body.remarks) updateData.remarks = req.body.remarks;
+        if (req.body.meetingLink) updateData.meetingLink = req.body.meetingLink;
+        if (req.body.rejectionReason) updateData.rejectionReason = req.body.rejectionReason;
+        if (req.body.joiningDate) updateData.joiningDate = req.body.joiningDate;
+
         const application = await Application.findByIdAndUpdate(
             applicationId,
-            { status },
+            updateData,
             { new: true }
         ).populate('candidate').populate('job');
 
@@ -460,7 +490,7 @@ const selectServicePackage = async (req, res) => {
  */
 const scheduleDemo = async (req, res) => {
     try {
-        const { demoDate, demoTime, meetingLink } = req.body;
+        const { demoDate, demoTime, meetingLink, demoMenu, demoNotes, remarks } = req.body;
         const applicationId = req.params.id;
 
         if (!demoDate || !demoTime) {
@@ -494,7 +524,10 @@ const scheduleDemo = async (req, res) => {
         application.status = 'Demo Scheduled';
         application.demoDate = demoDate;
         application.demoTime = demoTime;
-        application.meetingLink = meetingLink;
+        if (meetingLink) application.meetingLink = meetingLink;
+        if (demoMenu) application.demoMenu = Array.isArray(demoMenu) ? demoMenu : [demoMenu];
+        if (demoNotes !== undefined) application.demoNotes = demoNotes;
+        if (remarks) application.remarks = remarks;
         await application.save();
 
         const notificationController = require('./notificationController');
@@ -528,21 +561,26 @@ const scheduleDemo = async (req, res) => {
  */
 const rescheduleDemo = async (req, res) => {
     try {
-        const { demoDate, demoTime, meetingLink } = req.body;
+        const { demoDate, demoTime, meetingLink, demoMenu, demoNotes, remarks } = req.body;
         const applicationId = req.params.id;
 
         if (!demoDate || !demoTime) {
             return res.status(400).json({ success: false, message: 'Demo date and time are required' });
         }
 
+        const updateData = {
+            status: 'Reschedule Requested',
+            demoDate,
+            demoTime,
+        };
+        if (meetingLink) updateData.meetingLink = meetingLink;
+        if (demoMenu) updateData.demoMenu = Array.isArray(demoMenu) ? demoMenu : [demoMenu];
+        if (demoNotes !== undefined) updateData.demoNotes = demoNotes;
+        if (remarks) updateData.remarks = remarks;
+
         const application = await Application.findByIdAndUpdate(
             applicationId,
-            {
-                status: 'Reschedule Requested',
-                demoDate,
-                demoTime,
-                meetingLink
-            },
+            updateData,
             { new: true }
         ).populate('candidate').populate('job');
 
