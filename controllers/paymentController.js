@@ -100,6 +100,8 @@ const createOrder = async (req, res) => {
 
         const txn = await Transaction.create(txnData);
 
+        const currentCfEnv = ((process.env.CASHFREE_ENV || 'TEST').toUpperCase() === 'PROD' || (process.env.CASHFREE_ENV || 'TEST').toUpperCase() === 'PRODUCTION') ? 'PRODUCTION' : 'SANDBOX';
+
         res.status(200).json({
             success: true,
             order: {
@@ -110,9 +112,11 @@ const createOrder = async (req, res) => {
                 amount: cfData.order_amount,
                 currency: cfData.order_currency,
                 status: cfData.order_status,
+                environment: currentCfEnv,
             },
             paymentSessionId: cfData.payment_session_id,
             orderId: cfData.order_id,
+            environment: currentCfEnv,
             transactionId: txn._id
         });
     } catch (error) {
