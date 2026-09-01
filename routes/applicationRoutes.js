@@ -10,7 +10,11 @@ const {
     rescheduleDemo,
     hireCook,
     rejectApplication,
-    getApplicationById
+    getApplicationById,
+    startTrial,
+    sendTrialOtp,
+    completeTrial,
+    cancelTrial
 } = require('../controllers/applicationController');
 const { protect } = require('../middleware/authMiddleware');
 
@@ -37,6 +41,12 @@ router.post('/:id/schedule-demo', protect, scheduleDemo);
 
 // Reschedule demo
 router.post('/:id/reschedule-demo', protect, rescheduleDemo);
+
+// Trial lifecycle routes
+router.post('/:id/start-trial', protect, startTrial);
+router.post('/:id/send-trial-otp', protect, sendTrialOtp);
+router.post('/:id/complete-trial', protect, completeTrial);
+router.post('/:id/cancel-trial', protect, cancelTrial);
 
 // Hire cook
 router.post('/:id/hire', protect, hireCook);

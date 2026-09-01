@@ -18,7 +18,7 @@ const applicationSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['Applied', 'Shortlisted', 'Profile Reviewed', 'Package Selected', 'Package Paid', 'Demo Scheduled', 'Reschedule Requested', 'Hired', 'Rejected', 'On Hold', 'Not Interested', 'Cancelled'],
+        enum: ['Applied', 'Shortlisted', 'Profile Reviewed', 'Package Selected', 'Package Paid', 'Demo Scheduled', 'Demo In Progress', 'Demo Completed', 'Demo Cancelled', 'Reschedule Requested', 'Hired', 'Rejected', 'On Hold', 'Not Interested', 'Cancelled'],
         default: 'Applied'
     },
     isViewedByClient: {
@@ -57,13 +57,28 @@ const applicationSchema = new mongoose.Schema({
     demoMenu: [String],
     demoNotes: String,
     meetingLink: String,
-    remarks: String,
     rejectionReason: String,
+    rejectionNotes: String,
     joiningDate: Date,
+    offeredSalary: String,
     appliedDate: {
         type: Date,
         default: Date.now
-    }
+    },
+    // Trial Lifecycle fields
+    trialStatus: {
+        type: String,
+        enum: ['not_started', 'in_progress', 'completed', 'cancelled'],
+        default: 'not_started'
+    },
+    trialStartedAt: Date,
+    trialCompletedAt: Date,
+    trialCancelledAt: Date,
+    trialCancellationReason: String,
+    trialCancellationNotes: String,
+    trialOtp: String,
+    trialOtpExpiresAt: Date,
+    trialDurationSeconds: Number
 }, { timestamps: true });
 
 // Unique index to prevent duplicate applications
