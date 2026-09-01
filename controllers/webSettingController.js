@@ -114,10 +114,10 @@ const getAppVersion = async (req, res) => {
         }
 
         const appVersion = settings.appVersion || {
-            latestVersion: '1.0.4',
-            latestBuildNumber: 5,
-            minRequiredVersion: '1.0.4',
-            minRequiredBuildNumber: 5,
+            latestVersion: '1.0.5',
+            latestBuildNumber: 6,
+            minRequiredVersion: '1.0.5',
+            minRequiredBuildNumber: 6,
             forceUpdate: true,
             title: 'New Update Available! 🚀',
             message: 'A new version of ZomoCook is available on the Play Store with important improvements and bug fixes. Please update now to continue using the app.',
