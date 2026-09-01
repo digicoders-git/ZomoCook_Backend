@@ -14,7 +14,9 @@ const {
     startTrial,
     sendTrialOtp,
     completeTrial,
-    cancelTrial
+    cancelTrial,
+    cookAcceptOffer,
+    cookRejectOffer
 } = require('../controllers/applicationController');
 const { protect } = require('../middleware/authMiddleware');
 
@@ -48,8 +50,12 @@ router.post('/:id/send-trial-otp', protect, sendTrialOtp);
 router.post('/:id/complete-trial', protect, completeTrial);
 router.post('/:id/cancel-trial', protect, cancelTrial);
 
-// Hire cook
+// Hire cook (by customer)
 router.post('/:id/hire', protect, hireCook);
+
+// Cook response to offer
+router.post('/:id/cook-accept-offer', protect, cookAcceptOffer);
+router.post('/:id/cook-reject-offer', protect, cookRejectOffer);
 
 // Reject application
 router.post('/:id/reject', protect, rejectApplication);

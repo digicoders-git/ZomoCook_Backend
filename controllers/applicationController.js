@@ -1097,6 +1097,131 @@ const cancelTrial = async (req, res) => {
     }
 };
 
+/**
+ * @desc    Cook accepts job offer
+ * @route   POST /api/applications/:id/cook-accept-offer
+ * @access  Private (Cook)
+ */
+const cookAcceptOffer = async (req, res) => {
+    try {
+        const applicationId = req.params.id;
+        const application = await Application.findById(applicationId)
+            .populate('job')
+            .populate('candidate')
+            .populate('customer');
+
+        if (!application) {
+            return res.status(404).json({ success: false, message: 'Application not found' });
+        }
+
+        application.status = 'Offer Accepted';
+        application.offerStatus = 'accepted';
+        application.offerDecisionDate = new Date();
+        await application.save();
+
+        await syncCandidateApplication(application);
+
+        // Notify customer
+        if (application.customer) {
+            const notificationController = require('./notificationController');
+            const cookName = application.candidate?.name || 'Chef';
+            const jobTitle = application.job?.title || 'job';
+            let joiningDateStr = '';
+            if (application.joiningDate) {
+                try {
+                    const d = new Date(application.joiningDate);
+                    joiningDateStr = `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
+                } catch (_) {}
+            }
+
+            notificationController.sendNotificationToUser({
+                userId: application.customer._id || application.customer,
+                userModel: 'User',
+                title: '🎉 Offer Accepted!',
+                message: `Chef ${cookName} has accepted your job offer for "${jobTitle}"${joiningDateStr ? ` (Joining Date: ${joiningDateStr})` : ''}.`,
+                type: 'offer_accepted',
+                relatedId: application._id,
+                relatedModel: 'Application',
+                actionUrl: '/bookings'
+            }).catch(err => console.error('Error sending offer accepted notification:', err));
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Job offer accepted successfully',
+            application
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+/**
+ * @desc    Cook rejects job offer
+ * @route   POST /api/applications/:id/cook-reject-offer
+ * @access  Private (Cook)
+ */
+const cookRejectOffer = async (req, res) => {
+    try {
+        const applicationId = req.params.id;
+        const { reason } = req.body;
+
+        const application = await Application.findById(applicationId)
+            .populate('job')
+            .populate('candidate')
+            .populate('customer');
+
+        if (!application) {
+            return res.status(404).json({ success: false, message: 'Application not found' });
+        }
+
+        application.status = 'Offer Rejected';
+        application.offerStatus = 'rejected';
+        application.offerDecisionDate = new Date();
+        application.rejectionReason = reason || 'Rejected by Cook';
+        await application.save();
+
+        // Update any associated booking to Cancelled
+        try {
+            const Booking = require('../models/Booking');
+            await Booking.updateMany(
+                { application: application._id },
+                { $set: { status: 'Cancelled', cancellationReason: 'Job offer rejected by cook' } }
+            );
+        } catch (bErr) {
+            console.error('Error updating booking status on offer reject:', bErr);
+        }
+
+        await syncCandidateApplication(application);
+
+        // Notify customer
+        if (application.customer) {
+            const notificationController = require('./notificationController');
+            const cookName = application.candidate?.name || 'Chef';
+            const jobTitle = application.job?.title || 'job';
+
+            notificationController.sendNotificationToUser({
+                userId: application.customer._id || application.customer,
+                userModel: 'User',
+                title: '❌ Job Offer Rejected',
+                message: `Chef ${cookName} has rejected your job offer for "${jobTitle}". You can review other candidates.`,
+                type: 'offer_rejected',
+                relatedId: application._id,
+                relatedModel: 'Application',
+                actionUrl: '/jobs'
+            }).catch(err => console.error('Error sending offer rejected notification:', err));
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Job offer rejected successfully',
+            application
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
 module.exports = {
     applyJob,
     getApplications,
@@ -1111,5 +1236,7 @@ module.exports = {
     startTrial,
     sendTrialOtp,
     completeTrial,
-    cancelTrial
+    cancelTrial,
+    cookAcceptOffer,
+    cookRejectOffer
 };
