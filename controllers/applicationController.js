@@ -225,7 +225,7 @@ const getMyApplications = async (req, res) => {
         if (status) query.status = status;
 
         const applications = await Application.find(query)
-            .populate('job', 'title jobCategory city state salaryRange salary outletName joiningType jobType jobPosition')
+            .populate('job', 'title jobCategory city state salaryRange salary outletName joiningType jobType jobPosition location address facilities otherFacilities leave allowedLeave image jobPreference')
             .populate('customer', 'name email phone outletName')
             .sort({ appliedDate: -1 });
 
@@ -528,6 +528,11 @@ const scheduleDemo = async (req, res) => {
         if (demoMenu) application.demoMenu = Array.isArray(demoMenu) ? demoMenu : [demoMenu];
         if (demoNotes !== undefined) application.demoNotes = demoNotes;
         if (remarks) application.remarks = remarks;
+
+        // Generate random 4-digit OTP for demo/trial verification
+        if (!application.trialOtp) {
+            application.trialOtp = Math.floor(1000 + Math.random() * 9000).toString();
+        }
         await application.save();
 
         const notificationController = require('./notificationController');
@@ -709,7 +714,12 @@ const hireCook = async (req, res) => {
         }
 
         let amount = 15000;
-        if (application.job && application.job.salaryRange) {
+        if (offeredSalary) {
+            const cleanSalary = offeredSalary.toString().replace(/[^0-9.]/g, '');
+            if (cleanSalary) {
+                amount = parseFloat(cleanSalary) || 15000;
+            }
+        } else if (application.job && application.job.salaryRange) {
             const match = application.job.salaryRange.match(/\d+/);
             if (match) {
                 amount = parseInt(match[0]);
@@ -871,9 +881,9 @@ const startTrial = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Application not found' });
         }
 
-        // Generate 4-digit OTP
-        const otp = '1234';
-        const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 mins
+        // Generate random 4-digit OTP or keep existing
+        const otp = application.trialOtp || Math.floor(1000 + Math.random() * 9000).toString();
+        const otpExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // Active until trial ends
 
         application.trialStatus = 'in_progress';
         application.trialStartedAt = new Date();
@@ -926,9 +936,9 @@ const sendTrialOtp = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Application not found' });
         }
 
-        const otp = application.trialOtp || '1234';
+        const otp = application.trialOtp || Math.floor(1000 + Math.random() * 9000).toString();
         application.trialOtp = otp;
-        application.trialOtpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
+        application.trialOtpExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
         await application.save();
 
         if (application.customer) {
@@ -937,7 +947,7 @@ const sendTrialOtp = async (req, res) => {
                 userId: application.customer._id || application.customer,
                 userModel: 'User',
                 title: '🔐 Trial Verification OTP',
-                message: `Your trial completion OTP for "${application.job?.title || 'Job'}" is: ${otp}. Valid for 10 minutes.`,
+                message: `Your trial completion OTP for "${application.job?.title || 'Job'}" is: ${otp}.`,
                 type: 'trial_otp',
                 relatedId: application._id,
                 relatedModel: 'Application',
@@ -979,7 +989,7 @@ const completeTrial = async (req, res) => {
         }
 
         const enteredOtp = otp.toString().trim();
-        const validOtps = [application.trialOtp, '1234', '123456'].filter(Boolean);
+        const validOtps = [application.trialOtp].filter(Boolean);
 
         const isMatch = validOtps.includes(enteredOtp);
         if (!isMatch) {
