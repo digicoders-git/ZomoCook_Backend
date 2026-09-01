@@ -283,10 +283,10 @@ const getJobs = async (req, res) => {
         const jobsWithCounts = await Promise.all(jobs.map(async (job) => {
             const apps = await Application.find({ job: job._id });
             const assignedCandidates = apps.filter(app => ['Applied', 'Profile Reviewed'].includes(app.status)).length;
-            const interviews = apps.filter(app => ['Shortlisted', 'Demo Scheduled', 'Reschedule Requested', 'On Hold'].includes(app.status)).length;
+            const interviews = apps.filter(app => ['Shortlisted', 'Demo Scheduled', 'Demo In Progress', 'Demo Completed', 'Reschedule Requested', 'On Hold'].includes(app.status)).length;
             const selected = apps.filter(app => ['Package Selected', 'Package Paid'].includes(app.status)).length;
             const hired = apps.filter(app => app.status === 'Hired').length;
-            const rejected = apps.filter(app => ['Rejected', 'Cancelled', 'Not Interested'].includes(app.status)).length;
+            const rejected = apps.filter(app => ['Rejected', 'Cancelled', 'Demo Cancelled', 'Not Interested'].includes(app.status)).length;
 
             let customerData = job.customer;
             if (!customerData) {
@@ -383,10 +383,10 @@ const getJob = async (req, res) => {
         const Application = require('../models/Application');
         const apps = await Application.find({ job: job._id });
         const assignedCandidates = apps.filter(app => ['Applied', 'Profile Reviewed'].includes(app.status)).length;
-        const interviews = apps.filter(app => ['Shortlisted', 'Demo Scheduled', 'Reschedule Requested', 'On Hold'].includes(app.status)).length;
+        const interviews = apps.filter(app => ['Shortlisted', 'Demo Scheduled', 'Demo In Progress', 'Demo Completed', 'Reschedule Requested', 'On Hold'].includes(app.status)).length;
         const selected = apps.filter(app => ['Package Selected', 'Package Paid'].includes(app.status)).length;
         const hired = apps.filter(app => app.status === 'Hired').length;
-        const rejected = apps.filter(app => ['Rejected', 'Cancelled', 'Not Interested'].includes(app.status)).length;
+        const rejected = apps.filter(app => ['Rejected', 'Cancelled', 'Demo Cancelled', 'Not Interested'].includes(app.status)).length;
 
         let customerData = job.customer;
         if (!customerData) {

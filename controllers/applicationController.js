@@ -175,16 +175,13 @@ const getApplications = async (req, res) => {
         if (candidateId) query.candidate = candidateId;
 
         const applications = await Application.find(query)
-            .populate({
-                path: 'candidate',
-                match: { 'profileVerification.status': 'approved' }
-            })
+            .populate('candidate')
             .populate('job', 'title jobCategory jobType city state salaryRange outletName joiningType jobPosition')
             .populate('customer', 'name email phone outletName')
             .populate('servicePackagePaymentId')
             .sort({ appliedDate: -1 });
 
-        // Filter out applications where candidate is null (not approved)
+        // Filter out applications where candidate is null (deleted candidate record)
         const filteredApplications = applications.filter(app => app.candidate !== null);
 
         res.status(200).json({

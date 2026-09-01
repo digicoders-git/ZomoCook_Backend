@@ -21,8 +21,8 @@ router.get('/', protect, async (req, res) => {
             const apps = await Application.find({ job: { $in: jobIds } });
 
             const appliedCount = apps.filter(app => app.status === 'Applied').length;
-            const shortlistedCount = apps.filter(app => ['Shortlisted', 'Demo Scheduled', 'Reschedule Requested'].includes(app.status)).length;
-            const rejectedCount = apps.filter(app => ['Rejected', 'Not Interested', 'On Hold'].includes(app.status)).length;
+            const shortlistedCount = apps.filter(app => ['Shortlisted', 'Demo Scheduled', 'Demo In Progress', 'Demo Completed', 'Reschedule Requested', 'On Hold'].includes(app.status)).length;
+            const rejectedCount = apps.filter(app => ['Rejected', 'Not Interested', 'Cancelled', 'Demo Cancelled', 'On Hold'].includes(app.status)).length;
             const hiredCount = apps.filter(app => app.status === 'Hired' || app.status === 'Selected').length;
 
             subs.push({

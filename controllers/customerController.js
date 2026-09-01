@@ -240,7 +240,7 @@ const getCustomerDashboard = async (req, res) => {
         const jobIds = jobs.map(job => job._id);
         const applications = await Application.find({ 
             job: { $in: jobIds },
-            status: { $in: ['Hired', 'Profile Reviewed', 'Package Selected', 'Package Paid', 'Demo Scheduled'] } 
+            status: { $in: ['Hired', 'Profile Reviewed', 'Package Selected', 'Package Paid', 'Demo Scheduled', 'Demo In Progress', 'Demo Completed'] } 
         }).populate('candidate', 'name phone email profilePic').populate('job', 'title');
 
         // 4. Get Transactions
@@ -275,7 +275,7 @@ const getCustomerDashboard = async (req, res) => {
         let recentActivity = [];
         jobs.forEach(job => recentActivity.push({ type: 'job_posted', date: job.createdAt, details: job }));
         applications.filter(app => app.status === 'Hired').forEach(app => recentActivity.push({ type: 'candidate_hired', date: app.updatedAt, details: app }));
-        applications.filter(app => app.status === 'Demo Scheduled').forEach(app => recentActivity.push({ type: 'demo_scheduled', date: app.updatedAt, details: app }));
+        applications.filter(app => ['Demo Scheduled', 'Demo In Progress', 'Demo Completed'].includes(app.status)).forEach(app => recentActivity.push({ type: 'demo_scheduled', date: app.updatedAt, details: app }));
         transactions.forEach(txn => recentActivity.push({ type: 'payment_received', date: txn.createdAt, details: txn }));
         activeSubscriptions.forEach(sub => recentActivity.push({ type: 'package_renewed', date: sub.createdAt, details: sub }));
 
