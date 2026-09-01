@@ -69,6 +69,21 @@ const updateWebSettings = async (req, res) => {
             }
         }
 
+        if (req.body.appVersion !== undefined) {
+            try {
+                const av = typeof req.body.appVersion === 'string'
+                    ? JSON.parse(req.body.appVersion)
+                    : req.body.appVersion;
+                settings.appVersion = {
+                    ...settings.appVersion,
+                    ...av
+                };
+                settings.markModified('appVersion');
+            } catch (err) {
+                console.error("Error parsing appVersion:", err);
+            }
+        }
+
         // Handle file uploads
         if (req.files) {
             if (req.files.logo) {
@@ -86,7 +101,42 @@ const updateWebSettings = async (req, res) => {
     }
 };
 
+/**
+ * @desc    Get mobile app version & force update status (Public API)
+ * @route   GET /api/settings/app-version
+ * @access  Public
+ */
+const getAppVersion = async (req, res) => {
+    try {
+        let settings = await WebSetting.findOne();
+        if (!settings) {
+            settings = await WebSetting.create({});
+        }
+
+        const appVersion = settings.appVersion || {
+            latestVersion: '1.0.4',
+            latestBuildNumber: 5,
+            minRequiredVersion: '1.0.4',
+            minRequiredBuildNumber: 5,
+            forceUpdate: true,
+            title: 'New Update Available! 🚀',
+            message: 'A new version of ZomoCook is available on the Play Store with important improvements and bug fixes. Please update now to continue using the app.',
+            playStoreUrl: 'https://play.google.com/store/apps/details?id=digi.coders.zomocook',
+            appStoreUrl: '',
+            releaseNotes: ['Bug fixes and performance improvements', 'Enhanced booking and trial experience']
+        };
+
+        res.json({
+            success: true,
+            appVersion
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
 module.exports = {
     getWebSettings,
-    updateWebSettings
+    updateWebSettings,
+    getAppVersion
 };

@@ -27,6 +27,20 @@ const WebSettingSchema = new mongoose.Schema({
   jobPostFeeStatus: { type: Boolean, default: true },
   jobPostFeeDescription: { type: String, default: 'Hiring processing fee is a one-time amount charged from customers while posting a job. This amount is non-refundable.' },
 
+  // Mobile App Version & Force Update Settings
+  appVersion: {
+    latestVersion: { type: String, default: '1.0.4' },
+    latestBuildNumber: { type: Number, default: 5 },
+    minRequiredVersion: { type: String, default: '1.0.4' },
+    minRequiredBuildNumber: { type: Number, default: 5 },
+    forceUpdate: { type: Boolean, default: true },
+    title: { type: String, default: 'New Update Available! 🚀' },
+    message: { type: String, default: 'A new version of ZomoCook is available on the Play Store with important improvements and bug fixes. Please update now to continue using the app.' },
+    playStoreUrl: { type: String, default: 'https://play.google.com/store/apps/details?id=digi.coders.zomocook' },
+    appStoreUrl: { type: String, default: '' },
+    releaseNotes: { type: [String], default: ['Bug fixes and performance improvements', 'Enhanced booking and trial experience', 'UI and security updates'] }
+  },
+
   // Dynamic responsibilities configuration by role/category
   responsibilities: {
     type: mongoose.Schema.Types.Mixed,
