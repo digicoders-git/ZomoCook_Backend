@@ -20,10 +20,11 @@ router.get('/', protect, async (req, res) => {
             const jobIds = userJobs.map(j => j._id);
             const apps = await Application.find({ job: { $in: jobIds } });
 
-            const appliedCount = apps.filter(app => app.status === 'Applied').length;
+            const appliedCount = apps.filter(app => ['Applied', 'Profile Reviewed'].includes(app.status)).length;
             const shortlistedCount = apps.filter(app => ['Shortlisted', 'Demo Scheduled', 'Demo In Progress', 'Demo Completed', 'Reschedule Requested', 'On Hold'].includes(app.status)).length;
-            const rejectedCount = apps.filter(app => ['Rejected', 'Not Interested', 'Cancelled', 'Demo Cancelled', 'On Hold'].includes(app.status)).length;
-            const hiredCount = apps.filter(app => app.status === 'Hired' || app.status === 'Selected').length;
+            const selectedCount = apps.filter(app => ['Package Selected', 'Package Paid'].includes(app.status) || (app.status === 'Hired' && app.offerStatus !== 'accepted')).length;
+            const hiredCount = apps.filter(app => ['Offer Accepted', 'Joined'].includes(app.status) || (app.status === 'Hired' && app.offerStatus === 'accepted') || app.offerStatus === 'accepted').length;
+            const rejectedCount = apps.filter(app => ['Rejected', 'Not Interested', 'Cancelled', 'Demo Cancelled', 'Offer Rejected', 'Rejected by Cook'].includes(app.status) || app.offerStatus === 'rejected').length;
 
             subs.push({
                 id: plan._id,
@@ -39,6 +40,8 @@ router.get('/', protect, async (req, res) => {
                 total_paid: plan.price,
                 applied_count: appliedCount,
                 shortlisted_count: shortlistedCount,
+                selected_count: selectedCount,
+                hired_count: hiredCount,
                 rejected_count: rejectedCount,
             });
         }

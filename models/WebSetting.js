@@ -29,10 +29,10 @@ const WebSettingSchema = new mongoose.Schema({
 
   // Mobile App Version & Force Update Settings
   appVersion: {
-    latestVersion: { type: String, default: '1.0.6' },
-    latestBuildNumber: { type: Number, default: 7 },
-    minRequiredVersion: { type: String, default: '1.0.6' },
-    minRequiredBuildNumber: { type: Number, default: 7 },
+    latestVersion: { type: String, default: '1.0.7' },
+    latestBuildNumber: { type: Number, default: 8 },
+    minRequiredVersion: { type: String, default: '1.0.7' },
+    minRequiredBuildNumber: { type: Number, default: 8 },
     forceUpdate: { type: Boolean, default: true },
     title: { type: String, default: 'New Update Available! 🚀' },
     message: { type: String, default: 'A new version of ZomoCook is available on the Play Store with important improvements and bug fixes. Please update now to continue using the app.' },
