@@ -138,6 +138,40 @@ const WebSettingSchema = new mongoose.Schema({
         willNotDo: ['Cooking Family Meals', 'House Cleaning / Mopping', 'Washing Family Clothes']
       }
     }
+  },
+
+  // Daily Basis Charges & Staff Category Charges
+  dailyCharges: {
+    isActive: { type: Boolean, default: true },
+    staffCategories: {
+      type: [{
+        category: { type: String, required: true },
+        label: { type: String, required: true },
+        rate: { type: Number, required: true },
+        description: { type: String, default: '' },
+        isActive: { type: Boolean, default: true }
+      }],
+      default: [
+        { category: 'chef', label: 'Chef / Main Cook', rate: 1499, description: 'Experienced commercial/party chef', isActive: true },
+        { category: 'cook', label: 'Home Cook', rate: 1199, description: 'Domestic / daily meal cook', isActive: true },
+        { category: 'helper', label: 'Kitchen Helper', rate: 699, description: 'Vegetable cutting & kitchen support', isActive: true },
+        { category: 'waiter', label: 'Waiter / Steward', rate: 899, description: 'Food serving & guest hospitality', isActive: true },
+        { category: 'cleaner', label: 'Cleaner / Housekeeping', rate: 599, description: 'Kitchen and dining cleaning', isActive: true },
+        { category: 'manager', label: 'Kitchen Manager / Supervisor', rate: 1699, description: 'Kitchen & banquet event manager', isActive: true },
+        { category: 'bartender', label: 'Bartender / Beverage Staff', rate: 1299, description: 'Bar & mocktail/cocktail service', isActive: true }
+      ]
+    },
+    domesticCharges: {
+      breakfastRate: { type: Number, default: 399 },
+      lunchRate: { type: Number, default: 499 },
+      dinnerRate: { type: Number, default: 499 },
+      twoMealsRate: { type: Number, default: 899 },
+      threeMealsRate: { type: Number, default: 1399 },
+      guestRatePerDay: { type: Number, default: 65 }
+    },
+    advancePercentage: { type: Number, default: 25 },
+    platformFeePercentage: { type: Number, default: 10 },
+    gstPercentage: { type: Number, default: 18 }
   }
 }, { timestamps: true });
 

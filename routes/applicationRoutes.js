@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const {
     applyJob,
+    customerShortlistCandidate,
     getApplications,
     getMyApplications,
     updateApplicationStatus,
@@ -22,6 +23,9 @@ const { protect } = require('../middleware/authMiddleware');
 
 // Cook applies for job
 router.post('/apply', protect, applyJob);
+
+// Customer shortlists candidate directly
+router.post('/customer-shortlist', protect, customerShortlistCandidate);
 
 // Get cook's applications
 router.get('/cook/my-applications', protect, getMyApplications);

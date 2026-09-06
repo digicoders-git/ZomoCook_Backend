@@ -84,6 +84,21 @@ const updateWebSettings = async (req, res) => {
             }
         }
 
+        if (req.body.dailyCharges !== undefined) {
+            try {
+                const dc = typeof req.body.dailyCharges === 'string'
+                    ? JSON.parse(req.body.dailyCharges)
+                    : req.body.dailyCharges;
+                settings.dailyCharges = {
+                    ...settings.dailyCharges,
+                    ...dc
+                };
+                settings.markModified('dailyCharges');
+            } catch (err) {
+                console.error("Error parsing dailyCharges:", err);
+            }
+        }
+
         // Handle file uploads
         if (req.files) {
             if (req.files.logo) {

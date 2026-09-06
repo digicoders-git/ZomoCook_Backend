@@ -1219,8 +1219,95 @@ const cookRejectOffer = async (req, res) => {
     }
 };
 
+/**
+ * @desc    Customer shortlists candidate directly
+ * @route   POST /api/applications/customer-shortlist
+ * @access  Private (Customer)
+ */
+const customerShortlistCandidate = async (req, res) => {
+    try {
+        const { candidateId, jobId } = req.body;
+        const customerId = req.admin._id;
+
+        if (!candidateId) {
+            return res.status(400).json({ success: false, message: 'Candidate ID is required' });
+        }
+
+        const candidate = await Candidate.findById(candidateId);
+        if (!candidate) {
+            return res.status(404).json({ success: false, message: 'Candidate not found' });
+        }
+
+        let targetJobId = jobId;
+        if (!targetJobId) {
+            const Job = require('../models/Job');
+            const latestJob = await Job.findOne({ createdBy: customerId }).sort({ createdAt: -1 });
+            if (latestJob) {
+                targetJobId = latestJob._id;
+            }
+        }
+
+        let applicationQuery = { customer: customerId, candidate: candidateId };
+        if (targetJobId) {
+            applicationQuery = {
+                $or: [
+                    { customer: customerId, candidate: candidateId, job: targetJobId },
+                    { customer: customerId, candidate: candidateId }
+                ]
+            };
+        }
+
+        let application = await Application.findOne(applicationQuery).sort({ createdAt: -1 });
+
+        if (application) {
+            application.status = 'Shortlisted';
+            if (targetJobId && !application.job) {
+                application.job = targetJobId;
+            }
+            await application.save();
+        } else {
+            application = await Application.create({
+                job: targetJobId || null,
+                candidate: candidateId,
+                customer: customerId,
+                status: 'Shortlisted',
+                appliedDate: new Date()
+            });
+        }
+
+        await application.populate('candidate');
+        if (application.job) {
+            await application.populate('job');
+        }
+
+        const notificationController = require('./notificationController');
+        notificationController.sendNotificationToUser({
+            userId: candidate._id,
+            userModel: 'Candidate',
+            title: '⭐ You Have Been Shortlisted!',
+            message: `Congratulations! A customer (${req.admin.name || 'Customer'}) has shortlisted your profile.`,
+            type: 'application_status',
+            relatedId: application._id,
+            relatedModel: 'Application',
+            actionUrl: '/cook-applications'
+        }).catch(err => console.error('Error sending shortlist notification:', err));
+
+        await syncCandidateApplication(application);
+
+        res.status(200).json({
+            success: true,
+            message: 'Cook shortlisted successfully',
+            application
+        });
+    } catch (error) {
+        console.error('Error shortlisting candidate:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
 module.exports = {
     applyJob,
+    customerShortlistCandidate,
     getApplications,
     getMyApplications,
     updateApplicationStatus,
@@ -1237,3 +1324,4 @@ module.exports = {
     cookAcceptOffer,
     cookRejectOffer
 };
+
