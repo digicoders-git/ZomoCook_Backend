@@ -14,7 +14,9 @@ const { protect } = require('../middleware/authMiddleware');
 router.get('/admin/pending-cook-approvals', protect, getPendingCookApprovals);
 router.get('/admin/cook-verification/:id', protect, getCookVerificationDetails);
 router.post('/admin/approve/:id', protect, approveCook);
+router.post('/admin/approve-cook/:id', protect, approveCook);
 router.post('/admin/reject/:id', protect, rejectCook);
+router.post('/admin/reject-cook/:id', protect, rejectCook);
 
 // Cook routes
 router.get('/:id/profile-status', protect, getCookProfileStatus);

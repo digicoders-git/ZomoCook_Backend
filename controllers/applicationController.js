@@ -1226,17 +1226,44 @@ const cookRejectOffer = async (req, res) => {
  */
 const customerShortlistCandidate = async (req, res) => {
     try {
-        const { candidateId, jobId } = req.body;
+        const { candidateId, jobId, phone, email } = req.body;
         const customerId = req.admin._id;
+        const mongoose = require('mongoose');
 
-        if (!candidateId) {
-            return res.status(400).json({ success: false, message: 'Candidate ID is required' });
+        if (!candidateId && !phone && !email) {
+            return res.status(400).json({ success: false, message: 'Candidate identifier is required' });
         }
 
-        const candidate = await Candidate.findById(candidateId);
+        let candidate = null;
+        if (candidateId) {
+            if (mongoose.Types.ObjectId.isValid(candidateId)) {
+                candidate = await Candidate.findById(candidateId);
+                if (!candidate) {
+                    candidate = await Candidate.findOne({ createdBy: candidateId });
+                }
+            }
+            if (!candidate) {
+                const last10 = candidateId.toString().slice(-10);
+                if (last10.length === 10 && /^\d+$/.test(last10)) {
+                    candidate = await Candidate.findOne({ phone: new RegExp(last10 + '$') });
+                }
+            }
+        }
+
+        if (!candidate && phone) {
+            const last10 = phone.toString().slice(-10);
+            candidate = await Candidate.findOne({ phone: new RegExp(last10 + '$') });
+        }
+
+        if (!candidate && email) {
+            candidate = await Candidate.findOne({ email: new RegExp(`^${email}$`, 'i') });
+        }
+
         if (!candidate) {
             return res.status(404).json({ success: false, message: 'Candidate not found' });
         }
+
+        const actualCandidateId = candidate._id;
 
         let targetJobId = jobId;
         if (!targetJobId) {
@@ -1247,12 +1274,12 @@ const customerShortlistCandidate = async (req, res) => {
             }
         }
 
-        let applicationQuery = { customer: customerId, candidate: candidateId };
+        let applicationQuery = { customer: customerId, candidate: actualCandidateId };
         if (targetJobId) {
             applicationQuery = {
                 $or: [
-                    { customer: customerId, candidate: candidateId, job: targetJobId },
-                    { customer: customerId, candidate: candidateId }
+                    { customer: customerId, candidate: actualCandidateId, job: targetJobId },
+                    { customer: customerId, candidate: actualCandidateId }
                 ]
             };
         }
@@ -1268,7 +1295,7 @@ const customerShortlistCandidate = async (req, res) => {
         } else {
             application = await Application.create({
                 job: targetJobId || null,
-                candidate: candidateId,
+                candidate: actualCandidateId,
                 customer: customerId,
                 status: 'Shortlisted',
                 appliedDate: new Date()
