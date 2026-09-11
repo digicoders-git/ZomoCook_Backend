@@ -5,6 +5,16 @@ const path = require('path');
 const { getWebSettings, updateWebSettings, getAppVersion } = require('../controllers/webSettingController');
 const { protect } = require('../middleware/authMiddleware');
 
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, 'uploads/');
+    },
+    filename: (req, file, cb) => {
+        cb(null, `${file.fieldname}-${Date.now()}${path.extname(file.originalname)}`);
+    }
+});
+const upload = multer({ storage });
+
 // Public route to check app version & force update status
 router.get('/app-version', getAppVersion);
 

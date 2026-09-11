@@ -222,7 +222,52 @@ const getCandidates = async (req, res) => {
 
 const getCandidate = async (req, res) => {
     try {
-        const candidate = await Candidate.findById(req.params.id).populate('applications.job');
+        const mongoose = require('mongoose');
+        let candidate = null;
+        if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+            candidate = await Candidate.findById(req.params.id).populate('applications.job');
+            if (!candidate) {
+                candidate = await Candidate.findOne({ createdBy: req.params.id }).populate('applications.job');
+            }
+        }
+        if (!candidate) {
+            const last10 = req.params.id.toString().slice(-10);
+            if (last10.length === 10 && /^\d+$/.test(last10)) {
+                candidate = await Candidate.findOne({ phone: new RegExp(last10 + '$') }).populate('applications.job');
+            }
+        }
+        if (!candidate) {
+            const User = require('../models/User');
+            let user = null;
+            if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+                user = await User.findById(req.params.id);
+            }
+            if (!user) {
+                const last10 = req.params.id.toString().slice(-10);
+                if (last10.length === 10 && /^\d+$/.test(last10)) {
+                    user = await User.findOne({ phone: new RegExp(last10 + '$') });
+                }
+            }
+            if (user) {
+                const last10 = user.phone ? user.phone.slice(-10) : '';
+                candidate = await Candidate.findOne({
+                    $or: [
+                        { _id: user._id },
+                        { createdBy: user._id },
+                        { phone: last10 ? new RegExp(last10 + '$') : user.phone }
+                    ]
+                }).populate('applications.job');
+                if (!candidate) {
+                    candidate = await Candidate.create({
+                        name: (user.name && !user.name.startsWith('User_') && !user.name.startsWith('Cook_')) ? user.name : 'Enter Full Name',
+                        phone: user.phone,
+                        email: user.email || undefined,
+                        createdBy: user._id,
+                        creatorModel: 'User'
+                    });
+                }
+            }
+        }
         if (!candidate) return res.status(404).json({ success: false, message: 'Candidate not found' });
         res.status(200).json({ success: true, candidate });
     } catch (error) { res.status(500).json({ success: false, message: error.message }); }

@@ -265,9 +265,7 @@ exports.verifyOtp = async (req, res) => {
         if (!user) {
             isNewUser = true;
             // First time user, register
-            const defaultName = roleDoc.name.toLowerCase() === 'cook'
-                ? `Cook_${(formattedPhone || cleanedPhone).slice(-4)}`
-                : `User_${(formattedPhone || cleanedPhone).slice(-4)}`;
+            const defaultName = 'Enter Full Name';
 
             const userData = {
                 phone: formattedPhone || cleanedPhone,
@@ -419,14 +417,26 @@ exports.updateProfile = async (req, res) => {
         // If user has 'Cook' role, create or update Candidate profile
         let candidate = null;
         if (user.role && user.role.name && user.role.name.toLowerCase() === 'cook') {
-            candidate = await Candidate.findOne({ phone: user.phone });
+            const last10 = user.phone ? user.phone.slice(-10) : '';
+            candidate = await Candidate.findOne({
+                $or: [
+                    { _id: user._id },
+                    { createdBy: user._id },
+                    { phone: last10 ? new RegExp(last10 + '$') : user.phone }
+                ]
+            });
 
             const candidateData = {};
             
             if (user.name) candidateData.name = user.name;
             if (user.email) candidateData.email = user.email;
             if (user.phone) candidateData.phone = user.phone;
-            if (req.body.dob) candidateData.dob = new Date(req.body.dob);
+            if (req.body.dob) {
+                const parsedDob = new Date(req.body.dob);
+                if (!isNaN(parsedDob.getTime())) {
+                    candidateData.dob = parsedDob;
+                }
+            }
             if (req.body.gender) candidateData.gender = req.body.gender;
             if (req.body.languages) candidateData.languages = parseJsonField(req.body.languages);
             if (req.body.maritalStatus) candidateData.maritalStatus = req.body.maritalStatus;
@@ -493,7 +503,13 @@ exports.updateProfile = async (req, res) => {
             }
         } else if (user.role && user.role.name && user.role.name.toLowerCase() === 'customer') {
             const Customer = require('../models/Customer');
-            let customerDoc = await Customer.findOne({ contactPhone: user.phone });
+            const last10 = user.phone ? user.phone.slice(-10) : '';
+            let customerDoc = await Customer.findOne({
+                $or: [
+                    { createdBy: user._id },
+                    { contactPhone: last10 ? new RegExp(last10 + '$') : user.phone }
+                ]
+            });
             
             const customerData = {
                 createdBy: user._id,

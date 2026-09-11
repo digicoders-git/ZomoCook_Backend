@@ -396,7 +396,24 @@ const verifyPayment = async (req, res) => {
                     updateData.advanceAmount = Math.round((price > 0 ? price : 299) * 0.25);
                 }
             }
-            await Job.findByIdAndUpdate(jobId, updateData);
+            const updatedJob = await Job.findByIdAndUpdate(jobId, updateData, { new: true });
+            
+            // Dispatch push notification to all Cooks when job is activated after payment
+            if (updatedJob) {
+                const notificationController = require('./notificationController');
+                const salaryText = updatedJob.salaryRange ? `Salary ${updatedJob.salaryRange}` : 'Good Salary';
+                const cityText = updatedJob.city ? `in ${updatedJob.city}` : '';
+                notificationController.sendNotificationToRole({
+                    roleName: 'Cook',
+                    title: 'New Matching Job',
+                    message: `New Chef Requirement ${cityText}. ${salaryText}. Apply now.`,
+                    type: 'job_available',
+                    relatedId: updatedJob._id,
+                    relatedModel: 'Job',
+                    actionUrl: '/jobs'
+                }).catch(err => console.error('Error sending push notification after payment verification:', err));
+            }
+
             message = type === 'daily_job_advance' ? 'Advance paid and Plan activated. Daily job is now live.' : 'Job post fee paid. Job is now live.';
         } else if (type === 'daily_job_remaining' && jobId) {
             message = 'Remaining 75% payment verified successfully. You can now hire the candidate.';

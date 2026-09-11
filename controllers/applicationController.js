@@ -1260,7 +1260,48 @@ const customerShortlistCandidate = async (req, res) => {
         }
 
         if (!candidate) {
-            return res.status(404).json({ success: false, message: 'Candidate not found' });
+            const User = require('../models/User');
+            let user = null;
+            if (candidateId && mongoose.Types.ObjectId.isValid(candidateId)) {
+                user = await User.findById(candidateId);
+            }
+            if (!user && phone) {
+                const last10 = phone.toString().slice(-10);
+                user = await User.findOne({ phone: new RegExp(last10 + '$') });
+            }
+            if (!user && candidateId) {
+                const last10 = candidateId.toString().slice(-10);
+                if (last10.length === 10 && /^\d+$/.test(last10)) {
+                    user = await User.findOne({ phone: new RegExp(last10 + '$') });
+                }
+            }
+            if (!user && email) {
+                user = await User.findOne({ email: new RegExp(`^${email}$`, 'i') });
+            }
+
+            if (user) {
+                const last10 = user.phone ? user.phone.slice(-10) : '';
+                candidate = await Candidate.findOne({
+                    $or: [
+                        { _id: user._id },
+                        { createdBy: user._id },
+                        { phone: last10 ? new RegExp(last10 + '$') : user.phone }
+                    ]
+                });
+                if (!candidate) {
+                    candidate = await Candidate.create({
+                        name: (user.name && !user.name.startsWith('User_') && !user.name.startsWith('Cook_')) ? user.name : 'Enter Full Name',
+                        phone: user.phone,
+                        email: user.email || undefined,
+                        createdBy: user._id,
+                        creatorModel: 'User'
+                    });
+                }
+            }
+        }
+
+        if (!candidate) {
+            return res.status(404).json({ success: false, message: 'Candidate profile not found' });
         }
 
         const actualCandidateId = candidate._id;

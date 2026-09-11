@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const path = require('path');
-const { getMasters, createMaster, updateMaster, deleteMaster } = require('../controllers/masterController');
+const { getMasters, createMaster, updateMaster, deleteMaster, bulkDeleteMasters } = require('../controllers/masterController');
 const { protect } = require('../middleware/authMiddleware');
 
 // Multer storage configuration
@@ -16,6 +16,8 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({ storage });
+
+router.post('/bulk-delete', protect, bulkDeleteMasters);
 
 router.route('/:category')
     .get((req, res, next) => {

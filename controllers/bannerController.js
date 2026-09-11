@@ -28,7 +28,7 @@ const createBanner = async (req, res) => {
             link,
             status,
             targetAudience: targetAudience || 'both',
-            image: req.file ? req.file.path : '',
+            image: req.file ? req.file.path.replace(/\\/g, '/') : '',
             createdBy: req.admin?._id
         };
 
@@ -104,7 +104,7 @@ const updateBanner = async (req, res) => {
 
         if (req.file) {
             deleteFile(banner.image);
-            updateData.image = req.file.path;
+            updateData.image = req.file.path.replace(/\\/g, '/');
         }
 
         const updatedBanner = await Banner.findByIdAndUpdate(req.params.id, updateData, {

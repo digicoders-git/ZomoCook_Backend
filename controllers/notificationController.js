@@ -425,14 +425,33 @@ exports.sendNotificationToRole = async ({
         });
 
         const Role = require('../models/Role');
-        const roleDoc = await Role.findOne({ name: { $regex: new RegExp(`^${roleName}$`, 'i') } });
-        if (!roleDoc) {
-            console.error(`Role ${roleName} not found`);
-            return notification;
+        const Candidate = require('../models/Candidate');
+
+        let roleIds = [];
+        const roleDocs = await Role.find({ name: new RegExp(`^${roleName}$`, 'i') });
+        if (roleDocs.length > 0) {
+            roleIds = roleDocs.map(r => r._id);
         }
 
-        const users = await User.find({ role: roleDoc._id, fcmToken: { $ne: null } }).select('fcmToken');
-        const tokens = users.map(u => u.fcmToken).filter(Boolean);
+        // Search Users matching roleId OR string role name
+        const users = await User.find({
+            $or: [
+                ...(roleIds.length > 0 ? [{ role: { $in: roleIds } }] : []),
+                { role: new RegExp(`^${roleName}$`, 'i') },
+                { role: new RegExp(`^chef$`, 'i') }
+            ],
+            fcmToken: { $ne: null }
+        }).select('fcmToken');
+
+        // Also search Candidates with fcmToken if target is candidates/cook
+        let candidateTokens = [];
+        if (roleName.toLowerCase() === 'cook' || roleName.toLowerCase() === 'chef') {
+            const candidates = await Candidate.find({ fcmToken: { $ne: null } }).select('fcmToken');
+            candidateTokens = candidates.map(c => c.fcmToken).filter(Boolean);
+        }
+
+        const userTokens = users.map(u => u.fcmToken).filter(Boolean);
+        const tokens = [...new Set([...userTokens, ...candidateTokens])];
 
         if (tokens.length > 0) {
             const payload = buildFCMPayload(title, message, type, relatedId, actionUrl);
@@ -441,7 +460,9 @@ exports.sendNotificationToRole = async ({
                 const chunk = tokens.slice(i, i + chunkSize);
                 await admin.messaging().sendEachForMulticast({ tokens: chunk, ...payload });
             }
-            console.log(`[FCM] Role broadcast sent to ${tokens.length} ${roleName} users`);
+            console.log(`[FCM] Role broadcast sent to ${tokens.length} tokens for ${roleName}`);
+        } else {
+            console.log(`[FCM] No FCM tokens found for role: ${roleName}`);
         }
         return notification;
     } catch (err) {
