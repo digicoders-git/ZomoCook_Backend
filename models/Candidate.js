@@ -13,6 +13,8 @@ const candidateSchema = new mongoose.Schema({
     state: { type: String, trim: true },
     city: { type: String, trim: true },
     address: { type: String, trim: true },
+    latitude: { type: Number },
+    longitude: { type: Number },
     languages: [{ type: String }],
     profileImage: { type: String },
     cv: { type: String },
