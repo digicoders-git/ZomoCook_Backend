@@ -428,20 +428,21 @@ exports.sendNotificationToRole = async ({
         const Candidate = require('../models/Candidate');
 
         let roleIds = [];
-        const roleDocs = await Role.find({ name: new RegExp(`^${roleName}$`, 'i') });
-        if (roleDocs.length > 0) {
-            roleIds = roleDocs.map(r => r._id);
+        if (roleName.toLowerCase() === 'cook' || roleName.toLowerCase() === 'chef') {
+            const roleDocs = await Role.find({ name: new RegExp(`^(cook|chef)$`, 'i') });
+            if (roleDocs.length > 0) roleIds = roleDocs.map(r => r._id);
+        } else {
+            const roleDocs = await Role.find({ name: new RegExp(`^${roleName}$`, 'i') });
+            if (roleDocs.length > 0) roleIds = roleDocs.map(r => r._id);
         }
 
-        // Search Users matching roleId OR string role name
-        const users = await User.find({
-            $or: [
-                ...(roleIds.length > 0 ? [{ role: { $in: roleIds } }] : []),
-                { role: new RegExp(`^${roleName}$`, 'i') },
-                { role: new RegExp(`^chef$`, 'i') }
-            ],
-            fcmToken: { $ne: null }
-        }).select('fcmToken');
+        let users = [];
+        if (roleIds.length > 0) {
+            users = await User.find({
+                role: { $in: roleIds },
+                fcmToken: { $ne: null }
+            }).select('fcmToken');
+        }
 
         // Also search Candidates with fcmToken if target is candidates/cook
         let candidateTokens = [];
