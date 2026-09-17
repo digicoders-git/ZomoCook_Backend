@@ -112,6 +112,7 @@ app.use('/uploads', handleStaticFiles, express.static('uploads'));
 
 // Routes
 app.use('/api/admin/users', require('./routes/userRoutes'));
+app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/admin', require('./routes/adminRoutes'));
 app.use('/api', require('./routes/candidateVerificationRoutes'));
 app.use('/api/customers', require('./routes/customerRoutes'));
