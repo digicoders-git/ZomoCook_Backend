@@ -42,6 +42,35 @@ const PlanSchema = new mongoose.Schema({
         type: Boolean,
         default: true
     },
+    isCustom: {
+        type: Boolean,
+        default: false
+    },
+    targetCustomer: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Customer',
+        default: null
+    },
+    isPublished: {
+        type: Boolean,
+        default: false
+    },
+    replacementLimit: {
+        type: Number,
+        default: 0
+    },
+    customNotes: {
+        type: String,
+        default: ''
+    },
+    assignedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        refPath: 'assignedByModel'
+    },
+    assignedByModel: {
+        type: String,
+        enum: ['Admin', 'User']
+    },
     createdBy: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Admin'

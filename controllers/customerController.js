@@ -118,10 +118,50 @@ const getCustomers = async (req, res) => {
         }
 
         const customers = await Customer.find(query).sort({ createdAt: -1 });
+
+        // Populate active package / subscription for each customer
+        const customerIds = customers.map(c => c._id);
+        const creatorIds = customers.map(c => c.createdBy).filter(Boolean);
+        const allRelatedIds = [...new Set([...customerIds, ...creatorIds])];
+
+        const now = new Date();
+        const activeSubs = await SubscriptionHistory.find({
+            $or: [
+                { customer: { $in: allRelatedIds } },
+                { user: { $in: allRelatedIds } }
+            ],
+            status: 'Active',
+            endDate: { $gt: now }
+        }).populate('plan').sort({ createdAt: -1 });
+
+        const customersWithPackages = customers.map(cust => {
+            const custObj = cust.toObject();
+            const matchingSub = activeSubs.find(sub => 
+                (sub.customer && (sub.customer.toString() === cust._id.toString() || (cust.createdBy && sub.customer.toString() === cust.createdBy.toString()))) ||
+                (sub.user && (cust.createdBy && sub.user.toString() === cust.createdBy.toString()))
+            );
+
+            if (matchingSub && matchingSub.plan) {
+                custObj.activePackage = {
+                    planId: matchingSub.plan._id,
+                    name: matchingSub.plan.name,
+                    price: matchingSub.amountPaid || matchingSub.plan.price,
+                    startDate: matchingSub.startDate,
+                    endDate: matchingSub.endDate,
+                    durationDays: matchingSub.plan.durationDays,
+                    status: matchingSub.status,
+                    isCustom: matchingSub.plan.isCustom || false
+                };
+            } else {
+                custObj.activePackage = null;
+            }
+            return custObj;
+        });
+
         res.status(200).json({
             success: true,
-            count: customers.length,
-            customers
+            count: customersWithPackages.length,
+            customers: customersWithPackages
         });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -281,14 +321,28 @@ const getCustomerDashboard = async (req, res) => {
         const totalSpent = transactions.reduce((sum, txn) => sum + txn.amount, 0);
 
         // 5. Get Active Subscription/Package
+        const Plan = require('../models/Plan');
+        const User = require('../models/User');
+
+        const relatedUserIds = [customerId];
+        if (customer.createdBy) relatedUserIds.push(customer.createdBy);
+        if (customer.contactPhone) {
+            const linkedUser = await User.findOne({ phone: customer.contactPhone });
+            if (linkedUser) relatedUserIds.push(linkedUser._id);
+        }
+
         const activeSubscriptions = await SubscriptionHistory.find({
             $or: [
-                { customer: customerId }, 
-                { customer: customer.createdBy },
-                { user: customer.createdBy }
-            ],
-            status: 'Active'
-        }).populate('plan');
+                { customer: { $in: relatedUserIds } }, 
+                { user: { $in: relatedUserIds } }
+            ]
+        }).populate('plan').sort({ createdAt: -1 });
+
+        // Get Custom Packages created for this specific customer
+        const customPlans = await Plan.find({
+            isCustom: true,
+            targetCustomer: customerId
+        }).populate('assignedBy', 'name email').sort({ createdAt: -1 });
 
         // 6. Get Bookings
         const bookings = await Booking.find({ job: { $in: jobIds } })
@@ -318,6 +372,7 @@ const getCustomerDashboard = async (req, res) => {
                 transactions,
                 bookings,
                 activeSubscriptions,
+                customPlans,
                 recentActivity,
                 stats: {
                     totalJobs: jobs.length,
