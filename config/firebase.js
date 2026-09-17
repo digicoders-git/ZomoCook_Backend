@@ -26,8 +26,11 @@ if (!admin.apps.length) {
 
     // Fallback to environment variables
     if (!serviceAccount) {
-        const rawKey = process.env.FIREBASE_PRIVATE_KEY || '';
-        const privateKey = rawKey.includes('\\n') ? rawKey.replace(/\\n/g, '\n') : rawKey;
+        let rawKey = (process.env.FIREBASE_PRIVATE_KEY || '').trim();
+        if ((rawKey.startsWith("'") && rawKey.endsWith("'")) || (rawKey.startsWith('"') && rawKey.endsWith('"'))) {
+            rawKey = rawKey.slice(1, -1).trim();
+        }
+        const privateKey = rawKey.replace(/\\n/g, '\n');
         serviceAccount = {
             type: "service_account",
             project_id: process.env.FIREBASE_PROJECT_ID,
