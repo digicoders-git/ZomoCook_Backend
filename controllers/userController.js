@@ -294,20 +294,27 @@ exports.verifyOtp = async (req, res) => {
             user = await User.findById(user._id).populate('role');
         } else {
             // Existing user
-            // If user has no role assigned, assign the requested role
-            if (!user.role) {
-                user.role = roleDoc._id;
-                if (fcmToken && fcmToken !== 'optional_fcm_token' && fcmToken.length > 20) {
-                    user.fcmToken = fcmToken;
+            let shouldSave = false;
+            // If requested role is explicitly provided and different from current role, update it (e.g. Cook / Customer login)
+            if (roleDoc) {
+                const currentRoleId = (user.role?._id || user.role)?.toString();
+                const targetRoleId = roleDoc._id.toString();
+                if (currentRoleId !== targetRoleId) {
+                    const currentRoleName = (user.role?.name || '').toLowerCase();
+                    // Allow switching between standard app roles (Customer/User <-> Cook/Chef)
+                    if (!user.role || ['customer', 'user', 'cook', 'chef', ''].includes(currentRoleName)) {
+                        user.role = roleDoc._id;
+                        shouldSave = true;
+                    }
                 }
+            }
+            if (fcmToken && fcmToken !== 'optional_fcm_token' && fcmToken.length > 20) {
+                user.fcmToken = fcmToken;
+                shouldSave = true;
+            }
+            if (shouldSave) {
                 await user.save();
                 user = await User.findById(user._id).populate('role');
-            } else {
-                // Existing user - log in with existing role and update fcmToken if a real token is provided
-                if (fcmToken && fcmToken !== 'optional_fcm_token' && fcmToken.length > 20) {
-                    user.fcmToken = fcmToken;
-                    await user.save();
-                }
             }
         }
 
@@ -318,6 +325,8 @@ exports.verifyOtp = async (req, res) => {
                 $or: [
                     { contactPhone: cleanedPhone },
                     { contactPhone: formattedPhone },
+                    { phone: cleanedPhone },
+                    { phone: formattedPhone },
                     { contactPhone: phone }
                 ]
             });
@@ -333,6 +342,30 @@ exports.verifyOtp = async (req, res) => {
                 customerDoc.createdBy = user._id;
                 customerDoc.creatorModel = 'User';
                 await customerDoc.save();
+            }
+        } else if (roleDoc.name.toLowerCase() === 'cook' || roleDoc.name.toLowerCase() === 'chef') {
+            // Ensure Candidate record exists if role is Cook/Chef
+            const Candidate = require('../models/Candidate');
+            let candidateDoc = await Candidate.findOne({
+                $or: [
+                    { phone: cleanedPhone },
+                    { phone: formattedPhone },
+                    { phone: phone }
+                ]
+            });
+            if (!candidateDoc) {
+                await Candidate.create({
+                    name: user.name && user.name !== 'Enter Full Name' ? user.name : `Cook_${(formattedPhone || cleanedPhone).slice(-4)}`,
+                    phone: formattedPhone || cleanedPhone,
+                    fcmToken: user.fcmToken || undefined,
+                    createdBy: user._id,
+                    creatorModel: 'User'
+                });
+            } else {
+                if (user.fcmToken && candidateDoc.fcmToken !== user.fcmToken) {
+                    candidateDoc.fcmToken = user.fcmToken;
+                    await candidateDoc.save();
+                }
             }
         }
 
