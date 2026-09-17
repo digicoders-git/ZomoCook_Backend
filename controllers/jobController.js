@@ -199,8 +199,8 @@ const getJobs = async (req, res) => {
 
         if (isCustomer) {
             query.createdBy = req.admin._id;
-        } else if (!isSuperAdmin && !isCook && !canViewJobs) {
-            // Staff User without explicit job_management:view permission — show only assigned leads
+        } else if (!isSuperAdmin && !isCook) {
+            // Staff User / Lead Manager — show only assigned leads
             query.$and = query.$and || [];
             const makeFlexibleRegex = (s) => {
                 const cleaned = String(s || '').toLowerCase().replace(/[\s_-]/g, '');

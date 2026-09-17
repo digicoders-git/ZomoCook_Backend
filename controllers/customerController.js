@@ -22,7 +22,8 @@ const createCustomer = async (req, res) => {
             contactPhone,
             contactAddress,
             customerStatus,
-            accountStatus
+            accountStatus,
+            leadManager
         } = req.body;
 
         const customerExists = await Customer.findOne({ email });
@@ -41,6 +42,7 @@ const createCustomer = async (req, res) => {
             contactAddress,
             customerStatus,
             accountStatus,
+            leadManager: leadManager || '',
             profilePic: req.file ? req.file.path : undefined,
             createdBy: req.admin._id,
             creatorModel: req.admin.constructor.modelName
@@ -66,22 +68,19 @@ const getCustomers = async (req, res) => {
         let query = {};
         
         // Role-based data isolation
-        const isSuperAdmin = req.admin.constructor.modelName === 'Admin';
-        const isManager = req.admin.role && ['manager', 'super admin', 'admin'].includes(req.admin.role.name.toLowerCase());
-        const canViewCustomers = hasPermission(req.admin, 'customer_client:view');
-        const isInternalStaff = isSuperAdmin || canViewCustomers || (
-            req.admin.role && 
-            !['cook', 'user', 'customer'].includes(req.admin.role.name.toLowerCase())
-        );
+        const roleName = (req.admin.role?.name || '').toLowerCase();
+        const isSuperAdmin = (req.admin.constructor.modelName === 'Admin' && roleName !== 'lead manager') || 
+            roleName === 'super admin';
+        const isClient = req.admin.role && ['user', 'customer'].includes(roleName);
 
-        if (!isInternalStaff) {
+        if (isClient) {
             query.createdBy = req.admin._id;
-        } else if (!isSuperAdmin && !isManager && !canViewCustomers) {
-            // Restricted staff user — show customers associated with their assigned jobs
-            const Job = require('../models/Job');
+        } else if (!isSuperAdmin) {
+            // Staff User / Lead Manager — show only assigned customers
             const escapedName = req.admin.name ? req.admin.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';
             const escapedEmail = req.admin.email ? req.admin.email.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';
             
+            const Job = require('../models/Job');
             const assignedJobs = await Job.find({
                 $or: [
                     { leadManager: req.admin._id.toString() },
@@ -90,8 +89,32 @@ const getCustomers = async (req, res) => {
                 ]
             }).select('customer');
             
-            const customerIds = [...new Set(assignedJobs.map(j => j.customer?.toString()).filter(Boolean))];
-            query._id = { $in: customerIds };
+            const customerIdsFromJobs = [...new Set(assignedJobs.map(j => j.customer?.toString()).filter(Boolean))];
+
+            query.$or = [
+                { leadManager: req.admin._id.toString() },
+                { leadManager: new RegExp(`^\\s*${escapedName}\\s*$`, 'i') },
+                { leadManager: new RegExp(`^\\s*${escapedEmail}\\s*$`, 'i') },
+                ...(customerIdsFromJobs.length > 0 ? [{ _id: { $in: customerIdsFromJobs } }] : [])
+            ];
+        }
+
+        const { leadManager, search, status } = req.query;
+        if (leadManager) {
+            query.leadManager = leadManager;
+        }
+        if (status) {
+            query.accountStatus = status;
+        }
+        if (search) {
+            query.$and = query.$and || [];
+            query.$and.push({
+                $or: [
+                    { name: new RegExp(search, 'i') },
+                    { email: new RegExp(search, 'i') },
+                    { contactPhone: new RegExp(search, 'i') }
+                ]
+            });
         }
 
         const customers = await Customer.find(query).sort({ createdAt: -1 });

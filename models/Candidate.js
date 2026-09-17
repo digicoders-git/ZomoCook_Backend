@@ -187,6 +187,11 @@ const candidateSchema = new mongoose.Schema({
     creatorModel: {
         type: String,
         enum: ['Admin', 'User']
+    },
+    leadManager: {
+        type: String,
+        trim: true,
+        default: ''
     }
 }, { timestamps: true });
 

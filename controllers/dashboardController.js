@@ -17,20 +17,22 @@ const getDashboardStats = async (req, res) => {
     try {
         const { category, customer, position, date } = req.query;
 
-        const isSuperAdmin = req.admin.constructor.modelName === 'Admin';
-        const isManager = req.admin.role && ['manager', 'super admin', 'admin'].includes(req.admin.role.name.toLowerCase());
+        const roleName = (req.admin.role?.name || '').toLowerCase();
+        const isSuperAdmin = (req.admin.constructor.modelName === 'Admin' && roleName !== 'lead manager') || 
+            roleName === 'super admin';
+        const isManager = req.admin.role && ['manager', 'super admin', 'admin'].includes(roleName);
         const canViewDashboard = hasPermission(req.admin, 'dashboard:view');
         const isInternalStaff = isSuperAdmin || canViewDashboard || (
             req.admin.role && 
-            !['cook', 'user', 'customer'].includes(req.admin.role.name.toLowerCase())
+            !['cook', 'user', 'customer'].includes(roleName)
         );
         
         // Construct dynamic filter for Jobs
         const jobFilter = {};
         if (!isInternalStaff) {
             jobFilter.createdBy = req.admin._id;
-        } else if (!isSuperAdmin && !isManager && !canViewDashboard) {
-            // Restricted staff user without dashboard:view — show their assigned jobs only
+        } else if (!isSuperAdmin) {
+            // Restricted staff user without full access — show their assigned jobs only
             const escapedName = req.admin.name ? req.admin.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';
             const escapedEmail = req.admin.email ? req.admin.email.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';
             
@@ -98,8 +100,8 @@ const getDashboardStats = async (req, res) => {
             appMatchFilter.createdBy = req.admin._id;
             candidateQuery.createdBy = req.admin._id;
             customerQuery.createdBy = req.admin._id;
-        } else if (!isSuperAdmin && !isManager && !canViewDashboard) {
-            // Staff user without dashboard:view — show applications for their assigned jobs only
+        } else if (!isSuperAdmin) {
+            // Staff user — show applications, candidates, and customers for their assigned jobs or direct assignment
             const escapedName = req.admin.name ? req.admin.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';
             const escapedEmail = req.admin.email ? req.admin.email.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';
             
@@ -112,14 +114,24 @@ const getDashboardStats = async (req, res) => {
             }).select('_id customer');
             
             const assignedJobIds = assignedJobs.map(j => j._id);
-            const customerIds = [...new Set(assignedJobs.map(j => j.customer?.toString()).filter(Boolean))];
+            const customerIdsFromJobs = assignedJobs.map(j => j.customer?.toString()).filter(Boolean);
             
             const assignedApps = await Application.find({ job: { $in: assignedJobIds } }).select('candidate');
-            const candidateIds = [...new Set(assignedApps.map(a => a.candidate?.toString()).filter(Boolean))];
+            const candidateIdsFromApps = assignedApps.map(a => a.candidate?.toString()).filter(Boolean);
             
             appMatchFilter["applications.job"] = { $in: assignedJobIds };
-            candidateQuery._id = { $in: candidateIds };
-            customerQuery._id = { $in: customerIds };
+            candidateQuery.$or = [
+                { leadManager: req.admin._id.toString() },
+                { leadManager: new RegExp(`^\\s*${escapedName}\\s*$`, 'i') },
+                { leadManager: new RegExp(`^\\s*${escapedEmail}\\s*$`, 'i') },
+                ...(candidateIdsFromApps.length > 0 ? [{ _id: { $in: candidateIdsFromApps } }] : [])
+            ];
+            customerQuery.$or = [
+                { leadManager: req.admin._id.toString() },
+                { leadManager: new RegExp(`^\\s*${escapedName}\\s*$`, 'i') },
+                { leadManager: new RegExp(`^\\s*${escapedEmail}\\s*$`, 'i') },
+                ...(customerIdsFromJobs.length > 0 ? [{ _id: { $in: customerIdsFromJobs } }] : [])
+            ];
         }
 
         if (category) appMatchFilter["jobInfo.jobCategory"] = category;

@@ -55,6 +55,11 @@ const customerSchema = new mongoose.Schema({
         type: String,
         enum: ['Admin', 'User']
     },
+    leadManager: {
+        type: String,
+        trim: true,
+        default: ''
+    },
     notes: [{
         content: String,
         addedBy: String,

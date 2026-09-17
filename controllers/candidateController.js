@@ -181,20 +181,22 @@ const deleteCandidate = async (req, res) => {
 
 const getCandidates = async (req, res) => {
     try {
-        const { search, city, gender, kycStatus, profileStatus } = req.query;
+        const { search, city, gender, kycStatus, profileStatus, leadManager } = req.query;
         let query = {};
         
         // Role-based data isolation
-        const isSuperAdmin = req.admin.constructor.modelName === 'Admin';
-        const isClient = req.admin.role && ['user', 'customer'].includes(req.admin.role.name.toLowerCase());
-        const canViewCandidates = hasPermission(req.admin, 'candidates:view');
-        const isStaffUser = !isSuperAdmin && req.admin.role && !['cook', 'user', 'customer'].includes(req.admin.role.name.toLowerCase());
-        const isManager = req.admin.role && ['manager', 'super admin', 'admin'].includes(req.admin.role.name.toLowerCase());
+        const roleName = (req.admin.role?.name || '').toLowerCase();
+        const isSuperAdmin = (req.admin.constructor.modelName === 'Admin' && roleName !== 'lead manager') || 
+            roleName === 'super admin';
+        const isClient = req.admin.role && ['user', 'customer'].includes(roleName);
 
-        if (isStaffUser && !isManager && !canViewCandidates) {
-            // Staff user without explicit candidates:view permission — show candidates from their assigned jobs only
+        if (isClient) {
+            query.profileStatus = 'active';
+        } else if (!isSuperAdmin) {
+            // Staff User / Lead Manager — show only assigned candidates
             const escapedName = req.admin.name ? req.admin.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';
             const escapedEmail = req.admin.email ? req.admin.email.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';
+            
             const assignedJobs = await Job.find({
                 $or: [
                     { leadManager: req.admin._id.toString() },
@@ -204,19 +206,31 @@ const getCandidates = async (req, res) => {
             }).select('_id');
             const assignedJobIds = assignedJobs.map(j => j._id);
             const assignedApps = await Application.find({ job: { $in: assignedJobIds } }).select('candidate');
-            const candidateIds = [...new Set(assignedApps.map(a => a.candidate?.toString()).filter(Boolean))];
-            query._id = { $in: candidateIds };
+            const candidateIdsFromJobs = assignedApps.map(a => a.candidate?.toString()).filter(Boolean);
+
+            query.$or = [
+                { leadManager: req.admin._id.toString() },
+                { leadManager: new RegExp(`^\\s*${escapedName}\\s*$`, 'i') },
+                { leadManager: new RegExp(`^\\s*${escapedEmail}\\s*$`, 'i') },
+                ...(candidateIdsFromJobs.length > 0 ? [{ _id: { $in: candidateIdsFromJobs } }] : [])
+            ];
         }
 
-        if (isClient) {
-            query.profileStatus = 'active';
-        }
-
-        if (search) query.$or = [{ name: new RegExp(search, 'i') }, { phone: new RegExp(search, 'i') }, { email: new RegExp(search, 'i') }];
+        if (leadManager) query.leadManager = leadManager;
         if (city) query.city = new RegExp(city, 'i');
         if (gender) query.gender = gender;
         if (kycStatus) query.kycStatus = kycStatus;
         if (profileStatus) query.profileStatus = profileStatus;
+        if (search) {
+            query.$and = query.$and || [];
+            query.$and.push({
+                $or: [
+                    { name: new RegExp(search, 'i') },
+                    { phone: new RegExp(search, 'i') },
+                    { email: new RegExp(search, 'i') }
+                ]
+            });
+        }
         const candidates = await Candidate.find(query).sort({ createdAt: -1 });
         res.status(200).json({ success: true, count: candidates.length, candidates });
     } catch (error) { res.status(500).json({ success: false, message: error.message }); }
@@ -348,8 +362,8 @@ const getApplications = async (req, res) => {
             }
         } else if (isClient) {
             query.customer = req.admin._id;
-        } else if (isStaffUser && !isManager && !canViewCandidates) {
-            // Staff user (Lead Manager, Telecaller, etc.) without candidates:view — show applications for their assigned jobs only
+        } else if (!isSuperAdmin) {
+            // Staff user (Lead Manager, Telecaller, etc.) — show applications for their assigned jobs or candidates only
             const escapedName = req.admin.name ? req.admin.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';
             const escapedEmail = req.admin.email ? req.admin.email.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';
             const assignedJobs = await Job.find({
@@ -360,7 +374,20 @@ const getApplications = async (req, res) => {
                 ]
             }).select('_id');
             const assignedJobIds = assignedJobs.map(j => j._id);
-            query.job = { $in: assignedJobIds };
+
+            const assignedCandidates = await Candidate.find({
+                $or: [
+                    { leadManager: req.admin._id.toString() },
+                    { leadManager: new RegExp(`^\\s*${escapedName}\\s*$`, 'i') },
+                    { leadManager: new RegExp(`^\\s*${escapedEmail}\\s*$`, 'i') }
+                ]
+            }).select('_id');
+            const assignedCandidateIds = assignedCandidates.map(c => c._id);
+
+            query.$or = [
+                { job: { $in: assignedJobIds } },
+                { candidate: { $in: assignedCandidateIds } }
+            ];
         }
 
         if (status) query.status = status;
