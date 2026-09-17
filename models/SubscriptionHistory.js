@@ -14,10 +14,42 @@ const subscriptionHistorySchema = new mongoose.Schema({
         ref: 'Plan',
         required: true
     },
+    totalAmount: {
+        type: Number
+    },
     amountPaid: {
         type: Number,
-        required: true
+        required: true,
+        default: 0
     },
+    dueAmount: {
+        type: Number,
+        default: 0
+    },
+    paymentStatus: {
+        type: String,
+        enum: ['paid', 'partial', 'pending'],
+        default: 'paid'
+    },
+    customJobPostLimit: {
+        type: Number
+    },
+    customHiringLimit: {
+        type: Number
+    },
+    customReplacementLimit: {
+        type: Number
+    },
+    paymentHistory: [{
+        amount: { type: Number, required: true },
+        paymentMethod: { type: String, default: 'cash' },
+        paymentReference: { type: String, default: '' },
+        paymentNote: { type: String, default: '' },
+        collectedBy: { type: mongoose.Schema.Types.ObjectId, refPath: 'paymentHistory.collectedByModel' },
+        collectedByModel: { type: String, enum: ['Admin', 'User'], default: 'Admin' },
+        collectedByName: { type: String, default: '' },
+        collectedAt: { type: Date, default: Date.now }
+    }],
     startDate: {
         type: Date,
         default: Date.now

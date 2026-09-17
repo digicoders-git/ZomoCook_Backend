@@ -142,13 +142,23 @@ const getCustomers = async (req, res) => {
             );
 
             if (matchingSub && matchingSub.plan) {
+                const totalVal = matchingSub.totalAmount ?? matchingSub.plan.price ?? matchingSub.amountPaid ?? 0;
+                const paidVal = matchingSub.amountPaid ?? 0;
+                const dueVal = matchingSub.dueAmount ?? Math.max(0, totalVal - paidVal);
+
                 custObj.activePackage = {
+                    subId: matchingSub._id,
                     planId: matchingSub.plan._id,
                     name: matchingSub.plan.name,
-                    price: matchingSub.amountPaid || matchingSub.plan.price,
+                    price: totalVal,
+                    totalAmount: totalVal,
+                    amountPaid: paidVal,
+                    dueAmount: dueVal,
+                    paymentStatus: matchingSub.paymentStatus || (dueVal === 0 ? 'paid' : 'partial'),
                     startDate: matchingSub.startDate,
                     endDate: matchingSub.endDate,
                     durationDays: matchingSub.plan.durationDays,
+                    daysLeft: Math.max(0, Math.ceil((new Date(matchingSub.endDate) - now) / (1000 * 3600 * 24))),
                     status: matchingSub.status,
                     isCustom: matchingSub.plan.isCustom || false
                 };
@@ -336,7 +346,7 @@ const getCustomerDashboard = async (req, res) => {
                 { customer: { $in: relatedUserIds } }, 
                 { user: { $in: relatedUserIds } }
             ]
-        }).populate('plan').sort({ createdAt: -1 });
+        }).populate('plan').populate('activatedBy', 'name email').sort({ createdAt: -1 });
 
         // Get Custom Packages created for this specific customer
         const customPlans = await Plan.find({
