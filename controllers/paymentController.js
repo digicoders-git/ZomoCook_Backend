@@ -310,11 +310,26 @@ const verifyPayment = async (req, res) => {
                 user.cooksHiredInCurrentPlan = 0;
                 await user.save();
 
+                let amountPaid = plan.price;
+                let totalAmount = plan.price;
+                let dueAmount = 0;
+                let paymentStatus = 'paid';
+
+                if (plan.isCustom && plan.customPaymentEnabled) {
+                    const pct = plan.advancePaymentPercentage || 50;
+                    amountPaid = Math.round(plan.price * (pct / 100));
+                    dueAmount = plan.price - amountPaid;
+                    paymentStatus = dueAmount > 0 ? 'partial' : 'paid';
+                }
+
                 await SubscriptionHistory.create({
                     user: isCustomer ? undefined : user._id,
                     customer: isCustomer ? user._id : undefined,
                     plan: plan._id,
-                    amountPaid: plan.price,
+                    totalAmount: totalAmount,
+                    amountPaid: amountPaid,
+                    dueAmount: dueAmount,
+                    paymentStatus: paymentStatus,
                     startDate: new Date(),
                     endDate: expiry,
                     status: 'Active',

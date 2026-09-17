@@ -121,7 +121,9 @@ exports.createCustomerCustomPlan = async (req, res) => {
             isPublished,
             customNotes,
             expiresAt,
-            expiresInHours
+            expiresInHours,
+            customPaymentEnabled,
+            advancePaymentPercentage
         } = req.body;
 
         if (!name || !price || !durationDays) {
@@ -148,6 +150,8 @@ exports.createCustomerCustomPlan = async (req, res) => {
             targetCustomer: customerId,
             isPublished: isPublished === true || isPublished === 'true',
             isActive: true,
+            customPaymentEnabled: customPaymentEnabled === true || customPaymentEnabled === 'true',
+            advancePaymentPercentage: Number(advancePaymentPercentage || 50),
             customNotes: customNotes || '',
             expiresAt: calculatedExpiresAt,
             assignedBy: req.admin._id,

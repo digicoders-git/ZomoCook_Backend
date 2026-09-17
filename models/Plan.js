@@ -59,6 +59,14 @@ const PlanSchema = new mongoose.Schema({
         type: Number,
         default: 0
     },
+    customPaymentEnabled: {
+        type: Boolean,
+        default: false
+    },
+    advancePaymentPercentage: {
+        type: Number,
+        default: 50
+    },
     customNotes: {
         type: String,
         default: ''
