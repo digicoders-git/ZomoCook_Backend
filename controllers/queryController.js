@@ -1,4 +1,5 @@
 const Query = require('../models/Query');
+const { hasPermission } = require('../middleware/permissionHelper');
 
 /**
  * @desc    Get all queries
@@ -10,7 +11,8 @@ exports.getQueries = async (req, res) => {
         let query = {};
         
         const isSuperAdmin = req.admin.constructor.modelName === 'Admin';
-        if (!isSuperAdmin) {
+        const canViewQueries = hasPermission(req.admin, 'query_management:view');
+        if (!isSuperAdmin && !canViewQueries) {
             query.$and = query.$and || [];
             query.$and.push({
                 $or: [

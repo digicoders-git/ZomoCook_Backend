@@ -92,6 +92,10 @@ exports.createUser = async (req, res) => {
         if (email) {
             const userExists = await User.findOne({ email });
             if (userExists) return res.status(400).json({ success: false, message: 'User with this email already exists' });
+            
+            const Admin = require('../models/Admin');
+            const adminExists = await Admin.findOne({ email });
+            if (adminExists) return res.status(400).json({ success: false, message: 'An admin account with this email already exists' });
         }
 
         const userData = { name, email, phone, password, role, status, jobActions };
@@ -111,6 +115,15 @@ exports.createUser = async (req, res) => {
  */
 exports.updateUser = async (req, res) => {
     try {
+        if (req.body.email) {
+            const userExists = await User.findOne({ email: req.body.email, _id: { $ne: req.params.id } });
+            if (userExists) return res.status(400).json({ success: false, message: 'User with this email already exists' });
+            
+            const Admin = require('../models/Admin');
+            const adminExists = await Admin.findOne({ email: req.body.email });
+            if (adminExists) return res.status(400).json({ success: false, message: 'An admin account with this email already exists' });
+        }
+
         if (req.body.password) {
             const bcrypt = require('bcryptjs');
             const salt = await bcrypt.genSalt(10);

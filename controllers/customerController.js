@@ -4,6 +4,7 @@ const Application = require('../models/Application');
 const Transaction = require('../models/Transaction');
 const SubscriptionHistory = require('../models/SubscriptionHistory');
 const Booking = require('../models/Booking');
+const { hasPermission } = require('../middleware/permissionHelper');
 
 /**
  * @desc    Create new customer
@@ -67,14 +68,15 @@ const getCustomers = async (req, res) => {
         // Role-based data isolation
         const isSuperAdmin = req.admin.constructor.modelName === 'Admin';
         const isManager = req.admin.role && ['manager', 'super admin', 'admin'].includes(req.admin.role.name.toLowerCase());
-        const isInternalStaff = isSuperAdmin || (
+        const canViewCustomers = hasPermission(req.admin, 'customer_client:view');
+        const isInternalStaff = isSuperAdmin || canViewCustomers || (
             req.admin.role && 
             !['cook', 'user', 'customer'].includes(req.admin.role.name.toLowerCase())
         );
 
         if (!isInternalStaff) {
             query.createdBy = req.admin._id;
-        } else if (!isSuperAdmin && !isManager) {
+        } else if (!isSuperAdmin && !isManager && !canViewCustomers) {
             // Restricted staff user — show customers associated with their assigned jobs
             const Job = require('../models/Job');
             const escapedName = req.admin.name ? req.admin.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';

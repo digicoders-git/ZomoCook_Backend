@@ -6,6 +6,7 @@ const Transaction = require('../models/Transaction');
 const SubscriptionHistory = require('../models/SubscriptionHistory');
 const ServicePackagePayment = require('../models/ServicePackagePayment');
 const Application = require('../models/Application');
+const { hasPermission } = require('../middleware/permissionHelper');
 
 /**
  * @desc    Get dashboard statistics with filters
@@ -18,7 +19,8 @@ const getDashboardStats = async (req, res) => {
 
         const isSuperAdmin = req.admin.constructor.modelName === 'Admin';
         const isManager = req.admin.role && ['manager', 'super admin', 'admin'].includes(req.admin.role.name.toLowerCase());
-        const isInternalStaff = isSuperAdmin || (
+        const canViewDashboard = hasPermission(req.admin, 'dashboard:view');
+        const isInternalStaff = isSuperAdmin || canViewDashboard || (
             req.admin.role && 
             !['cook', 'user', 'customer'].includes(req.admin.role.name.toLowerCase())
         );
@@ -27,8 +29,8 @@ const getDashboardStats = async (req, res) => {
         const jobFilter = {};
         if (!isInternalStaff) {
             jobFilter.createdBy = req.admin._id;
-        } else if (!isSuperAdmin && !isManager) {
-            // Restricted staff user (like Lead Manager, Telecaller, etc.) — show their assigned jobs only
+        } else if (!isSuperAdmin && !isManager && !canViewDashboard) {
+            // Restricted staff user without dashboard:view — show their assigned jobs only
             const escapedName = req.admin.name ? req.admin.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';
             const escapedEmail = req.admin.email ? req.admin.email.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';
             
@@ -96,8 +98,8 @@ const getDashboardStats = async (req, res) => {
             appMatchFilter.createdBy = req.admin._id;
             candidateQuery.createdBy = req.admin._id;
             customerQuery.createdBy = req.admin._id;
-        } else if (!isSuperAdmin && !isManager) {
-            // Staff user (Lead Manager, Telecaller, etc.) — show applications for their assigned jobs only
+        } else if (!isSuperAdmin && !isManager && !canViewDashboard) {
+            // Staff user without dashboard:view — show applications for their assigned jobs only
             const escapedName = req.admin.name ? req.admin.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';
             const escapedEmail = req.admin.email ? req.admin.email.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';
             

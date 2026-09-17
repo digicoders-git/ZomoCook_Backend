@@ -3,6 +3,7 @@ const Application = require('../models/Application');
 const Job = require('../models/Job');
 const fs = require('fs');
 const path = require('path');
+const { hasPermission } = require('../middleware/permissionHelper');
 
 // Helper to delete file if exists
 const deleteFile = (filePath) => {
@@ -186,11 +187,12 @@ const getCandidates = async (req, res) => {
         // Role-based data isolation
         const isSuperAdmin = req.admin.constructor.modelName === 'Admin';
         const isClient = req.admin.role && ['user', 'customer'].includes(req.admin.role.name.toLowerCase());
+        const canViewCandidates = hasPermission(req.admin, 'candidates:view');
         const isStaffUser = !isSuperAdmin && req.admin.role && !['cook', 'user', 'customer'].includes(req.admin.role.name.toLowerCase());
         const isManager = req.admin.role && ['manager', 'super admin', 'admin'].includes(req.admin.role.name.toLowerCase());
 
-        if (isStaffUser && !isManager) {
-            // Staff user — show candidates from their assigned jobs only
+        if (isStaffUser && !isManager && !canViewCandidates) {
+            // Staff user without explicit candidates:view permission — show candidates from their assigned jobs only
             const escapedName = req.admin.name ? req.admin.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';
             const escapedEmail = req.admin.email ? req.admin.email.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';
             const assignedJobs = await Job.find({
@@ -326,6 +328,7 @@ const getApplications = async (req, res) => {
         const isSuperAdmin = req.admin.constructor.modelName === 'Admin';
         const isCook = req.admin.role && req.admin.role.name && req.admin.role.name.toLowerCase() === 'cook';
         const isClient = req.admin.role && ['user', 'customer'].includes(req.admin.role.name.toLowerCase());
+        const canViewCandidates = hasPermission(req.admin, 'candidates:view');
         const isStaffUser = !isSuperAdmin && req.admin.role && !['cook', 'user', 'customer'].includes(req.admin.role.name.toLowerCase());
         const isManager = req.admin.role && ['manager', 'super admin', 'admin'].includes(req.admin.role.name.toLowerCase());
         
@@ -345,8 +348,8 @@ const getApplications = async (req, res) => {
             }
         } else if (isClient) {
             query.customer = req.admin._id;
-        } else if (isStaffUser && !isManager) {
-            // Staff user (Lead Manager, Telecaller, etc.) — show applications for their assigned jobs only
+        } else if (isStaffUser && !isManager && !canViewCandidates) {
+            // Staff user (Lead Manager, Telecaller, etc.) without candidates:view — show applications for their assigned jobs only
             const escapedName = req.admin.name ? req.admin.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';
             const escapedEmail = req.admin.email ? req.admin.email.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';
             const assignedJobs = await Job.find({

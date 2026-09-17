@@ -334,13 +334,23 @@ exports.sendNotificationToUser = async ({
 
         let fcmResult = null;
         if (recipientDoc && recipientDoc.fcmToken) {
-            const payload = buildFCMPayload(title, message, type, relatedId, actionUrl);
-            console.log(`[FCM] Sending push to: ${recipientDoc.fcmToken.substring(0, 20)}...`);
-            fcmResult = await admin.messaging().send({
-                token: recipientDoc.fcmToken,
-                ...payload
-            });
-            console.log('[FCM] Push sent. Message ID:', fcmResult);
+            try {
+                const payload = buildFCMPayload(title, message, type, relatedId, actionUrl);
+                console.log(`[FCM] Sending push to: ${recipientDoc.fcmToken.substring(0, 20)}...`);
+                fcmResult = await admin.messaging().send({
+                    token: recipientDoc.fcmToken,
+                    ...payload
+                });
+                console.log('[FCM] Push sent. Message ID:', fcmResult);
+            } catch (fcmErr) {
+                console.error('[FCM] Failed to send push notification:', fcmErr.message);
+                if (fcmErr.code === 'messaging/registration-token-not-registered' || fcmErr.code === 'messaging/invalid-registration-token') {
+                    try {
+                        recipientDoc.fcmToken = null;
+                        await recipientDoc.save();
+                    } catch (_) {}
+                }
+            }
         } else {
             console.log(`[FCM] No FCM token for recipient: ${userId} (${userModel})`);
         }

@@ -1,6 +1,7 @@
 const Job = require('../models/Job');
 const Candidate = require('../models/Candidate');
 const WebSetting = require('../models/WebSetting');
+const { hasPermission } = require('../middleware/permissionHelper');
 
 const normalizeCategory = (cat) => {
     if (!cat) return '';
@@ -190,6 +191,7 @@ const getJobs = async (req, res) => {
         // Role name detection
         const roleName = (req.admin.role && req.admin.role.name) ? req.admin.role.name.toLowerCase() : '';
         const isCook = roleName === 'cook';
+        const canViewJobs = hasPermission(req.admin, 'job_management:view');
         // isCustomer = mobile app user (no admin panel role, just a regular app user)
         // Staff users (Lead Manager, Telecaller etc) are in User collection but HAVE a role assigned
         const isCustomer = req.admin.constructor.modelName === 'User' && 
@@ -197,8 +199,8 @@ const getJobs = async (req, res) => {
 
         if (isCustomer) {
             query.createdBy = req.admin._id;
-        } else if (!isSuperAdmin && !isCook) {
-            // Staff User (Lead Manager, Telecaller, Accounts etc) — show only assigned leads
+        } else if (!isSuperAdmin && !isCook && !canViewJobs) {
+            // Staff User without explicit job_management:view permission — show only assigned leads
             query.$and = query.$and || [];
             const makeFlexibleRegex = (s) => {
                 const cleaned = String(s || '').toLowerCase().replace(/[\s_-]/g, '');
@@ -354,8 +356,9 @@ const getJob = async (req, res) => {
         const isCustomerUser = req.admin.constructor.modelName === 'User' && 
             (!req.admin.role || gJobRoleName === 'user' || gJobRoleName === 'customer');
         
-        if (!isSuperAdmin && !isCook && !isCustomerUser) {
-            // Staff user - check they have access to this lead
+        const canViewThisJob = hasPermission(req.admin, 'job_management:view');
+        if (!isSuperAdmin && !isCook && !isCustomerUser && !canViewThisJob) {
+            // Staff user without job_management:view - check they have access to this lead
             const cleanStr = (s) => String(s || '').toLowerCase().replace(/[\s_-]/g, '');
             const lm = cleanStr(job.leadManager);
             const meName = cleanStr(req.admin.name);

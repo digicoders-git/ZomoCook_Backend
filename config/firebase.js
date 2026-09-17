@@ -1,24 +1,51 @@
 const admin = require('firebase-admin');
+const fs = require('fs');
+const path = require('path');
 
 if (!admin.apps.length) {
-    const serviceAccount = {
-        type: "service_account",
-        project_id: process.env.FIREBASE_PROJECT_ID,
-        private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID,
-        private_key: (process.env.FIREBASE_PRIVATE_KEY || '').split('\\n').join('\n'),
-        client_email: process.env.FIREBASE_CLIENT_EMAIL,
-        client_id: process.env.FIREBASE_CLIENT_ID,
-        auth_uri: "https://accounts.google.com/o/oauth2/auth",
-        token_uri: "https://oauth2.googleapis.com/token",
-    };
+    let serviceAccount = null;
 
-    console.log('[Firebase] project_id:', serviceAccount.project_id);
-    console.log('[Firebase] client_email:', serviceAccount.client_email);
-    console.log('[Firebase] key starts:', serviceAccount.private_key.substring(0, 27));
-    console.log('[Firebase] key length:', serviceAccount.private_key.length);
+    // Check for JSON service account file in project directory
+    const possiblePaths = [
+        path.join(__dirname, '../collegepanel-1027b-firebase-adminsdk-fbsvc-c7187e7903.json'),
+        path.join(__dirname, '../serviceAccountKey.json'),
+        path.join(__dirname, '../../collegepanel-1027b-firebase-adminsdk-fbsvc-c7187e7903.json')
+    ];
 
-    admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
-    console.log('[Firebase] Initialized successfully');
+    for (const p of possiblePaths) {
+        if (fs.existsSync(p)) {
+            try {
+                serviceAccount = JSON.parse(fs.readFileSync(p, 'utf8'));
+                console.log(`[Firebase] Loaded service account from ${path.basename(p)}`);
+                break;
+            } catch (e) {
+                console.error(`[Firebase] Failed to parse ${p}:`, e.message);
+            }
+        }
+    }
+
+    // Fallback to environment variables
+    if (!serviceAccount) {
+        const rawKey = process.env.FIREBASE_PRIVATE_KEY || '';
+        const privateKey = rawKey.includes('\\n') ? rawKey.replace(/\\n/g, '\n') : rawKey;
+        serviceAccount = {
+            type: "service_account",
+            project_id: process.env.FIREBASE_PROJECT_ID,
+            private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID,
+            private_key: privateKey,
+            client_email: process.env.FIREBASE_CLIENT_EMAIL,
+            client_id: process.env.FIREBASE_CLIENT_ID,
+            auth_uri: "https://accounts.google.com/o/oauth2/auth",
+            token_uri: "https://oauth2.googleapis.com/token",
+        };
+    }
+
+    try {
+        admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+        console.log('[Firebase] Initialized successfully with project:', serviceAccount.project_id);
+    } catch (initErr) {
+        console.error('[Firebase] Initialization error:', initErr.message);
+    }
 }
 
 module.exports = admin;

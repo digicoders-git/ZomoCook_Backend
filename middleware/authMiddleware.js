@@ -11,12 +11,14 @@ const protect = async (req, res, next) => {
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
             
             // 1. Check in Admin collection
+            let accountType = 'admin';
             let account = await Admin.findById(decoded.id).select('-password').populate('role');
             
             // 2. If not found in Admin, check in User collection
             if (!account) {
                 const User = require('../models/User');
                 account = await User.findById(decoded.id).select('-password').populate('role');
+                accountType = 'user';
             }
 
             if (!account) {
@@ -30,6 +32,7 @@ const protect = async (req, res, next) => {
             }
 
             req.admin = account; // Keep it as req.admin for backward compatibility or change to req.user
+            req.admin.type = accountType;
             next();
         } catch (error) {
             return res.status(401).json({ success: false, message: 'Invalid token' });
