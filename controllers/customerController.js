@@ -125,20 +125,45 @@ const getCustomers = async (req, res) => {
         const allRelatedIds = [...new Set([...customerIds, ...creatorIds])];
 
         const now = new Date();
-        const activeSubs = await SubscriptionHistory.find({
+        const [activeSubs, allJobs, allTransactions] = await Promise.all([
+            SubscriptionHistory.find({
+                $or: [
+                    { customer: { $in: allRelatedIds } },
+                    { user: { $in: allRelatedIds } }
+                ],
+                status: 'Active',
+                endDate: { $gt: now }
+            }).populate('plan').sort({ createdAt: -1 }),
+            Job.find({
+                $or: [
+                    { customer: { $in: allRelatedIds } },
+                    { createdBy: { $in: allRelatedIds } }
+                ]
+            }).sort({ createdAt: -1 }),
+            Transaction.find({
+                $or: [
+                    { customer: { $in: allRelatedIds } },
+                    { user: { $in: allRelatedIds } }
+                ],
+                status: 'success'
+            }).sort({ createdAt: -1 })
+        ]);
+
+        const allJobIds = allJobs.map(j => j._id);
+        const allApps = await Application.find({
             $or: [
-                { customer: { $in: allRelatedIds } },
-                { user: { $in: allRelatedIds } }
-            ],
-            status: 'Active',
-            endDate: { $gt: now }
-        }).populate('plan').sort({ createdAt: -1 });
+                { job: { $in: allJobIds } },
+                { customer: { $in: allRelatedIds } }
+            ]
+        }).sort({ updatedAt: -1 });
 
         const customersWithPackages = customers.map(cust => {
             const custObj = cust.toObject();
+            const relIds = [cust._id.toString(), cust.createdBy ? cust.createdBy.toString() : null].filter(Boolean);
+
             const matchingSub = activeSubs.find(sub => 
-                (sub.customer && (sub.customer.toString() === cust._id.toString() || (cust.createdBy && sub.customer.toString() === cust.createdBy.toString()))) ||
-                (sub.user && (cust.createdBy && sub.user.toString() === cust.createdBy.toString()))
+                (sub.customer && relIds.includes(sub.customer.toString())) ||
+                (sub.user && relIds.includes(sub.user.toString()))
             );
 
             if (matchingSub && matchingSub.plan) {
@@ -165,6 +190,58 @@ const getCustomers = async (req, res) => {
             } else {
                 custObj.activePackage = null;
             }
+
+            // Customer Jobs & Apps
+            const custJobs = allJobs.filter(j => 
+                (j.customer && relIds.includes(j.customer.toString())) ||
+                (j.createdBy && relIds.includes(j.createdBy.toString()))
+            );
+            const custJobIds = custJobs.map(j => j._id.toString());
+            const custApps = allApps.filter(a => 
+                (a.job && custJobIds.includes(a.job.toString())) ||
+                (a.customer && relIds.includes(a.customer.toString()))
+            );
+            const custTxns = allTransactions.filter(t =>
+                (t.customer && relIds.includes(t.customer.toString())) ||
+                (t.user && relIds.includes(t.user.toString()))
+            );
+
+            // Calculate Lead Type: Paid if they have any successful transaction or active package, else Unpaid
+            custObj.leadType = (custTxns.length > 0 || custObj.activePackage) ? 'Paid' : 'Unpaid';
+
+            // Calculate Lead Status based on latest application / job progress
+            let computedLeadStatus = 'New Lead';
+            if (custApps.some(a => ['Hired', 'Joined'].includes(a.status))) {
+                computedLeadStatus = 'Hired';
+            } else if (custApps.some(a => ['Demo Scheduled', 'Demo In Progress', 'Demo Completed'].includes(a.status))) {
+                computedLeadStatus = 'Demo';
+            } else if (custApps.some(a => ['Shortlisted', 'Profile Reviewed'].includes(a.status))) {
+                computedLeadStatus = 'Shortlisted';
+            } else if (custApps.some(a => ['Package Selected', 'Package Paid'].includes(a.status))) {
+                computedLeadStatus = 'Selected';
+            } else if (custApps.some(a => ['Rejected', 'Offer Rejected', 'Cancelled'].includes(a.status))) {
+                computedLeadStatus = 'Rejected';
+            } else if (custJobs.length > 0) {
+                computedLeadStatus = 'Job Posted';
+            }
+            custObj.leadStatus = computedLeadStatus;
+
+            // Calculate Latest Activity
+            let activities = [];
+            if (custTxns.length > 0) {
+                activities.push({ date: new Date(custTxns[0].createdAt), title: 'Payment received', desc: `₹${custTxns[0].amount}` });
+            }
+            if (custApps.length > 0) {
+                activities.push({ date: new Date(custApps[0].updatedAt || custApps[0].createdAt), title: custApps[0].status, desc: `Candidate ${custApps[0].status}` });
+            }
+            if (custJobs.length > 0) {
+                activities.push({ date: new Date(custJobs[0].createdAt), title: 'Job posted', desc: custJobs[0].title || 'Requirements added' });
+            }
+            activities.push({ date: new Date(cust.createdAt), title: 'Customer registered', desc: 'Account created' });
+            activities.sort((a, b) => b.date - a.date);
+
+            custObj.latestActivity = activities[0];
+
             return custObj;
         });
 
