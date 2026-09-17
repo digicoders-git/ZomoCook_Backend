@@ -33,11 +33,16 @@ exports.getPlans = async (req, res) => {
 
         let customPlans = [];
         if (customerId) {
+            const now = new Date();
             customPlans = await Plan.find({
                 isActive: true,
                 isCustom: true,
                 targetCustomer: customerId,
-                isPublished: true
+                isPublished: true,
+                $or: [
+                    { expiresAt: null },
+                    { expiresAt: { $gt: now } }
+                ]
             });
         }
 
@@ -114,11 +119,20 @@ exports.createCustomerCustomPlan = async (req, res) => {
             features,
             allowedJobCategories,
             isPublished,
-            customNotes
+            customNotes,
+            expiresAt,
+            expiresInHours
         } = req.body;
 
         if (!name || !price || !durationDays) {
             return res.status(400).json({ success: false, message: 'Please provide name, price, and duration' });
+        }
+
+        let calculatedExpiresAt = null;
+        if (expiresAt) {
+            calculatedExpiresAt = new Date(expiresAt);
+        } else if (expiresInHours && Number(expiresInHours) > 0) {
+            calculatedExpiresAt = new Date(Date.now() + Number(expiresInHours) * 60 * 60 * 1000);
         }
 
         const planData = {
@@ -135,6 +149,7 @@ exports.createCustomerCustomPlan = async (req, res) => {
             isPublished: isPublished === true || isPublished === 'true',
             isActive: true,
             customNotes: customNotes || '',
+            expiresAt: calculatedExpiresAt,
             assignedBy: req.admin._id,
             assignedByModel: req.admin.constructor.modelName || 'Admin',
             createdBy: req.admin._id
@@ -163,7 +178,18 @@ exports.togglePublishPlan = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Plan not found' });
         }
 
-        plan.isPublished = !plan.isPublished;
+        if (req.body.expiresAt !== undefined) {
+            plan.expiresAt = req.body.expiresAt ? new Date(req.body.expiresAt) : null;
+        } else if (req.body.expiresInHours && Number(req.body.expiresInHours) > 0) {
+            plan.expiresAt = new Date(Date.now() + Number(req.body.expiresInHours) * 60 * 60 * 1000);
+        }
+
+        if (req.body.isPublished !== undefined) {
+            plan.isPublished = req.body.isPublished === true || req.body.isPublished === 'true';
+        } else {
+            plan.isPublished = !plan.isPublished;
+        }
+
         await plan.save();
 
         res.status(200).json({

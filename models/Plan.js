@@ -63,6 +63,10 @@ const PlanSchema = new mongoose.Schema({
         type: String,
         default: ''
     },
+    expiresAt: {
+        type: Date,
+        default: null
+    },
     assignedBy: {
         type: mongoose.Schema.Types.ObjectId,
         refPath: 'assignedByModel'
