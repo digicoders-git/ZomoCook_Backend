@@ -52,6 +52,31 @@ const subscriptionHistorySchema = new mongoose.Schema({
     },
     razorpayPaymentId: {
         type: String
+    },
+    // Admin manual activation fields
+    paymentMethod: {
+        type: String,
+        enum: ['cashfree', 'razorpay', 'cash', 'upi', 'bank_transfer', 'cheque', 'complimentary', 'other'],
+        default: 'cashfree'
+    },
+    paymentReference: {
+        type: String   // UPI txn ID, cheque no., bank ref, etc.
+    },
+    paymentNote: {
+        type: String   // Admin's custom note e.g. "Collected by Rahul at office"
+    },
+    activatedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        refPath: 'activatedByModel'
+    },
+    activatedByModel: {
+        type: String,
+        enum: ['Admin', 'User']
+    },
+    activationType: {
+        type: String,
+        enum: ['online', 'manual'],
+        default: 'online'
     }
 }, {
     timestamps: true

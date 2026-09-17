@@ -33,5 +33,6 @@ router.get('/profile', protect, getAdminProfile);
 router.put('/profile', protect, upload.single('profilePic'), updateAdminProfile);
 router.put('/change-password', protect, changeAdminPassword);
 router.get('/subscriptions', protect, require('../controllers/adminSubscriptionController').getAllSubscriptions);
+router.post('/activate-plan', protect, require('../controllers/adminSubscriptionController').adminActivatePlan);
 
 module.exports = router;
