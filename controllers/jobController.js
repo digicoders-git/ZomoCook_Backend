@@ -1086,9 +1086,10 @@ const createCommercialWebJob = async (req, res) => {
         let orderId = null;
         if (pricing && pricing.advance && pricing.advance > 0) {
             try {
+                const cfEnvRaw = (process.env.CASHFREE_ENV || 'PRODUCTION').toUpperCase();
+                const isProd = cfEnvRaw === 'PROD' || cfEnvRaw === 'PRODUCTION';
                 const getCashfreeBaseUrl = () => {
-                    const env = (process.env.CASHFREE_ENV || 'TEST').toUpperCase();
-                    return env === 'PROD' || env === 'PRODUCTION' ? 'https://api.cashfree.com/pg' : 'https://sandbox.cashfree.com/pg';
+                    return isProd ? 'https://api.cashfree.com/pg' : 'https://sandbox.cashfree.com/pg';
                 };
                 const cfHeaders = {
                     'Content-Type': 'application/json',
@@ -1142,6 +1143,8 @@ const createCommercialWebJob = async (req, res) => {
             }
         }
 
+        const currentCfEnv = ((process.env.CASHFREE_ENV || 'PRODUCTION').toUpperCase() === 'PROD' || (process.env.CASHFREE_ENV || 'PRODUCTION').toUpperCase() === 'PRODUCTION') ? 'PRODUCTION' : 'SANDBOX';
+
         res.status(201).json({
             success: true,
             message: 'Commercial requirement posted successfully through backend API',
@@ -1150,7 +1153,8 @@ const createCommercialWebJob = async (req, res) => {
             jobs: createdJobs,
             paymentSessionId,
             orderId,
-            advanceAmount: pricing?.advance || 0
+            advanceAmount: pricing?.advance || 0,
+            environment: currentCfEnv
         });
 
     } catch (error) {
