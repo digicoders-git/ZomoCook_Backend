@@ -15,7 +15,7 @@ const { hasPermission } = require('../middleware/permissionHelper');
  */
 const getDashboardStats = async (req, res) => {
     try {
-        const { category, customer, position, date } = req.query;
+        const { category, customer, position, date, leadManager } = req.query;
 
         const roleName = (req.admin.role?.name || '').toLowerCase();
         const isSuperAdmin = (req.admin.constructor.modelName === 'Admin' && roleName !== 'lead manager') || 
@@ -45,6 +45,13 @@ const getDashboardStats = async (req, res) => {
 
         if (category) jobFilter.jobCategory = category;
         if (customer) jobFilter.customer = new mongoose.Types.ObjectId(customer);
+        if (leadManager && leadManager !== 'all') {
+            const escapedLm = leadManager.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim();
+            jobFilter.$or = [
+                { leadManager: leadManager },
+                { leadManager: new RegExp(`^\\s*${escapedLm}\\s*$`, 'i') }
+            ];
+        }
         if (position) jobFilter.jobPosition = position;
         if (date && date !== 'all') {
             let start = null, end = null;

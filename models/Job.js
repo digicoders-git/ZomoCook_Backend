@@ -128,7 +128,12 @@ const jobSchema = new mongoose.Schema({
     default: 'free'
   },
   advanceAmount: { type: Number, default: 0 },
-  jobPostFee: { type: Number, default: 0 }
+  jobPostFee: { type: Number, default: 0 },
+  source: {
+    type: String,
+    enum: ['app', 'web', 'admin'],
+    default: 'app'
+  }
 }, {
   timestamps: true
 });

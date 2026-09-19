@@ -60,6 +60,7 @@ const createOrder = async (req, res) => {
             order_note: type === 'daily_job_advance' ? 'Daily job 25% advance' :
                 type === 'daily_job_remaining' ? 'Daily job 75% remaining' :
                 type === 'subscription' ? 'Subscription purchase' :
+                type === 'subscription_due' ? 'Subscription Remaining Due Payment' :
                 type === 'service_package' ? `${packageType || ''} Service Package` :
                 `Job post fee ₹${numericAmount}`
         };
@@ -342,6 +343,38 @@ const verifyPayment = async (req, res) => {
                     razorpayPaymentId: targetPaymentId
                 });
                 message = 'Payment verified and Plan activated successfully';
+            }
+        }
+
+        // Handle subscription remaining due clearance
+        if (type === 'subscription_due') {
+            const SubscriptionHistory = require('../models/SubscriptionHistory');
+            const subId = req.body.subscriptionId || req.body.subId;
+            let subHistory = null;
+            if (subId) {
+                subHistory = await SubscriptionHistory.findById(subId);
+            }
+            if (!subHistory) {
+                // Find latest active subscription with due for this user
+                const isCustomer = req.admin.constructor.modelName === 'Customer';
+                subHistory = await SubscriptionHistory.findOne({
+                    $or: [
+                        { user: req.admin._id },
+                        { customer: req.admin._id }
+                    ],
+                    status: 'Active',
+                    dueAmount: { $gt: 0 }
+                }).sort({ createdAt: -1 });
+            }
+
+            if (subHistory) {
+                const paidNow = Number(req.body.amount || subHistory.dueAmount);
+                subHistory.amountPaid = (subHistory.amountPaid || 0) + paidNow;
+                subHistory.dueAmount = Math.max(0, (subHistory.dueAmount || 0) - paidNow);
+                subHistory.paymentStatus = subHistory.dueAmount <= 0 ? 'paid' : 'partial';
+                await subHistory.save();
+
+                message = 'Remaining due payment verified and cleared successfully!';
             }
         }
 

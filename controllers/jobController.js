@@ -903,9 +903,266 @@ const completePayment = async (req, res) => {
     }
 };
 
+/**
+ * @desc    Create commercial job requirement from Website
+ * @route   POST /api/jobs/web-commercial-booking
+ * @access  Public
+ */
+const createCommercialWebJob = async (req, res) => {
+    try {
+        const {
+            name,
+            phone,
+            address,
+            outletName,
+            familyMembers,
+            message,
+            staffList,
+            selectedPlan,
+            pricing
+        } = req.body;
+
+        if (!name || !phone) {
+            return res.status(400).json({ success: false, message: 'Name and Phone are required' });
+        }
+
+        const User = require('../models/User');
+        const Customer = require('../models/Customer');
+        const Role = require('../models/Role');
+        const cleanedPhone = phone.toString().trim();
+
+        // 1. Find or create User with this phone number
+        let user = await User.findOne({
+            $or: [
+                { phone: cleanedPhone },
+                { phone: `+91${cleanedPhone}` },
+                { phone: cleanedPhone.replace('+91', '') }
+            ]
+        });
+
+        let customerRole = await Role.findOne({ name: { $regex: /^customer$/i } });
+        if (!customerRole) {
+            customerRole = await Role.create({ name: 'Customer' });
+        }
+
+        if (!user) {
+            user = await User.create({
+                name: name,
+                phone: cleanedPhone,
+                address: address || '',
+                outletName: outletName || '',
+                propertyCategory: 'Hotel/Restaurant',
+                status: 'Active',
+                role: customerRole._id
+            });
+        } else {
+            user.name = name || user.name;
+            if (address) user.address = address;
+            if (outletName) user.outletName = outletName;
+            await user.save();
+        }
+
+        // 2. Find or create Customer in Admin Panel CRM
+        let customer = await Customer.findOne({
+            $or: [
+                { contactPhone: cleanedPhone },
+                { contactPhone: `+91${cleanedPhone}` },
+                { contactPhone: cleanedPhone.replace('+91', '') }
+            ]
+        });
+
+        if (!customer) {
+            customer = await Customer.create({
+                name: name,
+                contactName: name,
+                contactPhone: cleanedPhone,
+                contactAddress: address || '',
+                propertyCategory: 'Hotel/Restaurant',
+                customerStatus: 'running',
+                accountStatus: 'active',
+                createdBy: user._id,
+                creatorModel: 'User'
+            });
+        } else {
+            customer.name = name || customer.name;
+            if (address) customer.contactAddress = address;
+            await customer.save();
+        }
+
+        // Auto-assign random Lead Manager
+        let assignedManagerId = '';
+        try {
+            const Admin = require('../models/Admin');
+            const leadManagerRole = await Role.findOne({ name: { $regex: /lead manager/i } });
+            if (leadManagerRole) {
+                const leadManagers = await Admin.find({ role: leadManagerRole._id, status: 'Active' });
+                if (leadManagers.length > 0) {
+                    const randomManager = leadManagers[Math.floor(Math.random() * leadManagers.length)];
+                    assignedManagerId = randomManager._id.toString();
+                }
+            }
+        } catch (e) {
+            console.error('Error auto-assigning lead manager for web booking:', e);
+        }
+
+        // Determine category: 'hotel' | 'home' | 'daily'
+        let targetCategory = req.body.jobCategory;
+        if (!targetCategory) {
+            if (req.body.category === 'home' || req.body.category === 'domestic') targetCategory = 'home';
+            else if (req.body.category === 'daily' || req.body.category === 'event') targetCategory = 'daily';
+            else targetCategory = 'hotel';
+        }
+
+        // 3. Create Jobs for staff items
+        const items = (staffList && staffList.length > 0) ? staffList : [{
+            category: 'Chef',
+            count: 1,
+            salary: 25000,
+            food: 'Available',
+            accommodation: 'Available'
+        }];
+
+        const createdJobs = [];
+
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+
+            let nextNumber = 1;
+            const highestJob = await Job.findOne({ jobCode: { $regex: /^ZOMO\d+$/ } }).sort({ createdAt: -1 });
+            if (highestJob && highestJob.jobCode) {
+                const num = parseInt(highestJob.jobCode.replace('ZOMO', ''), 10);
+                if (!isNaN(num)) nextNumber = num + 1;
+            } else {
+                nextNumber = (await Job.countDocuments()) + 1;
+            }
+            let jobCode = `ZOMO${nextNumber}`;
+            while (await Job.exists({ jobCode })) {
+                nextNumber++;
+                jobCode = `ZOMO${nextNumber}`;
+            }
+
+            const defaultTitle = targetCategory === 'home' 
+                ? `${item.category || 'Home Cook'} Required at ${outletName || name}`
+                : (targetCategory === 'daily' 
+                    ? `${item.category || 'Event / Daily Chef'} Required for ${req.body.event || 'Occasion'} at ${outletName || name}`
+                    : `${item.category || 'Hospitality Staff'} Required at ${outletName || name}`);
+
+            const jobTitle = defaultTitle;
+            const jobDesc = `Hiring ${item.count || 1} ${item.category || 'Staff'}. Salary ₹${item.salary || 'Negotiable'}. Food: ${item.food || 'Available'}, Accommodation: ${item.accommodation || 'Not Required'}. Plan: ${selectedPlan?.name || 'Basic'}. Location: ${address || 'On Request'}. ${message ? `Notes: ${message}` : ''}`;
+
+            const newJob = await Job.create({
+                jobCategory: targetCategory,
+                jobCode,
+                title: jobTitle,
+                customer: customer._id,
+                propertyCategory: targetCategory === 'home' ? 'Residence/Home' : (targetCategory === 'daily' ? 'Event/Party' : 'Hotel/Restaurant'),
+                state: 'India',
+                city: address || 'Delhi NCR',
+                overview: jobDesc,
+                responsibilities: `Work as ${item.category || 'Staff'} for ${name}.`,
+                requirements: `Qualified and verified ${item.category || 'Candidate'}.`,
+                jobType: targetCategory === 'daily' ? 'Daily Pay' : 'Full Time',
+                jobPosition: item.category || 'Chef',
+                salaryRange: item.salary ? `₹${item.salary}${targetCategory === 'daily' ? '' : '/month'}` : (targetCategory === 'daily' ? '₹1500/day' : '₹20000 - ₹35000'),
+                packageOrGuestOrVacancy: `${item.count || 1} Staff`,
+                event: req.body.event || (targetCategory === 'daily' ? 'Daily / Event' : undefined),
+                dateOfEvent: req.body.dateOfEvent ? new Date(req.body.dateOfEvent) : undefined,
+                foodPreference: item.food || 'Available',
+                status: 'New',
+                isActive: true,
+                createdBy: user._id,
+                creatorModel: 'User',
+                paymentStatus: 'paid',
+                advanceAmount: pricing?.advance || 0,
+                leadManager: assignedManagerId,
+                source: 'web'
+            });
+
+            createdJobs.push(newJob);
+        }
+
+        // Create Cashfree Order for Advance Payment if advance > 0
+        let paymentSessionId = null;
+        let orderId = null;
+        if (pricing && pricing.advance && pricing.advance > 0) {
+            try {
+                const getCashfreeBaseUrl = () => {
+                    const env = (process.env.CASHFREE_ENV || 'TEST').toUpperCase();
+                    return env === 'PROD' || env === 'PRODUCTION' ? 'https://api.cashfree.com/pg' : 'https://sandbox.cashfree.com/pg';
+                };
+                const cfHeaders = {
+                    'Content-Type': 'application/json',
+                    'x-api-version': process.env.CASHFREE_API_VERSION || '2023-08-01',
+                    'x-client-id': process.env.CASHFREE_APP_ID || '182270724446849f01322008e4072281',
+                    'x-client-secret': process.env.CASHFREE_SECRET_KEY || '08a4432d47c63df7a8e0b26615ab303d96336ad1',
+                };
+
+                orderId = `order_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+                const orderPayload = {
+                    order_id: orderId,
+                    order_amount: Number(pricing.advance),
+                    order_currency: 'INR',
+                    customer_details: {
+                        customer_id: user._id.toString(),
+                        customer_name: name,
+                        customer_phone: cleanedPhone.slice(-10),
+                        customer_email: user.email || 'customer@zomocook.in'
+                    },
+                    order_meta: {
+                        return_url: `${process.env.BASE_URL || 'https://api.zomocook.in'}/api/payments/verify?order_id={order_id}`
+                    },
+                    order_note: `Web Commercial Hiring 25% Advance (Plan: ${selectedPlan?.name || 'Basic'})`
+                };
+
+                const cfRes = await fetch(`${getCashfreeBaseUrl()}/orders`, {
+                    method: 'POST',
+                    headers: cfHeaders,
+                    body: JSON.stringify(orderPayload)
+                });
+                const cfData = await cfRes.json();
+                if (cfData.payment_session_id) {
+                    paymentSessionId = cfData.payment_session_id;
+
+                    const Transaction = require('../models/Transaction');
+                    await Transaction.create({
+                        type: 'job_post_fee',
+                        amount: Number(pricing.advance),
+                        status: 'pending',
+                        gateway: 'cashfree',
+                        orderId: cfData.order_id,
+                        paymentSessionId: cfData.payment_session_id,
+                        user: user._id,
+                        customer: customer._id,
+                        relatedJob: createdJobs[0]?._id,
+                        description: `Commercial Booking 25% Advance (Web)`
+                    });
+                }
+            } catch (payErr) {
+                console.error('Cashfree order generation error for web booking:', payErr);
+            }
+        }
+
+        res.status(201).json({
+            success: true,
+            message: 'Commercial requirement posted successfully through backend API',
+            userId: user._id,
+            customerId: customer._id,
+            jobs: createdJobs,
+            paymentSessionId,
+            orderId,
+            advanceAmount: pricing?.advance || 0
+        });
+
+    } catch (error) {
+        console.error('Error in createCommercialWebJob:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
 module.exports = {
     ...oldExports,
     applyForJob,
     resendJobNotification,
-    completePayment
+    completePayment,
+    createCommercialWebJob
 };

@@ -13,7 +13,8 @@ const {
     getSavedJobs,
     applyForJob,
     resendJobNotification,
-    completePayment
+    completePayment,
+    createCommercialWebJob
 } = require('../controllers/jobController');
 const { protect } = require('../middleware/authMiddleware');
 const multer = require('multer');
@@ -30,6 +31,9 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({ storage });
+
+// Public Website Booking Route (Uses existing Backend)
+router.post('/web-commercial-booking', createCommercialWebJob);
 
 router.route('/')
     .get(protect, getJobs)
