@@ -1041,14 +1041,22 @@ const createCommercialWebJob = async (req, res) => {
                 jobCode = `ZOMO${nextNumber}`;
             }
 
-            const defaultTitle = targetCategory === 'home' 
-                ? `${item.category || 'Home Cook'} Required at ${outletName || name}`
-                : (targetCategory === 'daily' 
-                    ? `${item.category || 'Event / Daily Chef'} Required for ${req.body.event || 'Occasion'} at ${outletName || name}`
-                    : `${item.category || 'Hospitality Staff'} Required at ${outletName || name}`);
+            const isParty = req.body.bookingType === 'party';
+            const defaultTitle = isParty
+                ? `Chef for Party Booking for ${name} (${req.body.partyRequirement?.datesCount || 1} Day Event)`
+                : (targetCategory === 'home' 
+                    ? `${item.category || 'Home Cook'} Required at ${outletName || name}`
+                    : (targetCategory === 'daily' 
+                        ? `${item.category || 'Event / Daily Chef'} Required for ${req.body.event || 'Occasion'} at ${outletName || name}`
+                        : `${item.category || 'Hospitality Staff'} Required at ${outletName || name}`));
 
             const jobTitle = defaultTitle;
-            const jobDesc = `Hiring ${item.count || 1} ${item.category || 'Staff'}. Salary ₹${item.salary || 'Negotiable'}. Food: ${item.food || 'Available'}, Accommodation: ${item.accommodation || 'Not Required'}. Plan: ${selectedPlan?.name || 'Basic'}. Location: ${address || 'On Request'}. ${message ? `Notes: ${message}` : ''}`;
+            const partyDetailsDesc = isParty && req.body.partyRequirement
+                ? `Party Details: Dates Count: ${req.body.partyRequirement.datesCount || 1}, City: ${req.body.city || address}, Amount: ₹${pricing?.totalAmount || pricing?.advance || 0}. Payment: ${req.body.partyRequirement.paymentMethod || 'Online'}`
+                : '';
+            const jobDesc = isParty
+                ? `Chef for Party requirement booked by ${name} (+91 ${cleanedPhone}). Location: ${address}. ${partyDetailsDesc}`
+                : `Hiring ${item.count || 1} ${item.category || 'Staff'}. Salary ₹${item.salary || 'Negotiable'}. Food: ${item.food || 'Available'}, Accommodation: ${item.accommodation || 'Not Required'}. Plan: ${selectedPlan?.name || 'Basic'}. Location: ${address || 'On Request'}. ${message ? `Notes: ${message}` : ''}`;
 
             const newJob = await Job.create({
                 jobCategory: targetCategory,
