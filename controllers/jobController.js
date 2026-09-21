@@ -252,7 +252,7 @@ const getJobs = async (req, res) => {
         if (serviceCategory) query.cookingCategory = new RegExp(serviceCategory, 'i');
         if (minSalary || maxSalary) {
             // salaryRange is stored as string like "15000-20000", filter numerically
-            if (minSalary) query.$expr = { $gte: [{ $toInt: { $arrayElemAt: [{ $split: ['$salaryRange', '-'] }, 0] } }, parseInt(minSalary)] };
+            if (minSalary) query.$expr = { $gte: [{ $convert: { input: { $arrayElemAt: [{ $split: ['$salaryRange', '-'] }, 0] }, to: "int", onError: 0, onNull: 0 } }, parseInt(minSalary)] };
         }
 
         // Active jobs filter for cook viewing

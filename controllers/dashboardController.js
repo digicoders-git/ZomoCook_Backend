@@ -318,11 +318,16 @@ const getDashboardStats = async (req, res) => {
                     jobCount: { $sum: 1 },
                     totalVacancy: { 
                         $sum: { 
-                            $toInt: { 
-                                $ifNull: [
-                                    { $cond: [{ $eq: ["$jobCategory", "daily"] }, "$noOfGuests", "$packageOrGuestOrVacancy"] },
-                                    "0"
-                                ] 
+                            $convert: { 
+                                input: { 
+                                    $ifNull: [
+                                        { $cond: [{ $eq: ["$jobCategory", "daily"] }, "$noOfGuests", "$packageOrGuestOrVacancy"] },
+                                        "0"
+                                    ] 
+                                },
+                                to: "int",
+                                onError: 0,
+                                onNull: 0
                             } 
                         } 
                     }
