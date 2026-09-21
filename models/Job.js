@@ -79,6 +79,16 @@ const jobSchema = new mongoose.Schema({
   },
   package: String, // Specifically for Daily Pay
   noOfGuests: String, // Specifically for Daily Pay / Home Cook if needed separate
+  staffRequirements: [{
+    role: String,
+    genderPref: String,
+    count: Number,
+    ratePerDay: Number,
+    days: Number,
+    startDate: String,
+    startTime: String,
+    endTime: String
+  }],
   allowedLeave: String,
   salaryRange: String,
   experienceRange: String,
