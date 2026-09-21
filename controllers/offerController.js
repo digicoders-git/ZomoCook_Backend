@@ -3,13 +3,29 @@ const Offer = require('../models/Offer');
 // @desc    Get all offers
 // @route   GET /api/offers
 // @access  Public
+// @desc    Get all offers
+// @route   GET /api/offers
+// @access  Public
 const getOffers = async (req, res) => {
   try {
-    const { activeOnly } = req.query;
+    const { activeOnly, platform, applicableOn } = req.query;
     let query = {};
     if (activeOnly === 'true') {
       query.isActive = true;
     }
+    
+    // Filter target platform
+    const targetPlat = platform ? platform : 'App'; // Default to App if platform not sent (for older app versions)
+    if (targetPlat === 'Website') {
+      query.targetPlatform = { $in: ['All', 'Website'] };
+    } else {
+      query.targetPlatform = { $in: ['All', 'App'] };
+    }
+
+    if (applicableOn) {
+      query.applicableOn = { $in: ['All', applicableOn] };
+    }
+
     const offers = await Offer.find(query).sort({ createdAt: -1 });
     res.json({ success: true, offers });
   } catch (error) {
@@ -23,7 +39,7 @@ const getOffers = async (req, res) => {
 const createOffer = async (req, res) => {
   try {
     const { 
-      code, title, subtitle, offerType, discountValue, applicableOn, 
+      code, title, subtitle, offerType, discountValue, targetPlatform, applicableOn, 
       minOrderValue, usageLimitTotal, usageLimitPerUser, validFrom, validTo, status, isActive 
     } = req.body;
     
@@ -33,7 +49,8 @@ const createOffer = async (req, res) => {
       subtitle,
       offerType,
       discountValue,
-      applicableOn,
+      targetPlatform: targetPlatform || 'All',
+      applicableOn: applicableOn || 'All',
       minOrderValue,
       usageLimitTotal,
       usageLimitPerUser,
@@ -88,7 +105,7 @@ const deleteOffer = async (req, res) => {
 // @access  Public
 const validateOffer = async (req, res) => {
   try {
-    const { code, orderAmount, applicableOn } = req.body;
+    const { code, orderAmount, platform, applicableOn } = req.body;
     if (!code || typeof code !== 'string' || !code.trim()) {
       return res.status(400).json({ success: false, valid: false, message: 'Please enter a coupon code' });
     }
@@ -102,6 +119,23 @@ const validateOffer = async (req, res) => {
     if (offer) {
       if (!offer.isActive || offer.status !== 'ACTIVE') {
         return res.status(400).json({ success: false, valid: false, message: 'This coupon is inactive or disabled' });
+      }
+
+      const reqPlatform = platform || 'App';
+      if (offer.targetPlatform && offer.targetPlatform !== 'All' && offer.targetPlatform !== reqPlatform) {
+        return res.status(400).json({
+          success: false,
+          valid: false,
+          message: `This coupon code is valid only on ${offer.targetPlatform}`
+        });
+      }
+
+      if (offer.applicableOn && offer.applicableOn !== 'All' && applicableOn && offer.applicableOn !== applicableOn) {
+        return res.status(400).json({
+          success: false,
+          valid: false,
+          message: `This coupon code is valid only for '${offer.applicableOn}'`
+        });
       }
 
       const now = new Date();

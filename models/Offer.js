@@ -7,7 +7,12 @@ const offerSchema = new mongoose.Schema({
   offerType: { type: String, enum: ['FLAT', 'PERCENTAGE'], default: 'FLAT' },
   discountValue: { type: Number, required: true, default: 0 },
   maxDiscountValue: { type: Number, default: 0 }, // For percentage discounts (0 = no cap)
-  applicableOn: { type: String, enum: ['Service Package', 'Hiring Processing Fee', 'Subscription', 'All'], default: 'All' },
+  targetPlatform: { type: String, enum: ['All', 'Website', 'App'], default: 'All' },
+  applicableOn: { 
+    type: String, 
+    enum: ['All', 'Chef for Party', 'Daily Basis Staff', 'Home Cook Hiring', 'Commercial Hiring', 'Service Package', 'Hiring Processing Fee', 'Subscription'], 
+    default: 'All' 
+  },
   minOrderValue: { type: Number, default: 0 },
   usageLimitTotal: { type: Number, default: 0 }, // 0 = unlimited
   usageLimitPerUser: { type: Number, default: 1 },
