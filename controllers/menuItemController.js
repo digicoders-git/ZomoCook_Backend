@@ -1,4 +1,6 @@
 const MenuItem = require('../models/MenuItem');
+const fs = require('fs');
+const path = require('path');
 
 const initialMenuCatalog = [
   // North Indian
@@ -142,13 +144,21 @@ exports.getActiveMenuItems = async (req, res) => {
 // @access  Admin
 exports.createMenuItem = async (req, res) => {
   try {
-    const { name, foodType, cuisine, category, cookingCharge, image, isActive } = req.body;
+    const { name, foodType, cuisine, category, cookingCharge, isActive } = req.body;
 
     if (!name || !cuisine || !category) {
+      if (req.file && fs.existsSync(req.file.path)) {
+        try { fs.unlinkSync(req.file.path); } catch (e) {}
+      }
       return res.status(400).json({
         success: false,
         message: 'Name, Cuisine and Category are required'
       });
+    }
+
+    let image = req.body.image?.trim() || 'https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=200';
+    if (req.file) {
+      image = req.file.path.replace(/\\/g, '/');
     }
 
     const item = await MenuItem.create({
@@ -157,8 +167,8 @@ exports.createMenuItem = async (req, res) => {
       cuisine: cuisine.trim(),
       category: category.trim(),
       cookingCharge: Number(cookingCharge) || 0,
-      image: image?.trim() || 'https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=200',
-      isActive: isActive !== false
+      image,
+      isActive: isActive !== false && isActive !== 'false'
     });
 
     res.status(201).json({
@@ -167,9 +177,42 @@ exports.createMenuItem = async (req, res) => {
       message: 'Menu item created successfully'
     });
   } catch (error) {
+    if (req.file && fs.existsSync(req.file.path)) {
+      try { fs.unlinkSync(req.file.path); } catch (e) {}
+    }
     res.status(500).json({
       success: false,
       message: error.message || 'Server Error'
+    });
+  }
+};
+
+// @desc    Upload menu item image
+// @route   POST /api/menu-items/upload
+// @access  Admin
+exports.uploadMenuItemImage = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please select an image file to upload'
+      });
+    }
+
+    const filePath = req.file.path.replace(/\\/g, '/');
+    const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+    const fullUrl = `${baseUrl.replace(/\/+$/, '')}/${filePath}`;
+
+    res.status(200).json({
+      success: true,
+      message: 'Image uploaded successfully to server',
+      filePath,
+      imageUrl: fullUrl
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Image upload failed'
     });
   }
 };
@@ -179,13 +222,30 @@ exports.createMenuItem = async (req, res) => {
 // @access  Admin
 exports.updateMenuItem = async (req, res) => {
   try {
+    const updateData = { ...req.body };
+
+    if (req.file) {
+      updateData.image = req.file.path.replace(/\\/g, '/');
+    }
+
+    if (updateData.cookingCharge !== undefined) {
+      updateData.cookingCharge = Number(updateData.cookingCharge) || 0;
+    }
+
+    if (updateData.isActive !== undefined) {
+      updateData.isActive = updateData.isActive !== false && updateData.isActive !== 'false';
+    }
+
     const item = await MenuItem.findByIdAndUpdate(
       req.params.id,
-      { $set: req.body },
+      { $set: updateData },
       { new: true, runValidators: true }
     );
 
     if (!item) {
+      if (req.file && fs.existsSync(req.file.path)) {
+        try { fs.unlinkSync(req.file.path); } catch (e) {}
+      }
       return res.status(404).json({
         success: false,
         message: 'Menu item not found'
@@ -198,6 +258,9 @@ exports.updateMenuItem = async (req, res) => {
       message: 'Menu item updated successfully'
     });
   } catch (error) {
+    if (req.file && fs.existsSync(req.file.path)) {
+      try { fs.unlinkSync(req.file.path); } catch (e) {}
+    }
     res.status(500).json({
       success: false,
       message: error.message || 'Server Error'
@@ -217,6 +280,14 @@ exports.deleteMenuItem = async (req, res) => {
         success: false,
         message: 'Menu item not found'
       });
+    }
+
+    // Clean up local uploaded image file if present
+    if (item.image && item.image.startsWith('uploads/')) {
+      const fullPath = path.join(__dirname, '..', item.image);
+      if (fs.existsSync(fullPath)) {
+        try { fs.unlinkSync(fullPath); } catch (e) {}
+      }
     }
 
     res.status(200).json({
