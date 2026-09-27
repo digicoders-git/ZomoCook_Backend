@@ -160,6 +160,16 @@ const jobSchema = new mongoose.Schema({
   },
   advanceAmount: { type: Number, default: 0 },
   jobPostFee: { type: Number, default: 0 },
+  assignedStaff: [{
+    candidate: { type: mongoose.Schema.Types.ObjectId, ref: 'Candidate' },
+    name: String,
+    role: String,
+    phone: String,
+    experience: String,
+    startOtp: String,
+    assignedAt: { type: Date, default: Date.now },
+    status: { type: String, default: 'Assigned' }
+  }],
   source: {
     type: String,
     enum: ['app', 'web', 'admin'],
