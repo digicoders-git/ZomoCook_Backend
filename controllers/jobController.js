@@ -922,11 +922,14 @@ const createCommercialWebJob = async (req, res) => {
         const selectedPlan = req.body.selectedPlan;
         const rawPricing = req.body.pricing || req.body.billingSummary || {};
         const pricing = {
-            staffCharges: rawPricing.staffCharges || rawPricing.staffChargesTotal || 0,
+            staffCharges: rawPricing.staffCharges || rawPricing.staffChargesTotal || rawPricing.totalPrice || 0,
             gst: rawPricing.gst || 0,
             platformFee: rawPricing.platformFee || 0,
-            total: rawPricing.total || rawPricing.totalAmount || 0,
-            advance: rawPricing.advance || rawPricing.advancePayable || rawPricing.advanceAmount || 0
+            total: rawPricing.total || rawPricing.totalAmount || rawPricing.totalPrice || 0,
+            advance: rawPricing.advance || rawPricing.advancePayable || rawPricing.advanceAmount || rawPricing.advancePay || 0,
+            duePay: rawPricing.duePay || rawPricing.dueAmount || ((rawPricing.total || rawPricing.totalPrice || 0) - (rawPricing.advance || rawPricing.advancePay || 0)),
+            perDayPrice: rawPricing.perDayPrice || 0,
+            numberOfDays: rawPricing.numberOfDays || 0
         };
 
         if (!rawPhone) {
