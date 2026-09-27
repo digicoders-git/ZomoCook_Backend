@@ -1080,7 +1080,7 @@ const createCommercialWebJob = async (req, res) => {
                 isActive: true,
                 createdBy: user._id,
                 creatorModel: 'User',
-                paymentStatus: 'paid',
+                paymentStatus: 'pending',
                 advanceAmount: pricing?.advance || 0,
                 leadManager: assignedManagerId,
                 source: 'web'

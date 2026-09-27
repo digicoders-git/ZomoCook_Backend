@@ -227,7 +227,8 @@ const getCandidates = async (req, res) => {
                 $or: [
                     { name: new RegExp(search, 'i') },
                     { phone: new RegExp(search, 'i') },
-                    { email: new RegExp(search, 'i') }
+                    { email: new RegExp(search, 'i') },
+                    { city: new RegExp(search, 'i') }
                 ]
             });
         }

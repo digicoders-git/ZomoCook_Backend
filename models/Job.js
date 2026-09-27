@@ -3,9 +3,18 @@ const mongoose = require('mongoose');
 const jobSchema = new mongoose.Schema({
   jobCategory: {
     type: String,
-    enum: ['hotel', 'home', 'daily'],
+    enum: ['hotel', 'home', 'daily', 'party'],
     required: true,
     trim: true
+  },
+  bookingType: {
+    type: String,
+    enum: ['regular', 'daily', 'party'],
+    default: 'regular'
+  },
+  hiringPurpose: {
+    type: String, // 'commercial' or 'domestic'
+    default: ''
   },
   jobCode: {
     type: String,
@@ -68,11 +77,11 @@ const jobSchema = new mongoose.Schema({
   },
   jobType: {
     type: String,
-    required: true // Full Time, Part Time
+    default: 'Part Time'
   },
   jobPosition: {
     type: String,
-    required: true
+    default: 'Staff'
   },
   packageOrGuestOrVacancy: {
     type: String, // Keep for backward compatibility or generic use
@@ -89,6 +98,14 @@ const jobSchema = new mongoose.Schema({
     startTime: String,
     endTime: String
   }],
+  partyRequirement: {
+    city: String,
+    paymentMethod: String,
+    appliedCoupon: String,
+    dates: mongoose.Schema.Types.Mixed,
+    datesCount: Number,
+    pricingBreakdown: mongoose.Schema.Types.Mixed
+  },
   allowedLeave: String,
   salaryRange: String,
   experienceRange: String,
