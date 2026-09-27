@@ -910,26 +910,33 @@ const completePayment = async (req, res) => {
  */
 const createCommercialWebJob = async (req, res) => {
     try {
-        const {
-            name,
-            phone,
-            address,
-            outletName,
-            familyMembers,
-            message,
-            staffList,
-            selectedPlan,
-            pricing
-        } = req.body;
+        const name = req.body.name || req.body.contactName || req.body.fullName || 'Customer';
+        const rawPhone = req.body.phone || req.body.contactPhone || req.body.mobile || '';
+        const email = req.body.email || req.body.contactEmail || '';
+        const address = req.body.address || req.body.outletAddress || req.body.venueAddress || '';
+        const city = req.body.city || 'Lucknow';
+        const outletName = req.body.outletName || req.body.restaurantName || '';
+        const familyMembers = req.body.familyMembers;
+        const message = req.body.message || '';
+        const staffList = req.body.staffRequirements || req.body.staffList || [];
+        const selectedPlan = req.body.selectedPlan;
+        const rawPricing = req.body.pricing || req.body.billingSummary || {};
+        const pricing = {
+            staffCharges: rawPricing.staffCharges || rawPricing.staffChargesTotal || 0,
+            gst: rawPricing.gst || 0,
+            platformFee: rawPricing.platformFee || 0,
+            total: rawPricing.total || rawPricing.totalAmount || 0,
+            advance: rawPricing.advance || rawPricing.advancePayable || rawPricing.advanceAmount || 0
+        };
 
-        if (!name || !phone) {
-            return res.status(400).json({ success: false, message: 'Name and Phone are required' });
+        if (!rawPhone) {
+            return res.status(400).json({ success: false, message: 'Phone number is required' });
         }
 
         const User = require('../models/User');
         const Customer = require('../models/Customer');
         const Role = require('../models/Role');
-        const cleanedPhone = phone.toString().trim();
+        const cleanedPhone = rawPhone.toString().trim();
 
         // 1. Find or create User with this phone number
         let user = await User.findOne({
@@ -1079,15 +1086,15 @@ const createCommercialWebJob = async (req, res) => {
                 packageOrGuestOrVacancy: `${item.count || 1} Staff`,
                 event: req.body.event || (targetCategory === 'daily' ? 'Daily / Event' : undefined),
                 noOfGuests: req.body.noOfGuests ? String(req.body.noOfGuests) : undefined,
-                staffRequirements: staffList ? staffList.map(s => ({
-                    role: s.category || s.staffCategory || s.role || 'Staff',
-                    genderPref: s.genderPref || 'Any',
+                staffRequirements: (staffList && staffList.length > 0) ? staffList.map(s => ({
+                    role: s.role || s.category || s.staffCategory || 'Staff',
+                    genderPref: s.genderPreference || s.genderPref || 'Any Gender',
                     count: Number(s.count || s.noOfStaff || 1),
-                    ratePerDay: Number(s.salary || s.ratePerDay || 0),
-                    days: Number(s.noOfDays || s.days || 1),
+                    ratePerDay: Number(s.ratePerDay || s.salary || 0),
+                    days: Number(s.days || s.noOfDays || 1),
                     startDate: s.startDate || '',
-                    startTime: s.timing ? s.timing.split('–')[0]?.trim() : s.startTime,
-                    endTime: s.timing ? s.timing.split('–')[1]?.trim() : s.endTime
+                    startTime: s.startTime || (s.timing ? s.timing.split('–')[0]?.trim() : ''),
+                    endTime: s.endTime || (s.timing ? s.timing.split('–')[1]?.trim() : '')
                 })) : undefined,
                 partyRequirement: req.body.partyRequirement || undefined,
                 pricing: pricing || undefined,
