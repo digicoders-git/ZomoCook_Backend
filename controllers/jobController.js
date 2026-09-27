@@ -1019,12 +1019,41 @@ const createCommercialWebJob = async (req, res) => {
             console.error('Error auto-assigning lead manager for web booking:', e);
         }
 
-        // Determine category: 'hotel' | 'home' | 'daily'
+        // Determine if this is a Party Chef booking
+        const isParty = req.body.bookingType === 'party' || 
+                        req.body.jobCategory === 'party' || 
+                        req.body.hiringType === 'Chef for Party' || 
+                        (req.body.hiringType && req.body.hiringType.toLowerCase().includes('party')) ||
+                        (req.body.partyRequirement && Object.keys(req.body.partyRequirement).length > 0) ||
+                        (req.body.eventDates && req.body.eventDates.length > 0);
+
+        // Determine category: 'hotel' | 'home' | 'daily' | 'party'
         let targetCategory = req.body.jobCategory;
         if (!targetCategory) {
-            if (req.body.category === 'home' || req.body.category === 'domestic') targetCategory = 'home';
+            if (isParty) targetCategory = 'party';
+            else if (req.body.category === 'home' || req.body.category === 'domestic') targetCategory = 'home';
             else if (req.body.category === 'daily' || req.body.category === 'event') targetCategory = 'daily';
             else targetCategory = 'hotel';
+        }
+
+        // Standardize partyRequirement from either web format or Flutter app format
+        let partyRequirement = req.body.partyRequirement;
+        if (!partyRequirement && isParty) {
+            const rawDates = req.body.eventDates || [];
+            partyRequirement = {
+                eventType: req.body.occasion || req.body.event || 'Party Event',
+                guestCount: req.body.noOfGuests || 0,
+                datesCount: rawDates.length || 1,
+                dates: rawDates.map(d => ({
+                    date: d.date || '',
+                    eventType: d.eventType || req.body.occasion || 'Event',
+                    meals: (d.meals || []).map(m => ({
+                        mealType: m.name || m.mealType || 'Meal',
+                        guests: (Number(m.vegGuests || 0) + Number(m.nonVegGuests || 0)) || m.guests || 0,
+                        dishes: m.selectedMenu || m.dishes || m.menu || req.body.selectedMenuItems || []
+                    }))
+                }))
+            };
         }
 
         // 3. Create Jobs for staff items
@@ -1055,9 +1084,8 @@ const createCommercialWebJob = async (req, res) => {
                 jobCode = `ZOMO${nextNumber}`;
             }
 
-            const isParty = req.body.bookingType === 'party';
             const defaultTitle = isParty
-                ? `Chef for Party Booking for ${name} (${req.body.partyRequirement?.datesCount || 1} Day Event)`
+                ? `Chef for Party Booking for ${name} (${partyRequirement?.datesCount || 1} Day Event)`
                 : (targetCategory === 'home' 
                     ? `${item.category || 'Home Cook'} Required at ${outletName || name}`
                     : (targetCategory === 'daily' 
@@ -1065,34 +1093,34 @@ const createCommercialWebJob = async (req, res) => {
                         : `${item.category || 'Hospitality Staff'} Required at ${outletName || name}`));
 
             const jobTitle = defaultTitle;
-            const partyDetailsDesc = isParty && req.body.partyRequirement
-                ? `Party Details: Dates Count: ${req.body.partyRequirement.datesCount || 1}, City: ${req.body.city || address}, Amount: ₹${pricing?.totalAmount || pricing?.advance || 0}. Payment: ${req.body.partyRequirement.paymentMethod || 'Online'}`
+            const partyDetailsDesc = isParty && partyRequirement
+                ? `Party Details: Dates Count: ${partyRequirement.datesCount || 1}, City: ${req.body.city || address}, Amount: ₹${pricing?.total || pricing?.advance || 0}. Payment: ${partyRequirement.paymentMethod || 'Online'}`
                 : '';
             const jobDesc = isParty
                 ? `Chef for Party requirement booked by ${name} (+91 ${cleanedPhone}). Location: ${address}. ${partyDetailsDesc}`
                 : `Hiring ${item.count || 1} ${item.category || 'Staff'}. Salary ₹${item.salary || 'Negotiable'}. Food: ${item.food || 'Available'}, Accommodation: ${item.accommodation || 'Not Required'}. Plan: ${selectedPlan?.name || 'Basic'}. Location: ${address || 'On Request'}. ${message ? `Notes: ${message}` : ''}`;
 
             const newJob = await Job.create({
-                jobCategory: targetCategory,
+                jobCategory: isParty ? 'party' : targetCategory,
                 jobCode,
                 title: jobTitle,
                 customer: customer._id,
-                propertyCategory: targetCategory === 'home' ? 'Residence/Home' : (targetCategory === 'daily' ? 'Event/Party' : 'Hotel/Restaurant'),
+                propertyCategory: isParty ? 'Event/Party' : (targetCategory === 'home' ? 'Residence/Home' : (targetCategory === 'daily' ? 'Event/Party' : 'Hotel/Restaurant')),
                 state: 'India',
                 city: req.body.city || address || 'Delhi NCR',
                 address: address || '',
                 email: email || (customer && customer.email) || (user && user.email) || '',
                 outletName: outletName || '',
                 hiringPurpose: req.body.hiringPurpose ? req.body.hiringPurpose.toLowerCase() : ((req.body.bookingType || '').toLowerCase() === 'commercial' ? 'commercial' : 'domestic'),
-                bookingType: ['regular', 'daily', 'party'].includes((req.body.bookingType || '').toLowerCase()) ? req.body.bookingType.toLowerCase() : (targetCategory === 'daily' ? 'daily' : (isParty ? 'party' : 'regular')),
+                bookingType: isParty ? 'party' : (['regular', 'daily'].includes((req.body.bookingType || '').toLowerCase()) ? req.body.bookingType.toLowerCase() : (targetCategory === 'daily' ? 'daily' : 'regular')),
                 overview: jobDesc,
                 responsibilities: `Work as ${item.category || 'Staff'} for ${name}.`,
                 requirements: `Qualified and verified ${item.category || 'Candidate'}.`,
-                jobType: targetCategory === 'daily' ? 'Daily Pay' : (isParty ? 'Party Event' : 'Full Time'),
+                jobType: isParty ? 'Party Event' : (targetCategory === 'daily' ? 'Daily Pay' : 'Full Time'),
                 jobPosition: item.category || 'Chef',
                 salaryRange: item.salary ? `₹${item.salary}${targetCategory === 'daily' ? '' : '/month'}` : (targetCategory === 'daily' ? '₹1500/day' : '₹20000 - ₹35000'),
                 packageOrGuestOrVacancy: `${item.count || 1} Staff`,
-                event: req.body.event || (targetCategory === 'daily' ? 'Daily / Event' : undefined),
+                event: req.body.occasion || req.body.event || (targetCategory === 'daily' || isParty ? 'Party / Event' : undefined),
                 noOfGuests: req.body.noOfGuests ? String(req.body.noOfGuests) : undefined,
                 staffRequirements: (staffList && staffList.length > 0) ? staffList.map(s => ({
                     role: s.role || s.category || s.staffCategory || 'Staff',
@@ -1104,7 +1132,7 @@ const createCommercialWebJob = async (req, res) => {
                     startTime: s.startTime || (s.timing ? s.timing.split('–')[0]?.trim() : ''),
                     endTime: s.endTime || (s.timing ? s.timing.split('–')[1]?.trim() : '')
                 })) : undefined,
-                partyRequirement: req.body.partyRequirement || undefined,
+                partyRequirement: partyRequirement || undefined,
                 pricing: pricing || undefined,
                 dateOfEvent: req.body.dateOfEvent ? new Date(req.body.dateOfEvent) : undefined,
                 foodPreference: item.food || 'Available',
