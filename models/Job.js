@@ -59,6 +59,9 @@ const jobSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  address: String,
+  outletName: String,
+  pricing: mongoose.Schema.Types.Mixed,
   latitude: Number,
   longitude: Number,
   event: String, // For daily pay jobs
