@@ -60,6 +60,7 @@ const jobSchema = new mongoose.Schema({
     required: true
   },
   address: String,
+  email: String,
   outletName: String,
   pricing: mongoose.Schema.Types.Mixed,
   latitude: Number,

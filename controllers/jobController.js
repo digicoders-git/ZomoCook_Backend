@@ -956,6 +956,7 @@ const createCommercialWebJob = async (req, res) => {
             user = await User.create({
                 name: name,
                 phone: cleanedPhone,
+                email: email || '',
                 address: address || '',
                 outletName: outletName || '',
                 propertyCategory: 'Hotel/Restaurant',
@@ -964,6 +965,7 @@ const createCommercialWebJob = async (req, res) => {
             });
         } else {
             user.name = name || user.name;
+            if (email) user.email = email;
             if (address) user.address = address;
             if (outletName) user.outletName = outletName;
             await user.save();
@@ -983,6 +985,7 @@ const createCommercialWebJob = async (req, res) => {
                 name: name,
                 contactName: name,
                 contactPhone: cleanedPhone,
+                email: email || '',
                 contactAddress: address || '',
                 propertyCategory: 'Hotel/Restaurant',
                 customerStatus: 'running',
@@ -992,6 +995,7 @@ const createCommercialWebJob = async (req, res) => {
             });
         } else {
             customer.name = name || customer.name;
+            if (email) customer.email = email;
             if (address) customer.contactAddress = address;
             await customer.save();
         }
@@ -1074,6 +1078,7 @@ const createCommercialWebJob = async (req, res) => {
                 state: 'India',
                 city: req.body.city || address || 'Delhi NCR',
                 address: address || '',
+                email: email || (customer && customer.email) || (user && user.email) || '',
                 outletName: outletName || '',
                 hiringPurpose: req.body.hiringPurpose ? req.body.hiringPurpose.toLowerCase() : ((req.body.bookingType || '').toLowerCase() === 'commercial' ? 'commercial' : 'domestic'),
                 bookingType: ['regular', 'daily', 'party'].includes((req.body.bookingType || '').toLowerCase()) ? req.body.bookingType.toLowerCase() : (targetCategory === 'daily' ? 'daily' : (isParty ? 'party' : 'regular')),
