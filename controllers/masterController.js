@@ -13,7 +13,11 @@ exports.getMasters = async (req, res) => {
         if (search) query.name = new RegExp(search, 'i');
         if (parentId) query.parentId = parentId;
 
-        let masters = await Master.find(query).populate('parentId', 'name').sort({ createdAt: -1 });
+        let sortOption = (category === 'states' || category === 'cities' || req.query.sort === 'name')
+            ? { name: 1 }
+            : { createdAt: -1 };
+
+        let masters = await Master.find(query).populate('parentId', 'name').sort(sortOption);
 
         // Auto-seed default items if database for this category is currently empty and search/parentId filter is not applied
         if (masters.length === 0 && !search && !parentId) {
@@ -50,6 +54,17 @@ exports.getMasters = async (req, res) => {
                 ];
                 await Master.insertMany(defaultLeaves.map(l => ({ name: l, category: 'leaves', status: 'active' })));
                 masters = await Master.find(query).populate('parentId', 'name').sort({ createdAt: -1 });
+            } else if (category === 'cooking-preferences') {
+                const defaultCookingPrefs = [
+                    'Vegetarian (Veg Only)',
+                    'Non-Vegetarian',
+                    'Both (Veg & Non-Veg)',
+                    'Jain Food',
+                    'Eggetarian',
+                    'Vegan'
+                ];
+                await Master.insertMany(defaultCookingPrefs.map(p => ({ name: p, category: 'cooking-preferences', status: 'active' })));
+                masters = await Master.find(query).populate('parentId', 'name').sort(sortOption);
             }
         }
 
