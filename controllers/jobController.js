@@ -125,6 +125,32 @@ const createJob = async (req, res) => {
             leadManager: assignedManagerId || ''
         };
 
+        // Parse nested JSON strings if submitted via FormData
+        if (typeof jobData.staffRequirements === 'string') {
+            try { jobData.staffRequirements = JSON.parse(jobData.staffRequirements); } catch(e) {}
+        }
+        if (typeof jobData.partyRequirement === 'string') {
+            try { jobData.partyRequirement = JSON.parse(jobData.partyRequirement); } catch(e) {}
+        }
+        if (typeof jobData.pricing === 'string') {
+            try { jobData.pricing = JSON.parse(jobData.pricing); } catch(e) {}
+        }
+
+        // Auto-fill title and descriptions if not provided
+        const roleName = jobData.jobPosition || (Array.isArray(jobData.staffRequirements) && jobData.staffRequirements[0]?.role) || jobData.event || 'Cook';
+        if (!jobData.title || jobData.title.trim() === '') {
+            jobData.title = `${roleName} Requirement${jobData.city ? ` in ${jobData.city}` : ''}`;
+        }
+        if (!jobData.overview || jobData.overview.trim() === '') {
+            jobData.overview = `Looking for ${roleName} in ${jobData.city || 'specified location'}.`;
+        }
+        if (!jobData.responsibilities || jobData.responsibilities.trim() === '') {
+            jobData.responsibilities = `Handle daily cooking, meal preparation, hygiene and kitchen management as required.`;
+        }
+        if (!jobData.requirements || jobData.requirements.trim() === '') {
+            jobData.requirements = `Must be experienced in cooking, reliable, punctual and maintain hygiene standards.`;
+        }
+
         // Sanitize date and number fields
         if (!jobData.dateOfEvent || jobData.dateOfEvent === '' || jobData.dateOfEvent === 'null') {
             delete jobData.dateOfEvent;

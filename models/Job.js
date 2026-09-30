@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const jobSchema = new mongoose.Schema({
   jobCategory: {
     type: String,
-    enum: ['hotel', 'home', 'daily', 'party'],
+    enum: ['hotel', 'home', 'daily', 'party', 'commercial', 'domestic'],
     required: true,
     trim: true
   },
@@ -23,22 +23,23 @@ const jobSchema = new mongoose.Schema({
   },
   overview: {
     type: String,
-    required: [true, 'Job overview is required'],
-    trim: true
+    trim: true,
+    default: ''
   },
   responsibilities: {
     type: String,
-    required: [true, 'Key responsibilities are required'],
-    trim: true
+    trim: true,
+    default: ''
   },
   requirements: {
     type: String,
-    required: [true, 'Requirements are required'],
-    trim: true
+    trim: true,
+    default: ''
   },
   benefits: {
     type: String,
-    trim: true
+    trim: true,
+    default: ''
   },
   title: {
     type: String,

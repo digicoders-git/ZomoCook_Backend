@@ -29,26 +29,72 @@ const buildFCMPayload = (title, message, notificationType, relatedId, actionUrl)
     }
 });
 
-// Helper: send FCM to all tokens with deep link
-const sendFCMToAll = async (title, message, notificationType, relatedId, actionUrl) => {
-    const [admins, users] = await Promise.all([
-        Admin.find({ fcmToken: { $ne: null } }).select('fcmToken'),
-        User.find({ fcmToken: { $ne: null } }).select('fcmToken')
-    ]);
-    const tokens = [...admins, ...users].map(u => u.fcmToken).filter(Boolean);
-    const uniqueTokens = [...new Set(tokens)];
-    if (!uniqueTokens.length) return;
-
-    const payload = buildFCMPayload(title, message, notificationType, relatedId, actionUrl);
+// Helper: send targeted FCM push notification based on target audience
+const sendFCMTargeted = async ({ title, message, notificationType, relatedId, actionUrl, target = 'all', targetRegions = [] }) => {
     try {
+        const Role = require('../models/Role');
+        const Candidate = require('../models/Candidate');
+        let tokens = [];
+
+        if (target === 'candidates') {
+            // Find all Cook / Candidate roles
+            const cookRoles = await Role.find({ name: { $in: [/^cook$/i, /^candidate$/i] } }).select('_id');
+            const cookRoleIds = cookRoles.map(r => r._id);
+            
+            const [users, candidates] = await Promise.all([
+                User.find({ role: { $in: cookRoleIds }, fcmToken: { $ne: null, $exists: true } }).select('fcmToken state city'),
+                Candidate.find({ fcmToken: { $ne: null, $exists: true } }).select('fcmToken state city')
+            ]);
+            
+            let allRecipients = [...users, ...candidates];
+            if (targetRegions && targetRegions.length > 0) {
+                allRecipients = allRecipients.filter(u => 
+                    !u.state && !u.city || 
+                    targetRegions.includes(u.state) || 
+                    targetRegions.includes(u.city)
+                );
+            }
+            tokens = allRecipients.map(u => u.fcmToken).filter(Boolean);
+        } else if (target === 'customers') {
+            // Find all Customer / Employer roles
+            const customerRoles = await Role.find({ name: { $in: [/^customer$/i, /^user$/i, /^chef$/i] } }).select('_id');
+            const customerRoleIds = customerRoles.map(r => r._id);
+            
+            const users = await User.find({ role: { $in: customerRoleIds }, fcmToken: { $ne: null, $exists: true } }).select('fcmToken state city');
+            let allUsers = users;
+            if (targetRegions && targetRegions.length > 0) {
+                allUsers = allUsers.filter(u => 
+                    !u.state && !u.city || 
+                    targetRegions.includes(u.state) || 
+                    targetRegions.includes(u.city)
+                );
+            }
+            tokens = allUsers.map(u => u.fcmToken).filter(Boolean);
+        } else {
+            // Target === 'all': Send to Admins + Users + Candidates
+            const [admins, users, candidates] = await Promise.all([
+                Admin.find({ fcmToken: { $ne: null, $exists: true } }).select('fcmToken'),
+                User.find({ fcmToken: { $ne: null, $exists: true } }).select('fcmToken'),
+                Candidate.find({ fcmToken: { $ne: null, $exists: true } }).select('fcmToken')
+            ]);
+            tokens = [...admins, ...users, ...candidates].map(u => u.fcmToken).filter(Boolean);
+        }
+
+        const uniqueTokens = [...new Set(tokens)];
+        if (!uniqueTokens.length) {
+            console.log(`[FCM] No tokens found for target: ${target}`);
+            return;
+        }
+
+        const payload = buildFCMPayload(title, message, notificationType, relatedId, actionUrl);
         const chunkSize = 500;
         for (let i = 0; i < uniqueTokens.length; i += chunkSize) {
             const chunk = uniqueTokens.slice(i, i + chunkSize);
             await admin.messaging().sendEachForMulticast({ tokens: chunk, ...payload });
         }
-        console.log(`[FCM] Broadcast sent to ${tokens.length} tokens`);
+        console.log(`[FCM] Targeted (${target}) push sent to ${uniqueTokens.length} devices`);
     } catch (err) {
-        console.error('FCM Broadcast Error:', err);
+        console.error('FCM Targeted Error:', err);
     }
 };
 
@@ -58,7 +104,7 @@ const sendFCMToAll = async (title, message, notificationType, relatedId, actionU
  */
 exports.getNotifications = async (req, res) => {
     try {
-        const { search, status, limit = 50 } = req.query;
+        const { search, status, role: explicitRole, limit = 50 } = req.query;
         let query = {};
         if (search) query.title = new RegExp(search, 'i');
         if (status) query.status = status;
@@ -66,17 +112,33 @@ exports.getNotifications = async (req, res) => {
         if (req.admin) {
             const isSuperAdmin = req.admin.constructor.modelName === 'Admin';
             if (!isSuperAdmin) {
-                const userRole = req.admin.role && req.admin.role.name ? req.admin.role.name.toLowerCase() : '';
-                const Candidate = require('../models/Candidate');
-                const last10 = req.admin.phone ? req.admin.phone.slice(-10) : '';
-                const candidateDoc = await Candidate.findOne({
-                    phone: last10 ? new RegExp(last10 + '$') : req.admin.phone
-                });
-                const isCook = userRole === 'cook' || candidateDoc != null;
+                const userRole = req.admin.role && req.admin.role.name 
+                    ? req.admin.role.name.toLowerCase() 
+                    : (req.admin.role ? req.admin.role.toString().toLowerCase() : '');
+                
+                const expRoleLower = (explicitRole || '').toLowerCase();
+                let isCook = false;
+                
+                if (expRoleLower === 'cook' || expRoleLower === 'candidate') {
+                    isCook = true;
+                } else if (expRoleLower === 'customer' || expRoleLower === 'chef' || expRoleLower === 'user') {
+                    isCook = false;
+                } else if (userRole === 'cook' || userRole === 'candidate') {
+                    isCook = true;
+                } else if (userRole === 'customer' || userRole === 'chef' || userRole === 'user') {
+                    isCook = false;
+                } else {
+                    const Candidate = require('../models/Candidate');
+                    const candidateDoc = await Candidate.findOne({ phone: req.admin.phone });
+                    isCook = candidateDoc != null;
+                }
+
                 const targetRole = isCook ? 'candidates' : 'customers';
 
                 let recipientIds = [req.admin._id || req.admin.id];
                 if (isCook) {
+                    const Candidate = require('../models/Candidate');
+                    const candidateDoc = await Candidate.findOne({ phone: req.admin.phone });
                     if (candidateDoc) recipientIds.push(candidateDoc._id);
                 } else {
                     const Customer = require('../models/Customer');
@@ -89,8 +151,6 @@ exports.getNotifications = async (req, res) => {
                 // Region/category wise filter
                 const userState = req.admin.state || '';
                 const userCity = req.admin.city || '';
-                const userJobCategories = candidateDoc?.jobPreference?.jobCategory || [];
-                const userServiceCategories = candidateDoc?.cookingSkills ? Object.keys(candidateDoc.cookingSkills) : [];
 
                 query.$or = [
                     { recipient: { $in: recipientIds } },
@@ -104,20 +164,6 @@ exports.getNotifications = async (req, res) => {
                                     { targetRegions: { $exists: false } },
                                     ...(userState ? [{ targetRegions: userState }] : []),
                                     ...(userCity ? [{ targetRegions: userCity }] : [])
-                                ]
-                            },
-                            {
-                                $or: [
-                                    { targetJobCategories: { $size: 0 } },
-                                    { targetJobCategories: { $exists: false } },
-                                    ...(userJobCategories.length ? [{ targetJobCategories: { $in: userJobCategories } }] : [])
-                                ]
-                            },
-                            {
-                                $or: [
-                                    { targetServiceCategories: { $size: 0 } },
-                                    { targetServiceCategories: { $exists: false } },
-                                    ...(userServiceCategories.length ? [{ targetServiceCategories: { $in: userServiceCategories } }] : [])
                                 ]
                             }
                         ]
@@ -141,7 +187,6 @@ exports.getNotifications = async (req, res) => {
     }
 };
 
-
 /**
  * @desc    Create new notification + send FCM push
  * @route   POST /api/notifications
@@ -152,11 +197,11 @@ exports.createNotification = async (req, res) => {
         const notificationData = {
             title,
             message,
-            type,
+            type: type || 'system',
             relatedId,
             actionUrl,
-            target,
-            status,
+            target: target || 'all',
+            status: status || 'active',
             createdBy: req.admin?.id,
             targetRegions: targetRegions ? (Array.isArray(targetRegions) ? targetRegions : JSON.parse(targetRegions)) : [],
             targetJobCategories: targetJobCategories ? (Array.isArray(targetJobCategories) ? targetJobCategories : JSON.parse(targetJobCategories)) : [],
@@ -166,10 +211,17 @@ exports.createNotification = async (req, res) => {
 
         const notification = await Notification.create(notificationData);
 
-        // Send FCM push notification
+        // Send targeted FCM push notification
         if (status !== 'inactive') {
-            sendFCMToAll(title, message, type, relatedId, actionUrl)
-                .catch(err => console.error('FCM Error:', err));
+            sendFCMTargeted({
+                title,
+                message,
+                notificationType: type,
+                relatedId,
+                actionUrl,
+                target: notificationData.target,
+                targetRegions: notificationData.targetRegions
+            }).catch(err => console.error('FCM Error:', err));
         }
 
         res.status(201).json({
@@ -422,11 +474,12 @@ exports.sendNotificationToRole = async ({
     actionUrl
 }) => {
     try {
-        const target = roleName.toLowerCase() === 'cook' ? 'candidates' : 'customers';
+        const isCookRole = ['cook', 'candidate'].includes((roleName || '').toLowerCase());
+        const target = isCookRole ? 'candidates' : 'customers';
         const notification = await Notification.create({
             title,
             message,
-            type,
+            type: type || 'system',
             relatedId,
             relatedModel,
             actionUrl,
@@ -438,11 +491,11 @@ exports.sendNotificationToRole = async ({
         const Candidate = require('../models/Candidate');
 
         let roleIds = [];
-        if (roleName.toLowerCase() === 'cook' || roleName.toLowerCase() === 'chef') {
-            const roleDocs = await Role.find({ name: new RegExp(`^(cook|chef)$`, 'i') });
+        if (isCookRole) {
+            const roleDocs = await Role.find({ name: { $in: [/^cook$/i, /^candidate$/i] } });
             if (roleDocs.length > 0) roleIds = roleDocs.map(r => r._id);
         } else {
-            const roleDocs = await Role.find({ name: new RegExp(`^${roleName}$`, 'i') });
+            const roleDocs = await Role.find({ name: { $in: [/^customer$/i, /^user$/i, /^chef$/i] } });
             if (roleDocs.length > 0) roleIds = roleDocs.map(r => r._id);
         }
 
@@ -454,9 +507,9 @@ exports.sendNotificationToRole = async ({
             }).select('fcmToken');
         }
 
-        // Also search Candidates with fcmToken if target is candidates/cook
+        // Also search Candidates with fcmToken only if target is candidates/cook
         let candidateTokens = [];
-        if (roleName.toLowerCase() === 'cook' || roleName.toLowerCase() === 'chef') {
+        if (isCookRole) {
             const candidates = await Candidate.find({ fcmToken: { $ne: null } }).select('fcmToken');
             candidateTokens = candidates.map(c => c.fcmToken).filter(Boolean);
         }
