@@ -103,6 +103,18 @@ const jobSchema = new mongoose.Schema({
     startTime: String,
     endTime: String
   }],
+  commercialStaffList: [{
+    serviceCategory: String,
+    staffCategory: String,
+    salaryRange: String,
+    noOfStaff: Number
+  }],
+  homeCookLevel: String,
+  genderPreference: String,
+  serviceDuration: String,
+  familyMembers: String,
+  startDate: String,
+  dailyHiringPurpose: String,
   partyRequirement: {
     city: String,
     paymentMethod: String,
