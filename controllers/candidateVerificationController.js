@@ -1,5 +1,7 @@
 const Candidate = require('../models/Candidate');
 const Admin = require('../models/Admin');
+const User = require('../models/User');
+const mongoose = require('mongoose');
 
 /**
  * @desc    Get pending cook approvals for admin
@@ -44,8 +46,13 @@ const getPendingCookApprovals = async (req, res) => {
  */
 const getCookVerificationDetails = async (req, res) => {
     try {
-        const candidate = await Candidate.findById(req.params.id)
-            .select('-applications -savedJobs');
+        let candidate = null;
+        if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+            candidate = await Candidate.findById(req.params.id).select('-applications -savedJobs');
+            if (!candidate) {
+                candidate = await Candidate.findOne({ createdBy: req.params.id }).select('-applications -savedJobs');
+            }
+        }
 
         if (!candidate) {
             return res.status(404).json({ success: false, message: 'Cook not found' });
@@ -69,9 +76,16 @@ const approveCook = async (req, res) => {
     try {
         const { approvalNotes, verificationChecklist } = req.body;
         const candidateId = req.params.id;
-        const adminId = req.admin._id;
+        const adminId = req.admin ? req.admin._id : null;
 
-        const candidate = await Candidate.findById(candidateId);
+        let candidate = null;
+        if (mongoose.Types.ObjectId.isValid(candidateId)) {
+            candidate = await Candidate.findById(candidateId);
+            if (!candidate) {
+                candidate = await Candidate.findOne({ createdBy: candidateId });
+            }
+        }
+
         if (!candidate) {
             return res.status(404).json({ success: false, message: 'Cook not found' });
         }
@@ -97,8 +111,20 @@ const approveCook = async (req, res) => {
                 backgroundCheckPassed: true
             }
         };
+        candidate.kycStatus = 'approved';
 
         await candidate.save();
+
+        // Also update corresponding User status to Active
+        if (candidate.phone) {
+            const last10 = candidate.phone.replace(/\D/g, '').slice(-10);
+            if (last10) {
+                await User.updateMany(
+                    { phone: new RegExp(last10 + '$') },
+                    { status: 'Active' }
+                );
+            }
+        }
 
         // Send notification to cook
         const notificationController = require('./notificationController');
@@ -132,13 +158,20 @@ const rejectCook = async (req, res) => {
     try {
         const { rejectionReason, photoRejectionReason, idRejectionReason } = req.body;
         const candidateId = req.params.id;
-        const adminId = req.admin._id;
+        const adminId = req.admin ? req.admin._id : null;
 
         if (!rejectionReason) {
             return res.status(400).json({ success: false, message: 'Rejection reason is required' });
         }
 
-        const candidate = await Candidate.findById(candidateId);
+        let candidate = null;
+        if (mongoose.Types.ObjectId.isValid(candidateId)) {
+            candidate = await Candidate.findById(candidateId);
+            if (!candidate) {
+                candidate = await Candidate.findOne({ createdBy: candidateId });
+            }
+        }
+
         if (!candidate) {
             return res.status(404).json({ success: false, message: 'Cook not found' });
         }
@@ -156,6 +189,7 @@ const rejectCook = async (req, res) => {
             rejectionReason: rejectionReason,
             submissionCount: (candidate.profileVerification?.submissionCount || 0) + 1
         };
+        candidate.kycStatus = 'rejected';
 
         await candidate.save();
 
@@ -190,14 +224,29 @@ const rejectCook = async (req, res) => {
 const resubmitCookProfile = async (req, res) => {
     try {
         const candidateId = req.params.id;
-        const candidate = await Candidate.findById(candidateId);
+        let candidate = null;
+        if (mongoose.Types.ObjectId.isValid(candidateId)) {
+            candidate = await Candidate.findById(candidateId);
+            if (!candidate) {
+                candidate = await Candidate.findOne({ createdBy: candidateId });
+            }
+        }
+        if (!candidate && req.admin && req.admin.phone) {
+            const last10 = req.admin.phone.replace(/\D/g, '').slice(-10);
+            candidate = await Candidate.findOne({
+                $or: [
+                    { phone: req.admin.phone },
+                    ...(last10 ? [{ phone: new RegExp(last10 + '$') }] : [])
+                ]
+            });
+        }
 
         if (!candidate) {
             return res.status(404).json({ success: false, message: 'Cook not found' });
         }
 
         // Check if profile was rejected
-        if (candidate.profileVerification?.status !== 'rejected') {
+        if (candidate.profileVerification?.status !== 'rejected' && candidate.kycStatus !== 'rejected') {
             return res.status(400).json({
                 success: false,
                 message: 'Profile can only be resubmitted if it was rejected'
@@ -213,6 +262,7 @@ const resubmitCookProfile = async (req, res) => {
             submissionCount: (candidate.profileVerification?.submissionCount || 0) + 1,
             lastSubmissionDate: new Date()
         };
+        candidate.kycStatus = 'pending';
 
         await candidate.save();
 
@@ -233,17 +283,42 @@ const resubmitCookProfile = async (req, res) => {
  */
 const getCookProfileStatus = async (req, res) => {
     try {
-        const candidate = await Candidate.findById(req.params.id)
-            .select('profileVerification name email phone');
+        const id = req.params.id;
+        let candidate = null;
+        if (id && mongoose.Types.ObjectId.isValid(id)) {
+            candidate = await Candidate.findById(id).select('profileVerification kycStatus name email phone');
+            if (!candidate) {
+                candidate = await Candidate.findOne({ createdBy: id }).select('profileVerification kycStatus name email phone');
+            }
+        }
+        if (!candidate && req.admin && req.admin.phone) {
+            const last10 = req.admin.phone.replace(/\D/g, '').slice(-10);
+            candidate = await Candidate.findOne({
+                $or: [
+                    { phone: req.admin.phone },
+                    ...(last10 ? [{ phone: new RegExp(last10 + '$') }] : [])
+                ]
+            }).select('profileVerification kycStatus name email phone');
+        }
 
         if (!candidate) {
             return res.status(404).json({ success: false, message: 'Cook not found' });
         }
 
+        // Keep profileVerification and kycStatus in sync
+        const status = candidate.profileVerification?.status || (candidate.kycStatus === 'approved' ? 'approved' : 'pending_approval');
+        const canApply = candidate.profileVerification?.canApplyForJobs ?? (candidate.kycStatus === 'approved');
+
+        const verificationData = {
+            ...(candidate.profileVerification ? (candidate.profileVerification.toObject ? candidate.profileVerification.toObject() : candidate.profileVerification) : {}),
+            status,
+            canApplyForJobs: canApply
+        };
+
         res.status(200).json({
             success: true,
-            profileStatus: candidate.profileVerification,
-            canApplyForJobs: candidate.profileVerification?.canApplyForJobs || false
+            profileStatus: verificationData,
+            canApplyForJobs: canApply
         });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });

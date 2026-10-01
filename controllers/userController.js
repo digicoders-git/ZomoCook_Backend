@@ -624,7 +624,15 @@ exports.getProfile = async (req, res) => {
 
         let candidate = null;
         if (user.role && user.role.name && user.role.name.toLowerCase() === 'cook') {
-            candidate = await Candidate.findOne({ phone: user.phone });
+            const rawPhone = user.phone || '';
+            const last10 = rawPhone.replace(/\D/g, '').slice(-10);
+            candidate = await Candidate.findOne({
+                $or: [
+                    { createdBy: user._id },
+                    { phone: user.phone },
+                    ...(last10 ? [{ phone: new RegExp(last10 + '$') }] : [])
+                ]
+            });
         }
 
         // Calculate profile completion %

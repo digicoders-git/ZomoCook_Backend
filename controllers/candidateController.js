@@ -317,6 +317,13 @@ const toggleCandidateStatus = async (req, res) => {
         
         // Trigger notification if KYC status changed to approved
         if (type === 'kyc' && !wasApproved && value === 'approved') {
+            if (candidate && candidate.phone) {
+                const User = require('../models/User');
+                const last10 = candidate.phone.replace(/\D/g, '').slice(-10);
+                if (last10) {
+                    await User.updateMany({ phone: new RegExp(last10 + '$') }, { status: 'Active' });
+                }
+            }
             const notificationController = require('./notificationController');
             notificationController.sendNotificationToUser({
                 userId: candidate._id,

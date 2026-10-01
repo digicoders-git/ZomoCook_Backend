@@ -88,6 +88,7 @@ const candidateSchema = new mongoose.Schema({
     // Status
     kycStatus: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
     profileStatus: { type: String, enum: ['active', 'inactive'], default: 'active' },
+    fcmToken: { type: String, default: null },
 
     // Job Preference
     jobPreference: {

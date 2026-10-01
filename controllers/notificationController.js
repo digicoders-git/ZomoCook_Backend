@@ -138,8 +138,17 @@ exports.getNotifications = async (req, res) => {
                 let recipientIds = [req.admin._id || req.admin.id];
                 if (isCook) {
                     const Candidate = require('../models/Candidate');
-                    const candidateDoc = await Candidate.findOne({ phone: req.admin.phone });
-                    if (candidateDoc) recipientIds.push(candidateDoc._id);
+                    const last10 = req.admin.phone ? req.admin.phone.replace(/\D/g, '').slice(-10) : '';
+                    const candidateDocs = await Candidate.find({
+                        $or: [
+                            { createdBy: req.admin._id || req.admin.id },
+                            ...(last10 ? [{ phone: new RegExp(last10 + '$') }] : []),
+                            ...(req.admin.phone ? [{ phone: req.admin.phone }] : [])
+                        ]
+                    }).select('_id');
+                    if (candidateDocs && candidateDocs.length > 0) {
+                        candidateDocs.forEach(c => recipientIds.push(c._id));
+                    }
                 } else {
                     const Customer = require('../models/Customer');
                     const customerDocs = await Customer.find({ createdBy: req.admin._id || req.admin.id });
@@ -310,6 +319,20 @@ exports.saveFCMToken = async (req, res) => {
                 await Admin.findByIdAndUpdate(req.admin._id || req.admin.id, { fcmToken: token });
             } else {
                 await User.findByIdAndUpdate(req.admin._id || req.admin.id, { fcmToken: token });
+                if (req.admin.phone) {
+                    const Candidate = require('../models/Candidate');
+                    const last10 = req.admin.phone.replace(/\D/g, '').slice(-10);
+                    await Candidate.updateMany(
+                        {
+                            $or: [
+                                { createdBy: req.admin._id || req.admin.id },
+                                ...(last10 ? [{ phone: new RegExp(last10 + '$') }] : []),
+                                { phone: req.admin.phone }
+                            ]
+                        },
+                        { fcmToken: token }
+                    );
+                }
             }
         }
 
@@ -338,35 +361,37 @@ exports.sendNotificationToUser = async ({
             recipientDoc = await Admin.findById(userId).select('fcmToken');
         } else if (userModel === 'Candidate') {
             const Candidate = require('../models/Candidate');
-            const candidateDoc = await Candidate.findById(userId);
+            let candidateDoc = await Candidate.findById(userId);
+            if (!candidateDoc) {
+                candidateDoc = await Candidate.findOne({ createdBy: userId });
+            }
             if (candidateDoc && candidateDoc.phone) {
-                const last10 = candidateDoc.phone.slice(-10);
+                const last10 = candidateDoc.phone.replace(/\D/g, '').slice(-10);
                 recipientDoc = await User.findOne({ phone: new RegExp(last10 + '$') }).select('fcmToken');
                 if (recipientDoc) {
                     resolvedRecipientId = recipientDoc._id;
                     resolvedRecipientModel = 'User';
                 }
+                if (!recipientDoc?.fcmToken && candidateDoc.fcmToken) {
+                    recipientDoc = candidateDoc;
+                }
+            } else if (candidateDoc && candidateDoc.fcmToken) {
+                recipientDoc = candidateDoc;
             }
         } else {
-            recipientDoc = await User.findById(userId).select('fcmToken');
-            if (!recipientDoc) {
-                // Try Admin first
-                recipientDoc = await Admin.findById(userId).select('fcmToken');
-                if (recipientDoc) {
-                    resolvedRecipientId = recipientDoc._id;
-                    resolvedRecipientModel = 'Admin';
-                } else {
-                    // Try finding Candidate first, then find corresponding User
-                    const Candidate = require('../models/Candidate');
-                    const candidateDoc = await Candidate.findById(userId);
-                    if (candidateDoc && candidateDoc.phone) {
-                        const last10 = candidateDoc.phone.slice(-10);
-                        recipientDoc = await User.findOne({ phone: new RegExp(last10 + '$') }).select('fcmToken');
-                        if (recipientDoc) {
-                            resolvedRecipientId = recipientDoc._id;
-                            resolvedRecipientModel = 'User';
-                        }
-                    }
+            recipientDoc = await User.findById(userId).select('fcmToken phone');
+            if (!recipientDoc?.fcmToken) {
+                const Candidate = require('../models/Candidate');
+                let candidateDoc = null;
+                if (recipientDoc?.phone) {
+                    const last10 = recipientDoc.phone.replace(/\D/g, '').slice(-10);
+                    candidateDoc = await Candidate.findOne({ phone: new RegExp(last10 + '$') }).select('fcmToken');
+                }
+                if (!candidateDoc) {
+                    candidateDoc = await Candidate.findOne({ createdBy: userId }).select('fcmToken');
+                }
+                if (candidateDoc?.fcmToken) {
+                    recipientDoc = candidateDoc;
                 }
             }
         }
@@ -419,7 +444,7 @@ exports.markAllRead = async (req, res) => {
         const userId = req.admin._id;
         const userRole = req.admin.role && req.admin.role.name ? req.admin.role.name.toLowerCase() : '';
         const Candidate = require('../models/Candidate');
-        const last10 = req.admin.phone ? req.admin.phone.slice(-10) : '';
+        const last10 = req.admin.phone ? req.admin.phone.replace(/\D/g, '').slice(-10) : '';
         const candidateDoc = await Candidate.findOne({
             phone: last10 ? new RegExp(last10 + '$') : req.admin.phone
         });
@@ -430,9 +455,15 @@ exports.markAllRead = async (req, res) => {
         console.log('[DEBUG] User Role:', userRole, 'Target Role:', targetRole);
 
         if (isCook) {
-            if (candidateDoc) {
-                recipientIds.push(candidateDoc._id);
-                console.log('[DEBUG] Found Candidate ID:', candidateDoc._id);
+            const candidateDocs = await Candidate.find({
+                $or: [
+                    { createdBy: userId },
+                    ...(last10 ? [{ phone: new RegExp(last10 + '$') }] : []),
+                    ...(req.admin.phone ? [{ phone: req.admin.phone }] : [])
+                ]
+            }).select('_id');
+            if (candidateDocs && candidateDocs.length > 0) {
+                candidateDocs.forEach(c => recipientIds.push(c._id));
             }
         } else {
             const Customer = require('../models/Customer');
