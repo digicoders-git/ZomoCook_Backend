@@ -132,6 +132,9 @@ const createJob = async (req, res) => {
         if (typeof jobData.partyRequirement === 'string') {
             try { jobData.partyRequirement = JSON.parse(jobData.partyRequirement); } catch(e) {}
         }
+        if (typeof jobData.eventDays === 'string') {
+            try { jobData.eventDays = JSON.parse(jobData.eventDays); } catch(e) {}
+        }
         if (typeof jobData.pricing === 'string') {
             try { jobData.pricing = JSON.parse(jobData.pricing); } catch(e) {}
         }
@@ -479,6 +482,19 @@ const updateJob = async (req, res) => {
         // Handle image update
         if (req.file) {
             req.body.image = req.file.path;
+        }
+
+        if (typeof req.body.staffRequirements === 'string') {
+            try { req.body.staffRequirements = JSON.parse(req.body.staffRequirements); } catch(e) {}
+        }
+        if (typeof req.body.partyRequirement === 'string') {
+            try { req.body.partyRequirement = JSON.parse(req.body.partyRequirement); } catch(e) {}
+        }
+        if (typeof req.body.eventDays === 'string') {
+            try { req.body.eventDays = JSON.parse(req.body.eventDays); } catch(e) {}
+        }
+        if (typeof req.body.pricing === 'string') {
+            try { req.body.pricing = JSON.parse(req.body.pricing); } catch(e) {}
         }
 
         job = await Job.findByIdAndUpdate(req.params.id, req.body, {

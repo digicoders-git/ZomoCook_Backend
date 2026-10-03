@@ -115,14 +115,9 @@ const jobSchema = new mongoose.Schema({
   familyMembers: String,
   startDate: String,
   dailyHiringPurpose: String,
-  partyRequirement: {
-    city: String,
-    paymentMethod: String,
-    appliedCoupon: String,
-    dates: mongoose.Schema.Types.Mixed,
-    datesCount: Number,
-    pricingBreakdown: mongoose.Schema.Types.Mixed
-  },
+  venueAddress: String,
+  eventDays: mongoose.Schema.Types.Mixed,
+  partyRequirement: mongoose.Schema.Types.Mixed,
   allowedLeave: String,
   salaryRange: String,
   experienceRange: String,

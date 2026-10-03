@@ -92,9 +92,15 @@ const applyJob = async (req, res) => {
             });
         }
 
-        const existingApp = await Application.findOne({ job: jobId, candidate: candidate._id });
+        const targetRole = req.body.appliedRole || req.body.role || applicationData?.role || applicationData?.appliedRole || '';
+
+        const existingAppQuery = { job: jobId, candidate: candidate._id };
+        if (targetRole) {
+            existingAppQuery.appliedRole = targetRole;
+        }
+        const existingApp = await Application.findOne(existingAppQuery);
         if (existingApp) {
-            return res.status(400).json({ success: false, message: 'You have already applied for this job' });
+            return res.status(400).json({ success: false, message: `You have already applied for this job${targetRole ? ` as ${targetRole}` : ''}` });
         }
 
         const application = await Application.create({
@@ -102,6 +108,7 @@ const applyJob = async (req, res) => {
             candidate: candidate._id,
             customer: job.createdBy,
             status: 'Applied',
+            appliedRole: targetRole,
             applicationData: applicationData || {},
             appliedDate: new Date()
         });

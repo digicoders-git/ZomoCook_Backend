@@ -84,10 +84,14 @@ const applicationSchema = new mongoose.Schema({
     trialCancellationNotes: String,
     trialOtp: String,
     trialOtpExpiresAt: Date,
-    trialDurationSeconds: Number
+    trialDurationSeconds: Number,
+    appliedRole: {
+        type: String,
+        default: ''
+    }
 }, { timestamps: true });
 
-// Unique index to prevent duplicate applications
-applicationSchema.index({ job: 1, candidate: 1 }, { unique: true });
+// Unique index to prevent duplicate applications for same role
+applicationSchema.index({ job: 1, candidate: 1, appliedRole: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model('Application', applicationSchema);
