@@ -787,22 +787,36 @@ const applyForJob = async (req, res) => {
         const application = await Application.create({
             job: jobId,
             candidate: candidate._id,
-            customer: job.createdBy,
+            customer: job.createdBy || job.customer,
             status: 'Applied'
         });
 
-        // Send push notification to the customer/chef who posted the job
-        const notificationController = require('./notificationController');
-        notificationController.sendNotificationToUser({
-            userId: job.createdBy,
-            userModel: 'User',
-            title: '📝 New Job Application',
-            message: `${candidate.name} has applied for your job "${job.title}".`,
-            type: 'application_status',
-            relatedId: application._id,
-            relatedModel: 'Application',
-            actionUrl: '/applications'
-        }).catch(err => console.error('Error sending job apply push notification:', err));
+        // Send push notification specifically to the user who posted the job
+        let jobPosterId = job.createdBy;
+        let jobPosterModel = job.creatorModel || 'User';
+
+        if (!jobPosterId && job.customer) {
+            const Customer = require('../models/Customer');
+            const custDoc = await Customer.findById(job.customer);
+            if (custDoc) {
+                jobPosterId = custDoc.createdBy || custDoc._id;
+                jobPosterModel = custDoc.creatorModel || 'User';
+            }
+        }
+
+        if (jobPosterId) {
+            const notificationController = require('./notificationController');
+            notificationController.sendNotificationToUser({
+                userId: jobPosterId,
+                userModel: jobPosterModel,
+                title: '📝 New Job Application',
+                message: `${candidate.name || 'A candidate'} has applied for your job "${job.title || 'Job'}".`,
+                type: 'application_status',
+                relatedId: application._id,
+                relatedModel: 'Application',
+                actionUrl: '/applications'
+            }).catch(err => console.error('Error sending job apply push notification:', err));
+        }
 
         // Add to candidate's applications array (for backward compatibility)
         await Candidate.findByIdAndUpdate(

@@ -378,8 +378,36 @@ exports.sendNotificationToUser = async ({
             } else if (candidateDoc && candidateDoc.fcmToken) {
                 recipientDoc = candidateDoc;
             }
+        } else if (userModel === 'Customer') {
+            const Customer = require('../models/Customer');
+            const custDoc = await Customer.findById(userId);
+            if (custDoc) {
+                if (custDoc.createdBy) {
+                    resolvedRecipientId = custDoc.createdBy;
+                    resolvedRecipientModel = 'User';
+                    recipientDoc = await User.findById(custDoc.createdBy).select('fcmToken phone');
+                }
+                if (!recipientDoc && custDoc.contactPhone) {
+                    const last10 = custDoc.contactPhone.replace(/\D/g, '').slice(-10);
+                    recipientDoc = await User.findOne({ phone: new RegExp(last10 + '$') }).select('fcmToken');
+                    if (recipientDoc) {
+                        resolvedRecipientId = recipientDoc._id;
+                        resolvedRecipientModel = 'User';
+                    }
+                }
+            }
         } else {
             recipientDoc = await User.findById(userId).select('fcmToken phone');
+            if (!recipientDoc) {
+                const Customer = require('../models/Customer');
+                const custDoc = await Customer.findById(userId);
+                if (custDoc && custDoc.createdBy) {
+                    recipientDoc = await User.findById(custDoc.createdBy).select('fcmToken phone');
+                    if (recipientDoc) {
+                        resolvedRecipientId = recipientDoc._id;
+                    }
+                }
+            }
             if (!recipientDoc?.fcmToken) {
                 const Candidate = require('../models/Candidate');
                 let candidateDoc = null;
