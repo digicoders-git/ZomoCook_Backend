@@ -111,15 +111,14 @@ exports.updateMaster = async (req, res) => {
 
         const updateData = { ...req.body };
         if (updateData.parentId === "" || updateData.parentId === "null") {
-            delete updateData.parentId;
-            // Also explicitly set to undefined if needed, or use $unset
+            updateData.parentId = null;
         }
 
         if (req.file) {
             updateData.image = req.file.path;
         }
 
-        const updatedMaster = await Master.findByIdAndUpdate(req.params.id, updateData, { new: true });
+        const updatedMaster = await Master.findByIdAndUpdate(req.params.id, updateData, { new: true }).populate('parentId', 'name');
         res.status(200).json({ success: true, message: 'Record updated successfully', master: updatedMaster });
     } catch (error) {
         res.status(400).json({ success: false, message: error.message });
