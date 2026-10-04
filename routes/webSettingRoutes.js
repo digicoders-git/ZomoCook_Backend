@@ -18,8 +18,8 @@ const upload = multer({ storage });
 // Public route to check app version & force update status
 router.get('/app-version', getAppVersion);
 
-// Protected routes for admin settings
-router.get('/', protect, getWebSettings);
+// Public route to get web settings & category responsibilities
+router.get('/', getWebSettings);
 
 const uploadSettingsFiles = (req, res, next) => {
     const contentType = req.headers['content-type'] || '';
