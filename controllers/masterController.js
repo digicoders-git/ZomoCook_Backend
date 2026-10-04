@@ -65,6 +65,16 @@ exports.getMasters = async (req, res) => {
                 ];
                 await Master.insertMany(defaultCookingPrefs.map(p => ({ name: p, category: 'cooking-preferences', status: 'active' })));
                 masters = await Master.find(query).populate('parentId', 'name').sort(sortOption);
+            } else if (category === 'family-members') {
+                const defaultFamilyMembers = [
+                    '1 – 2 Members',
+                    '3 – 4 Members',
+                    '5 – 6 Members',
+                    '7 – 8 Members',
+                    '8+ Members'
+                ];
+                await Master.insertMany(defaultFamilyMembers.map(f => ({ name: f, category: 'family-members', status: 'active' })));
+                masters = await Master.find(query).populate('parentId', 'name').sort(sortOption);
             }
         }
 
