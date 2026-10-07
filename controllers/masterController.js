@@ -168,6 +168,26 @@ exports.getMasters = async (req, res) => {
                 ];
                 await Master.insertMany(defaultCuisines.map(c => ({ name: c, category: 'cuisines', status: 'active' })));
                 masters = await Master.find(query).populate('parentId', 'name').sort({ createdAt: -1 });
+            } else if (category === 'food-types') {
+                const defaultFoodTypes = ['Veg', 'Non-Veg', 'Both (Veg & Non-Veg)', 'Egg', 'Vegan', 'Jain'];
+                await Master.insertMany(defaultFoodTypes.map(f => ({ name: f, category: 'food-types', status: 'active' })));
+                masters = await Master.find(query).populate('parentId', 'name').sort({ createdAt: -1 });
+            } else if (category === 'meal-categories' || category === 'menu-categories') {
+                const defaultCategories = ['Main Course', 'Starter', 'Snacks', 'Bread', 'Rice', 'Dessert', 'Drinks', 'Breakfast', 'Sides'];
+                await Master.insertMany(defaultCategories.map(c => ({ name: c, category, status: 'active' })));
+                masters = await Master.find(query).populate('parentId', 'name').sort({ createdAt: -1 });
+            } else if (category === 'offer-types') {
+                const defaultOfferTypes = ['PERCENTAGE', 'FLAT'];
+                await Master.insertMany(defaultOfferTypes.map(o => ({ name: o, category: 'offer-types', status: 'active' })));
+                masters = await Master.find(query).populate('parentId', 'name').sort({ createdAt: -1 });
+            } else if (category === 'applicable-types') {
+                const defaultApplicables = ['All', 'Service Package', 'Hiring Processing Fee', 'Chef for Party', 'Daily Staff'];
+                await Master.insertMany(defaultApplicables.map(a => ({ name: a, category: 'applicable-types', status: 'active' })));
+                masters = await Master.find(query).populate('parentId', 'name').sort({ createdAt: -1 });
+            } else if (category === 'kyc-statuses') {
+                const defaultKyc = ['Pending', 'Approved', 'Rejected'];
+                await Master.insertMany(defaultKyc.map(k => ({ name: k, category: 'kyc-statuses', status: 'active' })));
+                masters = await Master.find(query).populate('parentId', 'name').sort({ createdAt: -1 });
             } else if (category === 'states') {
                 const defaultStates = [
                     'Uttar Pradesh', 'Delhi', 'Maharashtra', 'Karnataka', 'Haryana', 

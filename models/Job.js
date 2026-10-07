@@ -100,37 +100,53 @@ const jobSchema = new mongoose.Schema({
   },
   package: String, // Specifically for Daily Pay
   noOfGuests: String, // Specifically for Daily Pay / Home Cook if needed separate
-  staffRequirements: [{
-    role: String,
-    genderPref: String,
-    count: Number,
-    ratePerDay: Number,
-    days: Number,
-    startDate: String,
-    startTime: String,
-    endTime: String
-  }],
-  commercialStaffList: [{
-    serviceCategory: String,
-    staffCategory: String,
-    role: String,
-    salaryRange: String,
-    salary: String,
-    noOfStaff: Number,
-    count: Number,
-    vacancies: Number,
-    experienceRange: String,
-    experience: String,
-    shiftType: String,
-    jobType: String,
-    allowedLeave: String,
-    joiningType: String,
-    joiningTimeline: String,
-    facilities: String,
-    basicFacility: String,
-    otherPerks: String,
-    isUrgent: Boolean
-  }],
+  staffRequirements: {
+    type: [{
+      role: String,
+      genderPref: String,
+      count: Number,
+      ratePerDay: Number,
+      days: Number,
+      startDate: String,
+      startTime: String,
+      endTime: String
+    }],
+    set: function(val) {
+      if (typeof val === 'string') {
+        try { return JSON.parse(val); } catch (e) { return val; }
+      }
+      return val;
+    }
+  },
+  commercialStaffList: {
+    type: [{
+      serviceCategory: String,
+      staffCategory: String,
+      role: String,
+      salaryRange: String,
+      salary: String,
+      noOfStaff: Number,
+      count: Number,
+      vacancies: Number,
+      experienceRange: String,
+      experience: String,
+      shiftType: String,
+      jobType: String,
+      allowedLeave: String,
+      joiningType: String,
+      joiningTimeline: String,
+      facilities: String,
+      basicFacility: String,
+      otherPerks: String,
+      isUrgent: Boolean
+    }],
+    set: function(val) {
+      if (typeof val === 'string') {
+        try { return JSON.parse(val); } catch (e) { return val; }
+      }
+      return val;
+    }
+  },
   homeCookLevel: String,
   cookPreference: String,
   genderPreference: String,
@@ -139,8 +155,24 @@ const jobSchema = new mongoose.Schema({
   startDate: String,
   dailyHiringPurpose: String,
   venueAddress: String,
-  eventDays: mongoose.Schema.Types.Mixed,
-  partyRequirement: mongoose.Schema.Types.Mixed,
+  eventDays: {
+    type: mongoose.Schema.Types.Mixed,
+    set: function(val) {
+      if (typeof val === 'string') {
+        try { return JSON.parse(val); } catch (e) { return val; }
+      }
+      return val;
+    }
+  },
+  partyRequirement: {
+    type: mongoose.Schema.Types.Mixed,
+    set: function(val) {
+      if (typeof val === 'string') {
+        try { return JSON.parse(val); } catch (e) { return val; }
+      }
+      return val;
+    }
+  },
   allowedLeave: String,
   salaryRange: String,
   experienceRange: String,
@@ -208,6 +240,24 @@ const jobSchema = new mongoose.Schema({
   }
 }, {
   timestamps: true
+});
+
+jobSchema.pre('validate', function() {
+  if (typeof this.commercialStaffList === 'string') {
+    try { this.commercialStaffList = JSON.parse(this.commercialStaffList); } catch(e) {}
+  }
+  if (typeof this.staffRequirements === 'string') {
+    try { this.staffRequirements = JSON.parse(this.staffRequirements); } catch(e) {}
+  }
+  if (typeof this.partyRequirement === 'string') {
+    try { this.partyRequirement = JSON.parse(this.partyRequirement); } catch(e) {}
+  }
+  if (typeof this.eventDays === 'string') {
+    try { this.eventDays = JSON.parse(this.eventDays); } catch(e) {}
+  }
+  if (typeof this.pricing === 'string') {
+    try { this.pricing = JSON.parse(this.pricing); } catch(e) {}
+  }
 });
 
 module.exports = mongoose.model('Job', jobSchema);
