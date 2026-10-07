@@ -125,9 +125,11 @@ const createJob = async (req, res) => {
             leadManager: assignedManagerId || ''
         };
 
-        // Parse nested JSON strings if submitted via FormData
         if (typeof jobData.staffRequirements === 'string') {
             try { jobData.staffRequirements = JSON.parse(jobData.staffRequirements); } catch(e) {}
+        }
+        if (typeof jobData.commercialStaffList === 'string') {
+            try { jobData.commercialStaffList = JSON.parse(jobData.commercialStaffList); } catch(e) {}
         }
         if (typeof jobData.partyRequirement === 'string') {
             try { jobData.partyRequirement = JSON.parse(jobData.partyRequirement); } catch(e) {}
@@ -486,6 +488,9 @@ const updateJob = async (req, res) => {
 
         if (typeof req.body.staffRequirements === 'string') {
             try { req.body.staffRequirements = JSON.parse(req.body.staffRequirements); } catch(e) {}
+        }
+        if (typeof req.body.commercialStaffList === 'string') {
+            try { req.body.commercialStaffList = JSON.parse(req.body.commercialStaffList); } catch(e) {}
         }
         if (typeof req.body.partyRequirement === 'string') {
             try { req.body.partyRequirement = JSON.parse(req.body.partyRequirement); } catch(e) {}

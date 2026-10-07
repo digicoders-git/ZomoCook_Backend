@@ -73,8 +73,109 @@ exports.getMasters = async (req, res) => {
                     '7 – 8 Members',
                     '8+ Members'
                 ];
-                await Master.insertMany(defaultFamilyMembers.map(f => ({ name: f, category: 'family-members', status: 'active' })));
-                masters = await Master.find(query).populate('parentId', 'name').sort(sortOption);
+            } else if (category === 'job-categories') {
+                const defaultJobCategories = [
+                    { name: 'Hotel / Restaurant / Commercial', value: 'hotel' },
+                    { name: 'Home Cook / Domestic', value: 'home' },
+                    { name: 'Daily Basis Staff Booking', value: 'daily' },
+                    { name: 'Chef for Party & Events', value: 'party' }
+                ];
+                await Master.insertMany(defaultJobCategories.map(c => ({ name: c.name, value: c.value, category: 'job-categories', status: 'active' })));
+                masters = await Master.find(query).populate('parentId', 'name').sort({ createdAt: -1 });
+            } else if (category === 'experiences') {
+                const defaultExperiences = [
+                    'Fresher',
+                    '6 months – 1 year',
+                    '1 – 2 years',
+                    '2 – 3 years',
+                    '3 – 5 years',
+                    '5+ years'
+                ];
+                await Master.insertMany(defaultExperiences.map(e => ({ name: e, category: 'experiences', status: 'active' })));
+                masters = await Master.find(query).populate('parentId', 'name').sort({ createdAt: -1 });
+            } else if (category === 'salaries') {
+                const defaultSalaries = [
+                    '₹10,000 – ₹15,000/month',
+                    '₹15,000 – ₹25,000/month',
+                    '₹25,000 – ₹35,000/month',
+                    '₹35,000 – ₹50,000/month',
+                    '₹50,000 – ₹75,000/month',
+                    '₹75,000+/month'
+                ];
+                await Master.insertMany(defaultSalaries.map(s => ({ name: s, category: 'salaries', status: 'active' })));
+                masters = await Master.find(query).populate('parentId', 'name').sort({ createdAt: -1 });
+            } else if (category === 'facilities') {
+                const defaultFacilities = [
+                    'Food & Accommodation',
+                    'Only Food Provided',
+                    'Only Accommodation Provided',
+                    'No Food / No Accommodation',
+                    'Food + Travel Allowance'
+                ];
+                await Master.insertMany(defaultFacilities.map(f => ({ name: f, category: 'facilities', status: 'active' })));
+                masters = await Master.find(query).populate('parentId', 'name').sort({ createdAt: -1 });
+            } else if (category === 'shift-types') {
+                const defaultShifts = [
+                    'Full Time (10-12 hrs)',
+                    'Day Shift (8-10 hrs)',
+                    'Night Shift (8-10 hrs)',
+                    'Split Shift (Morning + Evening)',
+                    'Part Time (4-6 hrs)'
+                ];
+                await Master.insertMany(defaultShifts.map(s => ({ name: s, category: 'shift-types', status: 'active' })));
+                masters = await Master.find(query).populate('parentId', 'name').sort({ createdAt: -1 });
+            } else if (category === 'cook-preferences') {
+                const defaultCookPrefs = [
+                    'Basic Cook (Home style Food - Less Experience @14k-18k/Month)',
+                    'Standard Cook (Multicuisine - Indian, Chinese, South @18k-25k/Month)',
+                    'Premium Chef (Multicuisine Professional >@25k/month)'
+                ];
+                await Master.insertMany(defaultCookPrefs.map(c => ({ name: c, category: 'cook-preferences', status: 'active' })));
+                masters = await Master.find(query).populate('parentId', 'name').sort({ createdAt: -1 });
+            } else if (category === 'events') {
+                const defaultEvents = [
+                    'Birthday Party',
+                    'Anniversary',
+                    'Wedding',
+                    'Engagement',
+                    'Corporate Event',
+                    'House Party',
+                    'Festival',
+                    'Other'
+                ];
+                await Master.insertMany(defaultEvents.map(e => ({ name: e, category: 'events', status: 'active' })));
+                masters = await Master.find(query).populate('parentId', 'name').sort({ createdAt: -1 });
+            } else if (category === 'meal-types') {
+                const defaultMeals = [
+                    'Breakfast',
+                    'Lunch',
+                    'High Tea / Snacks',
+                    'Dinner'
+                ];
+                await Master.insertMany(defaultMeals.map(m => ({ name: m, category: 'meal-types', status: 'active' })));
+                masters = await Master.find(query).populate('parentId', 'name').sort({ createdAt: -1 });
+            } else if (category === 'cuisines') {
+                const defaultCuisines = [
+                    'North Indian',
+                    'South Indian',
+                    'Chinese',
+                    'Continental',
+                    'Italian',
+                    'Mughlai',
+                    'Mexican',
+                    'Desserts',
+                    'Beverages'
+                ];
+                await Master.insertMany(defaultCuisines.map(c => ({ name: c, category: 'cuisines', status: 'active' })));
+                masters = await Master.find(query).populate('parentId', 'name').sort({ createdAt: -1 });
+            } else if (category === 'states') {
+                const defaultStates = [
+                    'Uttar Pradesh', 'Delhi', 'Maharashtra', 'Karnataka', 'Haryana', 
+                    'Rajasthan', 'Gujarat', 'Madhya Pradesh', 'Punjab', 'Bihar', 
+                    'West Bengal', 'Tamil Nadu', 'Telangana', 'Uttarakhand'
+                ];
+                await Master.insertMany(defaultStates.map(st => ({ name: st, category: 'states', status: 'active' })));
+                masters = await Master.find(query).populate('parentId', 'name').sort({ name: 1 });
             }
         }
 
