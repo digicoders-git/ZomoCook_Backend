@@ -1145,12 +1145,14 @@ const createCommercialWebJob = async (req, res) => {
                 jobCode = `ZOMO${nextNumber}`;
             }
 
+            const occasionName = req.body.occasion || req.body.event || partyRequirement?.eventType || '';
+            const isGenericOccasion = !occasionName || ['party / event', 'event', 'party'].includes(occasionName.toLowerCase());
             const defaultTitle = isParty
-                ? `Chef for Party Booking for ${name} (${partyRequirement?.datesCount || 1} Day Event)`
+                ? (!isGenericOccasion ? occasionName : `Chef for Party Booking for ${name} (${partyRequirement?.datesCount || 1} Day Event)`)
                 : (targetCategory === 'home' 
                     ? `${item.category || 'Home Cook'} Required at ${outletName || name}`
                     : (targetCategory === 'daily' 
-                        ? `${item.category || 'Event / Daily Chef'} Required for ${req.body.event || 'Occasion'} at ${outletName || name}`
+                        ? (!isGenericOccasion ? occasionName : `${item.category || 'Event / Daily Chef'} Required for ${req.body.event || 'Occasion'} at ${outletName || name}`)
                         : `${item.category || 'Hospitality Staff'} Required at ${outletName || name}`));
 
             const jobTitle = defaultTitle;
