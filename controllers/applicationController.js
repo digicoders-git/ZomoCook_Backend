@@ -113,7 +113,19 @@ const applyJob = async (req, res) => {
             appliedDate: new Date()
         });
 
-        // Send notification specifically to the user who posted this job
+        // Determine if this is a Daily Basis or Chef for Party job
+        const jobCat = (job.jobCategory || '').toLowerCase();
+        const bType = (job.bookingType || '').toLowerCase();
+        const jType = (job.jobType || '').toLowerCase();
+        const jTitle = (job.title || '').toLowerCase();
+        const isDailyOrParty = jobCat === 'daily' || jobCat === 'party' || 
+                               bType === 'daily' || bType === 'party' || 
+                               jType.includes('daily') || jType.includes('party') || 
+                               jTitle.includes('daily') || jTitle.includes('party') ||
+                               Boolean(job.partyRequirement && Object.keys(job.partyRequirement).length > 0);
+
+        // Send notification specifically to the user who posted this job ONLY IF not Daily or Party job
+        // (Daily basis and Chef for Party flow is managed directly by Admin, no candidate notification to customer on apply)
         let jobPosterId = job.createdBy;
         let jobPosterModel = job.creatorModel || 'User';
 
@@ -126,7 +138,7 @@ const applyJob = async (req, res) => {
             }
         }
 
-        if (jobPosterId) {
+        if (jobPosterId && !isDailyOrParty) {
             const notificationController = require('./notificationController');
             notificationController.sendNotificationToUser({
                 userId: jobPosterId,
@@ -204,7 +216,24 @@ const getApplications = async (req, res) => {
             .sort({ appliedDate: -1 });
 
         // Filter out applications where candidate is null (deleted candidate record)
-        const filteredApplications = applications.filter(app => app.candidate !== null);
+        let filteredApplications = applications.filter(app => app.candidate !== null);
+
+        // If requested by a customer (mobile app user), do NOT show raw applied candidate details for Daily Basis & Chef for Party
+        if (isCustomer) {
+            filteredApplications = filteredApplications.filter(app => {
+                const j = app.job;
+                if (!j) return false;
+                const cat = (j.jobCategory || '').toLowerCase();
+                const jType = (j.jobType || '').toLowerCase();
+                const title = (j.title || '').toLowerCase();
+                const isDailyOrParty = cat === 'daily' || cat === 'party' || jType.includes('daily') || jType.includes('party') || title.includes('daily') || title.includes('party');
+                if (isDailyOrParty) {
+                    // Only show to customer if assigned/hired by Admin
+                    return ['Assigned', 'Selected', 'Hired', 'Offer Accepted', 'Joined'].includes(app.status);
+                }
+                return true;
+            });
+        }
 
         res.status(200).json({
             success: true,

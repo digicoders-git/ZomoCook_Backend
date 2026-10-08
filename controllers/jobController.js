@@ -315,7 +315,17 @@ const getJobs = async (req, res) => {
         const User = require('../models/User');
         const jobsWithCounts = await Promise.all(jobs.map(async (job) => {
             const apps = await Application.find({ job: job._id });
-            const assignedCandidates = apps.filter(app => ['Applied', 'Profile Reviewed'].includes(app.status)).length;
+            const jobCat = (job.jobCategory || '').toLowerCase();
+            const bType = (job.bookingType || '').toLowerCase();
+            const jType = (job.jobType || '').toLowerCase();
+            const title = (job.title || '').toLowerCase();
+            const isDailyOrParty = jobCat === 'daily' || jobCat === 'party' || bType === 'daily' || bType === 'party' || jType.includes('daily') || jType.includes('party') || title.includes('daily') || title.includes('party');
+
+            let assignedCandidates = apps.filter(app => ['Applied', 'Profile Reviewed'].includes(app.status)).length;
+            if (isCustomer && isDailyOrParty) {
+                // Customer should not see raw applicants count for daily and party jobs (Admin assigned flow)
+                assignedCandidates = 0;
+            }
             const interviews = apps.filter(app => ['Shortlisted', 'Demo Scheduled', 'Demo In Progress', 'Demo Completed', 'Reschedule Requested', 'On Hold'].includes(app.status)).length;
             const selected = apps.filter(app => ['Package Selected', 'Package Paid'].includes(app.status) || (app.status === 'Hired' && app.offerStatus !== 'accepted')).length;
             const hired = apps.filter(app => ['Offer Accepted', 'Joined'].includes(app.status) || (app.status === 'Hired' && app.offerStatus === 'accepted') || app.offerStatus === 'accepted').length;
@@ -345,7 +355,7 @@ const getJobs = async (req, res) => {
                 selected,
                 hired,
                 rejected,
-                appliedCount: apps.length,
+                appliedCount: isCustomer && isDailyOrParty ? 0 : apps.length,
                 assignedCount: assignedCandidates,
                 isSaved: isCook ? savedJobIds.some(id => id.toString() === job._id.toString()) : undefined
             };
@@ -502,10 +512,40 @@ const updateJob = async (req, res) => {
             try { req.body.pricing = JSON.parse(req.body.pricing); } catch(e) {}
         }
 
+        const wasNotAssigned = job.status !== 'Assigned';
+        const isNowAssigned = req.body.status === 'Assigned' || (req.body.assignedStaff && Array.isArray(req.body.assignedStaff) && req.body.assignedStaff.length > 0);
+
         job = await Job.findByIdAndUpdate(req.params.id, req.body, {
             new: true,
             runValidators: true
         });
+
+        // Send push notification to customer when chef/staff is assigned
+        if (wasNotAssigned && isNowAssigned) {
+            let jobPosterId = job.createdBy;
+            let jobPosterModel = job.creatorModel || 'User';
+            if (!jobPosterId && job.customer) {
+                const Customer = require('../models/Customer');
+                const custDoc = await Customer.findById(job.customer);
+                if (custDoc) {
+                    jobPosterId = custDoc.createdBy || custDoc._id;
+                    jobPosterModel = custDoc.creatorModel || 'User';
+                }
+            }
+            if (jobPosterId) {
+                const notificationController = require('./notificationController');
+                notificationController.sendNotificationToUser({
+                    userId: jobPosterId,
+                    userModel: jobPosterModel,
+                    title: '👨‍🍳 Chef Assigned!',
+                    message: `Chef / Staff has been assigned for your booking "${job.title || job.jobCode || 'requirement'}". You can now view chef details and share Start OTP in your app.`,
+                    type: 'candidate_assigned',
+                    relatedId: job._id,
+                    relatedModel: 'Job',
+                    actionUrl: '/bookings'
+                }).catch(err => console.error('Error sending chef assigned push notification to customer:', err));
+            }
+        }
 
         res.status(200).json({
             success: true,
@@ -628,24 +668,50 @@ const updateJobStatus = async (req, res) => {
         );
 
         // Send push notification to the job creator about status change
-        if (job.createdBy) {
-            const notificationController = require('./notificationController');
-            const statusEmoji = {
-                'Active': '✅', 'New': '🆕', 'Urgent': '🚨', 'Open': '🔓',
-                'In Progress': '🔄', 'Inactive': '⏸️', 'Cancelled': '❌',
-                'Expired': '⏰', 'Closed': '🔒', 'Hold': '⏳'
-            };
-            const emoji = statusEmoji[status] || '📋';
-            notificationController.sendNotificationToUser({
-                userId: job.createdBy,
-                userModel: job.creatorModel || 'User',
-                title: `${emoji} Job Status Updated`,
-                message: `Your job "${job.title}" status has been changed to "${status}".`,
-                type: 'job_status',
-                relatedId: job._id,
-                relatedModel: 'Job',
-                actionUrl: '/jobs'
-            }).catch(err => console.error('Error sending status update notification:', err));
+        if (job.createdBy || job.customer) {
+            let jobPosterId = job.createdBy;
+            let jobPosterModel = job.creatorModel || 'User';
+            if (!jobPosterId && job.customer) {
+                const Customer = require('../models/Customer');
+                const custDoc = await Customer.findById(job.customer);
+                if (custDoc) {
+                    jobPosterId = custDoc.createdBy || custDoc._id;
+                    jobPosterModel = custDoc.creatorModel || 'User';
+                }
+            }
+
+            if (jobPosterId) {
+                const notificationController = require('./notificationController');
+                if (status === 'Assigned') {
+                    notificationController.sendNotificationToUser({
+                        userId: jobPosterId,
+                        userModel: jobPosterModel,
+                        title: '👨‍🍳 Chef Assigned!',
+                        message: `Chef / Staff has been assigned for your booking "${job.title || job.jobCode || 'requirement'}". You can now view chef details and share Start OTP in your app.`,
+                        type: 'candidate_assigned',
+                        relatedId: job._id,
+                        relatedModel: 'Job',
+                        actionUrl: '/bookings'
+                    }).catch(err => console.error('Error sending chef assigned push notification to customer:', err));
+                } else {
+                    const statusEmoji = {
+                        'Active': '✅', 'New': '🆕', 'Urgent': '🚨', 'Open': '🔓',
+                        'In Progress': '🔄', 'Inactive': '⏸️', 'Cancelled': '❌',
+                        'Expired': '⏰', 'Closed': '🔒', 'Hold': '⏳'
+                    };
+                    const emoji = statusEmoji[status] || '📋';
+                    notificationController.sendNotificationToUser({
+                        userId: jobPosterId,
+                        userModel: jobPosterModel,
+                        title: `${emoji} Job Status Updated`,
+                        message: `Your job "${job.title}" status has been changed to "${status}".`,
+                        type: 'job_status',
+                        relatedId: job._id,
+                        relatedModel: 'Job',
+                        actionUrl: '/jobs'
+                    }).catch(err => console.error('Error sending status update notification:', err));
+                }
+            }
         }
 
         res.status(200).json({
@@ -796,7 +862,18 @@ const applyForJob = async (req, res) => {
             status: 'Applied'
         });
 
-        // Send push notification specifically to the user who posted the job
+        // Determine if Daily Basis or Chef for Party job (admin assignment flow, no applicant notification to customer)
+        const jobCat = (job.jobCategory || '').toLowerCase();
+        const bType = (job.bookingType || '').toLowerCase();
+        const jType = (job.jobType || '').toLowerCase();
+        const jTitle = (job.title || '').toLowerCase();
+        const isDailyOrParty = jobCat === 'daily' || jobCat === 'party' || 
+                               bType === 'daily' || bType === 'party' || 
+                               jType.includes('daily') || jType.includes('party') || 
+                               jTitle.includes('daily') || jTitle.includes('party') ||
+                               Boolean(job.partyRequirement && Object.keys(job.partyRequirement).length > 0);
+
+        // Send push notification specifically to the user who posted the job ONLY if not daily/party
         let jobPosterId = job.createdBy;
         let jobPosterModel = job.creatorModel || 'User';
 
@@ -809,7 +886,7 @@ const applyForJob = async (req, res) => {
             }
         }
 
-        if (jobPosterId) {
+        if (jobPosterId && !isDailyOrParty) {
             const notificationController = require('./notificationController');
             notificationController.sendNotificationToUser({
                 userId: jobPosterId,
