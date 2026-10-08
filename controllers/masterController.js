@@ -8,7 +8,21 @@ exports.getMasters = async (req, res) => {
     try {
         const { category } = req.params;
         const { search, parentId } = req.query;
-        let query = { category };
+        // Support category aliases
+        let categoryQuery = category;
+        if (category === 'time-ranges' || category === 'shift-types') {
+            categoryQuery = { $in: ['time-ranges', 'shift-types'] };
+        } else if (category === 'experiences' || category === 'experience-ranges') {
+            categoryQuery = { $in: ['experiences', 'experience-ranges'] };
+        } else if (category === 'salaries' || category === 'salary-ranges') {
+            categoryQuery = { $in: ['salaries', 'salary-ranges'] };
+        } else if (category === 'cooking-preferences' || category === 'food-preferences' || category === 'food-types') {
+            categoryQuery = { $in: ['cooking-preferences', 'food-preferences', 'food-types'] };
+        } else if (category === 'cooking-categories' || category === 'cuisines') {
+            categoryQuery = { $in: ['cooking-categories', 'cuisines'] };
+        }
+
+        let query = { category: categoryQuery };
 
         if (search) query.name = new RegExp(search, 'i');
         if (parentId) query.parentId = parentId;
@@ -32,13 +46,15 @@ exports.getMasters = async (req, res) => {
                     'Italian', 'Mexican Chef', 'Momo Maker', 'Dimsum Chef', 'Chaap Chef', 'Mughlai Chef', 'Biryani Chef',
                     'Paratha Chef', 'Chaat Master', 'Rolls Chef', 'Sweets Chef Master', 'Bakery Chef',
                     'Assistant / Helper Cook', 'Male Waiter', 'Female Waiter', 'Receptionist', 'Restaurant Manager',
-                    'Housekeeping', 'Male Home Cook: 10Hr', 'Male Home Cook: 24Hr', 'Female Home Cook: 10Hr', 'Female Home Cook: 24Hr'
+                    'Housekeeping', 'Home Cook', 'Baby Sitter', 'Maid', 'Driver', 'Caretaker',
+                    'Male Home Cook: 10Hr', 'Male Home Cook: 24Hr', 'Female Home Cook: 10Hr', 'Female Home Cook: 24Hr'
                 ];
                 await Master.insertMany(defaultPositions.map(pos => ({ name: pos, category: 'job-positions', status: 'active' })));
                 masters = await Master.find(query).populate('parentId', 'name').sort({ createdAt: -1 });
             } else if (category === 'joining-types') {
                 const defaultJoiningTypes = [
                     'Immediate (Within 24 - 48 Hours)',
+                    'Within 3 Days',
                     'Within 1 Week',
                     'Within 15 Days',
                     'Within 1 Month'
@@ -47,18 +63,23 @@ exports.getMasters = async (req, res) => {
                 masters = await Master.find(query).populate('parentId', 'name').sort({ createdAt: -1 });
             } else if (category === 'leaves') {
                 const defaultLeaves = [
+                    '1 day/month',
                     '2 days/month',
+                    '3 days/month',
                     '4 days/month',
+                    '5 days/month',
                     '6 days/month',
                     'No leaves required'
                 ];
                 await Master.insertMany(defaultLeaves.map(l => ({ name: l, category: 'leaves', status: 'active' })));
                 masters = await Master.find(query).populate('parentId', 'name').sort({ createdAt: -1 });
-            } else if (category === 'cooking-preferences') {
+            } else if (category === 'cooking-preferences' || category === 'food-preferences') {
                 const defaultCookingPrefs = [
                     'Vegetarian (Veg Only)',
                     'Non-Vegetarian',
                     'Both (Veg & Non-Veg)',
+                    'Pure Veg',
+                    'Veg + Non Veg',
                     'Jain Food',
                     'Eggetarian',
                     'Vegan'
@@ -73,8 +94,27 @@ exports.getMasters = async (req, res) => {
                     '7 – 8 Members',
                     '8+ Members'
                 ];
+                await Master.insertMany(defaultFamilyMembers.map(f => ({ name: f, category: 'family-members', status: 'active' })));
+                masters = await Master.find(query).populate('parentId', 'name').sort({ createdAt: -1 });
+            } else if (category === 'gender-preferences') {
+                const defaultGenders = ['Anyone', 'Male', 'Female', 'Any Gender'];
+                await Master.insertMany(defaultGenders.map(g => ({ name: g, category: 'gender-preferences', status: 'active' })));
+                masters = await Master.find(query).populate('parentId', 'name').sort({ createdAt: -1 });
+            } else if (category === 'service-durations') {
+                const defaultDurations = [
+                    '10 Hours – ( Morning to Evening)',
+                    '24 Hours – Live-in Cook',
+                    '12 Hours (Day)',
+                    '12 Hours (Night)',
+                    'Part Time (4-6 Hours)'
+                ];
+                await Master.insertMany(defaultDurations.map(d => ({ name: d, category: 'service-durations', status: 'active' })));
+                masters = await Master.find(query).populate('parentId', 'name').sort({ createdAt: -1 });
             } else if (category === 'job-categories') {
                 const defaultJobCategories = [
+                    { name: 'Chef / Kitchen Staff', value: 'kitchen' },
+                    { name: 'Service & Managing Staff', value: 'service' },
+                    { name: 'Cleaning and Other Staff', value: 'cleaning' },
                     { name: 'Hotel / Restaurant / Commercial', value: 'hotel' },
                     { name: 'Home Cook / Domestic', value: 'home' },
                     { name: 'Daily Basis Staff Booking', value: 'daily' },
@@ -82,21 +122,24 @@ exports.getMasters = async (req, res) => {
                 ];
                 await Master.insertMany(defaultJobCategories.map(c => ({ name: c.name, value: c.value, category: 'job-categories', status: 'active' })));
                 masters = await Master.find(query).populate('parentId', 'name').sort({ createdAt: -1 });
-            } else if (category === 'experiences') {
+            } else if (category === 'experiences' || category === 'experience-ranges') {
                 const defaultExperiences = [
-                    'Fresher',
-                    '6 months – 1 year',
-                    '1 – 2 years',
-                    '2 – 3 years',
-                    '3 – 5 years',
-                    '5+ years'
+                    'Fresher / Entry Level',
+                    '0 – 1 Year',
+                    '1 – 2 Years',
+                    '2 – 5 Years',
+                    '5 – 8 Years',
+                    '8+ Years'
                 ];
                 await Master.insertMany(defaultExperiences.map(e => ({ name: e, category: 'experiences', status: 'active' })));
                 masters = await Master.find(query).populate('parentId', 'name').sort({ createdAt: -1 });
-            } else if (category === 'salaries') {
+            } else if (category === 'salaries' || category === 'salary-ranges') {
                 const defaultSalaries = [
-                    '₹10,000 – ₹15,000/month',
-                    '₹15,000 – ₹25,000/month',
+                    '₹5,000 – ₹8,000/month',
+                    '₹8,000 – ₹12,000/month',
+                    '₹12,000 – ₹15,000/month',
+                    '₹15,000 – ₹20,000/month',
+                    '₹20,000 – ₹25,000/month',
                     '₹25,000 – ₹35,000/month',
                     '₹35,000 – ₹50,000/month',
                     '₹50,000 – ₹75,000/month',
@@ -114,9 +157,41 @@ exports.getMasters = async (req, res) => {
                 ];
                 await Master.insertMany(defaultFacilities.map(f => ({ name: f, category: 'facilities', status: 'active' })));
                 masters = await Master.find(query).populate('parentId', 'name').sort({ createdAt: -1 });
-            } else if (category === 'shift-types') {
+            } else if (category === 'benefits') {
+                const defaultBenefits = [
+                    'Food & Accommodation Provided',
+                    'Travel Allowance',
+                    'Tips & Service Charge',
+                    'PF & ESI Provided',
+                    'Overtime Pay',
+                    'Performance Bonus',
+                    'Medical Insurance'
+                ];
+                await Master.insertMany(defaultBenefits.map(b => ({ name: b, category: 'benefits', status: 'active' })));
+                masters = await Master.find(query).populate('parentId', 'name').sort({ createdAt: -1 });
+            } else if (category === 'property-categories') {
+                const defaultPropCats = [
+                    'Restaurant',
+                    'Hotel',
+                    'Cafe / Coffee Shop',
+                    'Resort',
+                    'Cloud Kitchen',
+                    'Bar & Pub / Lounge',
+                    'Bakery & Confectionery',
+                    'Catering / Banquet',
+                    'Fast Food / QSR',
+                    'Dhaba',
+                    'Food Truck / Stall',
+                    'Office / Corporate Canteen',
+                    'Club',
+                    'Other'
+                ];
+                await Master.insertMany(defaultPropCats.map(p => ({ name: p, category: 'property-categories', status: 'active' })));
+                masters = await Master.find(query).populate('parentId', 'name').sort({ createdAt: -1 });
+            } else if (category === 'shift-types' || category === 'time-ranges') {
                 const defaultShifts = [
                     'Full Time (10-12 hrs)',
+                    'Full Time (8-9 hrs)',
                     'Day Shift (8-10 hrs)',
                     'Night Shift (8-10 hrs)',
                     'Split Shift (Morning + Evening)',
@@ -150,11 +225,12 @@ exports.getMasters = async (req, res) => {
                     'Breakfast',
                     'Lunch',
                     'High Tea / Snacks',
-                    'Dinner'
+                    'Dinner',
+                    'Full Day Party'
                 ];
                 await Master.insertMany(defaultMeals.map(m => ({ name: m, category: 'meal-types', status: 'active' })));
                 masters = await Master.find(query).populate('parentId', 'name').sort({ createdAt: -1 });
-            } else if (category === 'cuisines') {
+            } else if (category === 'cuisines' || category === 'cooking-categories') {
                 const defaultCuisines = [
                     'North Indian',
                     'South Indian',
@@ -163,6 +239,8 @@ exports.getMasters = async (req, res) => {
                     'Italian',
                     'Mughlai',
                     'Mexican',
+                    'Tandoor',
+                    'Bakery & Pastry',
                     'Desserts',
                     'Beverages'
                 ];
