@@ -109,6 +109,7 @@ const jobSchema = new mongoose.Schema({
       ratePerDay: Number,
       days: Number,
       startDate: String,
+      endDate: String,
       startTime: String,
       endTime: String
     }],

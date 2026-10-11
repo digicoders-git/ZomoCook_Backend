@@ -1201,12 +1201,19 @@ const createCommercialWebJob = async (req, res) => {
                         (req.body.partyRequirement && Object.keys(req.body.partyRequirement).length > 0) ||
                         (req.body.eventDates && req.body.eventDates.length > 0);
 
+        // Determine if this is a Daily Basis Staff booking
+        const isDaily = req.body.jobCategory === 'daily' || 
+                        req.body.category === 'daily' || 
+                        req.body.bookingType === 'daily' ||
+                        req.body.hiringType === 'Daily Basis Staff' || 
+                        (req.body.hiringType && req.body.hiringType.toLowerCase().includes('daily'));
+
         // Determine category: 'hotel' | 'home' | 'daily' | 'party'
         let targetCategory = req.body.jobCategory;
         if (!targetCategory) {
             if (isParty) targetCategory = 'party';
+            else if (isDaily) targetCategory = 'daily';
             else if (req.body.category === 'home' || req.body.category === 'domestic') targetCategory = 'home';
-            else if (req.body.category === 'daily' || req.body.category === 'event') targetCategory = 'daily';
             else targetCategory = 'hotel';
         }
 
@@ -1230,8 +1237,17 @@ const createCommercialWebJob = async (req, res) => {
             };
         }
 
-        // 3. Create Jobs for staff items
-        const items = (staffList && staffList.length > 0) ? staffList : [{
+        // Resolve Event Date: Use explicit dateOfEvent or derive from earliest staff requirement date
+        let resolvedDateOfEvent = req.body.dateOfEvent ? new Date(req.body.dateOfEvent) : undefined;
+        if (!resolvedDateOfEvent && staffList && staffList.length > 0) {
+            const startDates = staffList.map(s => s.startDate).filter(Boolean).sort();
+            if (startDates.length > 0) {
+                resolvedDateOfEvent = new Date(startDates[0]);
+            }
+        }
+
+        // 3. Create Jobs: Exactly ONE job containing all staff requirements
+        const items = [(staffList && staffList.length > 0) ? staffList[0] : {
             category: 'Chef',
             count: 1,
             salary: 25000,
@@ -1260,12 +1276,16 @@ const createCommercialWebJob = async (req, res) => {
 
             const occasionName = req.body.occasion || req.body.event || partyRequirement?.eventType || '';
             const isGenericOccasion = !occasionName || ['party / event', 'event', 'party'].includes(occasionName.toLowerCase());
+            const rolesListSummary = (staffList && staffList.length > 0)
+                ? staffList.map(s => `${s.role || s.category || 'Staff'} × ${s.count || 1}`).join(', ')
+                : '';
+
             const defaultTitle = isParty
                 ? (!isGenericOccasion ? occasionName : `Chef for Party Booking for ${name} (${partyRequirement?.datesCount || 1} Day Event)`)
-                : (targetCategory === 'home' 
-                    ? `${item.category || 'Home Cook'} Required at ${outletName || name}`
-                    : (targetCategory === 'daily' 
-                        ? (!isGenericOccasion ? occasionName : `${item.category || 'Event / Daily Chef'} Required for ${req.body.event || 'Occasion'} at ${outletName || name}`)
+                : (targetCategory === 'daily'
+                    ? (req.body.title || (rolesListSummary ? `Daily Staff Requirement (${rolesListSummary})` : `Daily Staff Requirement at ${outletName || name}`))
+                    : (targetCategory === 'home' 
+                        ? `${item.category || 'Home Cook'} Required at ${outletName || name}`
                         : `${item.category || 'Hospitality Staff'} Required at ${outletName || name}`));
 
             const jobTitle = defaultTitle;
@@ -1274,14 +1294,16 @@ const createCommercialWebJob = async (req, res) => {
                 : '';
             const jobDesc = isParty
                 ? `Chef for Party requirement booked by ${name} (+91 ${cleanedPhone}). Location: ${address}. ${partyDetailsDesc}`
-                : `Hiring ${item.count || 1} ${item.category || 'Staff'}. Salary ₹${item.salary || 'Negotiable'}. Food: ${item.food || 'Available'}, Accommodation: ${item.accommodation || 'Not Required'}. Plan: ${selectedPlan?.name || 'Basic'}. Location: ${address || 'On Request'}. ${message ? `Notes: ${message}` : ''}`;
+                : (targetCategory === 'daily'
+                    ? `Daily Staff requirement (${rolesListSummary || 'Staff'}). Location: ${address || 'Lucknow'}. Notes: ${message || 'On time reporting required'}.`
+                    : `Hiring ${item.count || 1} ${item.category || 'Staff'}. Salary ₹${item.salary || 'Negotiable'}. Food: ${item.food || 'Available'}, Accommodation: ${item.accommodation || 'Not Required'}. Plan: ${selectedPlan?.name || 'Basic'}. Location: ${address || 'On Request'}. ${message ? `Notes: ${message}` : ''}`);
 
             const newJob = await Job.create({
                 jobCategory: isParty ? 'party' : targetCategory,
                 jobCode,
                 title: jobTitle,
                 customer: customer._id,
-                propertyCategory: isParty ? 'Event/Party' : (targetCategory === 'home' ? 'Residence/Home' : (targetCategory === 'daily' ? 'Event/Party' : 'Hotel/Restaurant')),
+                propertyCategory: isParty ? 'Event/Party' : (targetCategory === 'daily' ? 'Event/Party' : (targetCategory === 'home' ? 'Residence/Home' : 'Hotel/Restaurant')),
                 state: 'India',
                 city: req.body.city || address || 'Delhi NCR',
                 address: address || '',
@@ -1290,10 +1312,10 @@ const createCommercialWebJob = async (req, res) => {
                 hiringPurpose: req.body.hiringPurpose ? req.body.hiringPurpose.toLowerCase() : ((req.body.bookingType || '').toLowerCase() === 'commercial' ? 'commercial' : 'domestic'),
                 bookingType: isParty ? 'party' : (['regular', 'daily'].includes((req.body.bookingType || '').toLowerCase()) ? req.body.bookingType.toLowerCase() : (targetCategory === 'daily' ? 'daily' : 'regular')),
                 overview: jobDesc,
-                responsibilities: `Work as ${item.category || 'Staff'} for ${name}.`,
-                requirements: `Qualified and verified ${item.category || 'Candidate'}.`,
+                responsibilities: `Work as ${item.category || item.role || 'Staff'} for ${name}.`,
+                requirements: `Qualified and verified ${item.category || item.role || 'Candidate'}.`,
                 jobType: isParty ? 'Party Event' : (targetCategory === 'daily' ? 'Daily Pay' : 'Full Time'),
-                jobPosition: item.category || 'Chef',
+                jobPosition: item.category || item.role || 'Chef',
                 salaryRange: item.salary ? `₹${item.salary}${targetCategory === 'daily' ? '' : '/month'}` : (targetCategory === 'daily' ? '₹1500/day' : '₹20000 - ₹35000'),
                 packageOrGuestOrVacancy: `${item.count || 1} Staff`,
                 event: req.body.occasion || req.body.event || (targetCategory === 'daily' || isParty ? 'Party / Event' : undefined),
@@ -1305,12 +1327,13 @@ const createCommercialWebJob = async (req, res) => {
                     ratePerDay: Number(s.ratePerDay || s.salary || 0),
                     days: Number(s.days || s.noOfDays || 1),
                     startDate: s.startDate || '',
+                    endDate: s.endDate || s.startDate || '',
                     startTime: s.startTime || (s.timing ? s.timing.split('–')[0]?.trim() : ''),
                     endTime: s.endTime || (s.timing ? s.timing.split('–')[1]?.trim() : '')
                 })) : undefined,
                 partyRequirement: partyRequirement || undefined,
                 pricing: pricing || undefined,
-                dateOfEvent: req.body.dateOfEvent ? new Date(req.body.dateOfEvent) : undefined,
+                dateOfEvent: resolvedDateOfEvent,
                 foodPreference: item.food || 'Available',
                 status: 'New',
                 isActive: true,
@@ -1318,6 +1341,7 @@ const createCommercialWebJob = async (req, res) => {
                 creatorModel: 'User',
                 paymentStatus: 'pending',
                 advanceAmount: pricing?.advance || pricing?.advanceAmount || 0,
+                totalAmount: pricing?.total || pricing?.totalAmount || 0,
                 leadManager: assignedManagerId,
                 source: 'web'
             });
