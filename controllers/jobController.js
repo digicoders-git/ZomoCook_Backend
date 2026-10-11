@@ -553,10 +553,104 @@ const updateJob = async (req, res) => {
         const wasNotAssigned = job.status !== 'Assigned';
         const isNowAssigned = req.body.status === 'Assigned' || (req.body.assignedStaff && Array.isArray(req.body.assignedStaff) && req.body.assignedStaff.length > 0);
 
+        const wasNotPaid = job.paymentStatus !== 'paid';
+        const isNowPaid = req.body.paymentStatus === 'paid';
+
+        if (wasNotPaid && isNowPaid) {
+            req.body.paymentStatus = 'paid';
+            req.body.isActive = true;
+            if (job.status === 'hold' || job.status === 'Pending' || req.body.status === 'Pending' || req.body.status === 'hold') {
+                req.body.status = 'New';
+            }
+            req.body.createdAt = new Date();
+        }
+
         job = await Job.findByIdAndUpdate(req.params.id, req.body, {
             new: true,
             runValidators: true
         });
+
+        // Send push notification to all cooks if payment status just transitioned to 'paid'
+        if (wasNotPaid && isNowPaid) {
+            const txnType = job.jobType === 'daily' ? 'daily_job_advance' : 'job_post_fee';
+            const Transaction = require('../models/Transaction');
+            const existingTxn = await Transaction.findOne({
+                relatedJob: job._id,
+                type: txnType,
+                status: 'success'
+            });
+
+            if (!existingTxn) {
+                const adminUser = req.admin || req.user;
+                const isCustomer = adminUser && adminUser.constructor && adminUser.constructor.modelName === 'Customer';
+                const finalAmount = job.jobType === 'daily' ? (job.advanceAmount || 0) : (job.jobPostFee || 299);
+                const txnData = {
+                    type: txnType,
+                    amount: finalAmount,
+                    status: 'success',
+                    relatedJob: job._id,
+                    razorpayOrderId: 'OFFLINE_' + Date.now(),
+                    razorpayPaymentId: 'MANUAL_' + Date.now(),
+                    description: job.jobType === 'daily' 
+                        ? `Daily job 25% advance marked by: ${adminUser ? adminUser.name || 'Admin' : 'Admin'}`
+                        : `Job post fee marked by: ${adminUser ? adminUser.name || 'Admin' : 'Admin'}`
+                };
+                if (adminUser) {
+                    if (isCustomer) {
+                        txnData.customer = adminUser._id;
+                    } else {
+                        txnData.user = adminUser._id;
+                    }
+                }
+                await Transaction.create(txnData).catch(e => console.error('Txn create error:', e));
+            }
+
+            // Send push notification to all cooks
+            const notificationController = require('./notificationController');
+            const notifData = formatJobNotification(job);
+            notificationController.sendNotificationToRole({
+                roleName: 'Cook',
+                title: notifData.title,
+                message: notifData.message,
+                type: 'job_available',
+                relatedId: job._id,
+                relatedModel: 'Job',
+                actionUrl: '/jobs'
+            }).catch(err => console.error('Error sending job post push notification in updateJob:', err));
+
+            // Send push notification to customer / poster that payment is confirmed
+            let jobPosterId = job.createdBy;
+            let jobPosterModel = job.creatorModel || 'User';
+            if (!jobPosterId && job.customer) {
+                const Customer = require('../models/Customer');
+                const custDoc = await Customer.findById(job.customer);
+                if (custDoc) {
+                    jobPosterId = custDoc.createdBy || custDoc._id;
+                    jobPosterModel = custDoc.creatorModel || 'User';
+                }
+            }
+            if (jobPosterId) {
+                notificationController.sendNotificationToUser({
+                    userId: jobPosterId,
+                    userModel: jobPosterModel,
+                    title: '✅ Payment Confirmed & Job Live!',
+                    message: `Payment confirmed for "${job.title || job.jobCode || 'requirement'}". Your job is now active and verified cooks are being assigned!`,
+                    type: 'job_payment_confirmed',
+                    relatedId: job._id,
+                    relatedModel: 'Job',
+                    actionUrl: '/bookings'
+                }).catch(err => console.error('Error sending customer payment notification in updateJob:', err));
+            }
+
+            if (job.creatorModel === 'User') {
+                const User = require('../models/User');
+                const user = await User.findById(job.createdBy);
+                if (user) {
+                    user.jobsPostedInCurrentPlan = (user.jobsPostedInCurrentPlan || 0) + 1;
+                    await user.save().catch(e => console.error('Error updating user jobs count:', e));
+                }
+            }
+        }
 
         // Send push notification to customer when chef/staff is assigned
         if (wasNotAssigned && isNowAssigned) {
