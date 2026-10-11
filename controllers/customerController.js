@@ -5,6 +5,7 @@ const Transaction = require('../models/Transaction');
 const SubscriptionHistory = require('../models/SubscriptionHistory');
 const Booking = require('../models/Booking');
 const { hasPermission } = require('../middleware/permissionHelper');
+const bcrypt = require('bcryptjs');
 
 /**
  * @desc    Create new customer
@@ -26,26 +27,32 @@ const createCustomer = async (req, res) => {
             leadManager
         } = req.body;
 
-        const customerExists = await Customer.findOne({ email });
+        const trimmedEmail = email ? email.trim().toLowerCase() : undefined;
 
-        if (customerExists) {
-            return res.status(400).json({ success: false, message: 'Customer with this email already exists' });
+        if (trimmedEmail) {
+            const customerExists = await Customer.findOne({ email: trimmedEmail });
+            if (customerExists) {
+                return res.status(400).json({ success: false, message: 'Customer with this email already exists' });
+            }
         }
+
+        const creatorModel = (req.admin && req.admin.type === 'user') ? 'User' : 'Admin';
 
         const customer = await Customer.create({
             name,
             propertyCategory,
-            email,
-            password,
+            email: trimmedEmail || undefined,
+            password: password ? password : undefined,
             contactName,
             contactPhone,
             contactAddress,
-            customerStatus,
-            accountStatus,
+            customerStatus: customerStatus || 'running',
+            accountStatus: accountStatus || 'active',
             leadManager: leadManager || '',
             profilePic: req.file ? req.file.path : undefined,
-            createdBy: req.admin._id,
-            creatorModel: req.admin.constructor.modelName
+            createdBy: req.admin ? req.admin._id : undefined,
+            creatorModel,
+            notes: []
         });
 
         res.status(201).json({
@@ -290,14 +297,75 @@ const updateCustomer = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Customer not found' });
         }
 
-        // Handle profile pic update
-        if (req.file) {
-            req.body.profilePic = req.file.path;
+        const allowedFields = [
+            'name',
+            'propertyCategory',
+            'email',
+            'contactName',
+            'contactPhone',
+            'contactAddress',
+            'customerStatus',
+            'accountStatus',
+            'leadManager'
+        ];
+
+        const updateData = {};
+        allowedFields.forEach(field => {
+            if (req.body[field] !== undefined) {
+                updateData[field] = req.body[field];
+            }
+        });
+
+        // Email validation & duplicate check
+        let unsetEmail = false;
+        if (updateData.email !== undefined) {
+            const trimmedEmail = (updateData.email || '').trim().toLowerCase();
+            if (trimmedEmail) {
+                const existing = await Customer.findOne({ 
+                    email: trimmedEmail, 
+                    _id: { $ne: req.params.id } 
+                });
+                if (existing) {
+                    return res.status(400).json({ 
+                        success: false, 
+                        message: 'Customer with this email already exists' 
+                    });
+                }
+                updateData.email = trimmedEmail;
+            } else {
+                delete updateData.email;
+                unsetEmail = true;
+            }
         }
 
-        customer = await Customer.findByIdAndUpdate(req.params.id, req.body, {
+        // Handle profile pic update
+        if (req.file) {
+            updateData.profilePic = req.file.path;
+        }
+
+        // Handle password update if provided
+        if (req.body.password && typeof req.body.password === 'string' && req.body.password.trim() !== '') {
+            const salt = await bcrypt.genSalt(10);
+            updateData.password = await bcrypt.hash(req.body.password, salt);
+        }
+
+        // Clean up legacy corrupted notes in the document if any
+        if (Array.isArray(customer.notes)) {
+            updateData.notes = customer.notes.map(n => {
+                if (typeof n === 'string') return { content: n, addedBy: 'Admin', createdAt: new Date() };
+                if (n && typeof n === 'object') return { content: n.content || '', addedBy: n.addedBy || 'Admin', createdAt: n.createdAt || new Date() };
+                return { content: String(n || ''), addedBy: 'Admin', createdAt: new Date() };
+            });
+        }
+
+        const updateQuery = { $set: updateData };
+        if (unsetEmail) {
+            updateQuery.$unset = { email: 1 };
+        }
+
+        customer = await Customer.findByIdAndUpdate(req.params.id, updateQuery, {
             new: true,
-            runValidators: true
+            runValidators: false
         });
 
         res.status(200).json({

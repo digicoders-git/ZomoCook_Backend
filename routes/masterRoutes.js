@@ -21,7 +21,14 @@ router.post('/bulk-delete', protect, bulkDeleteMasters);
 
 router.route('/:category')
     .get((req, res, next) => {
-        const publicCats = ['sliders', 'videos', 'cms', 'states', 'cities'];
+        const publicCats = [
+            'sliders', 'videos', 'cms', 'states', 'cities',
+            'job-categories', 'job-positions', 'cuisines', 'salaries',
+            'experiences', 'joining-types', 'time-ranges', 'leaves',
+            'cooking-preferences', 'food-preferences', 'property-categories',
+            'facilities', 'benefits', 'service-durations', 'gender-preferences',
+            'events', 'meal-types', 'family-members'
+        ];
         if (publicCats.includes(req.params.category)) return next();
         return protect(req, res, next);
     }, getMasters)

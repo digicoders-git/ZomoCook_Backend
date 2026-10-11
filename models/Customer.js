@@ -60,13 +60,31 @@ const customerSchema = new mongoose.Schema({
         trim: true,
         default: ''
     },
-    notes: [{
-        content: String,
-        addedBy: String,
-        createdAt: { type: Date, default: Date.now }
-    }]
+    notes: {
+        type: [mongoose.Schema.Types.Mixed],
+        default: []
+    }
 }, {
     timestamps: true
+});
+
+// Normalize notes array so any string or plain object notes are safe
+customerSchema.pre('validate', function () {
+    if (Array.isArray(this.notes)) {
+        this.notes = this.notes.map(n => {
+            if (typeof n === 'string') {
+                return { content: n, addedBy: 'Admin', createdAt: new Date() };
+            }
+            if (n && typeof n === 'object') {
+                return {
+                    content: n.content || '',
+                    addedBy: n.addedBy || 'Admin',
+                    createdAt: n.createdAt || new Date()
+                };
+            }
+            return { content: String(n || ''), addedBy: 'Admin', createdAt: new Date() };
+        });
+    }
 });
 
 // Clean up empty or null email fields before saving to prevent unique index violation
@@ -78,7 +96,7 @@ customerSchema.pre('save', function () {
 
 // Encrypt password using bcrypt
 customerSchema.pre('save', async function () {
-    if (!this.isModified('password')) {
+    if (!this.isModified('password') || !this.password) {
         return;
     }
     const salt = await bcrypt.genSalt(10);
