@@ -80,6 +80,7 @@ const jobSchema = new mongoose.Schema({
   basicFacility: String, // For hotel/home
   otherFacilities: String,
   cookingCategory: String, // For home
+  notes: String, // Client/Customer special instructions or additional notes
   menuDetails: String, // For daily
   image: String,
   status: {
