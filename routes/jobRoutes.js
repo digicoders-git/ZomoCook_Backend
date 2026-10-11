@@ -14,7 +14,11 @@ const {
     applyForJob,
     resendJobNotification,
     completePayment,
-    createCommercialWebJob
+    createCommercialWebJob,
+    assignStaffToJob,
+    startJobWithOtp,
+    completeJobWithOtp,
+    getAssignedStaff
 } = require('../controllers/jobController');
 const { protect } = require('../middleware/authMiddleware');
 const multer = require('multer');
@@ -58,4 +62,11 @@ router.patch('/:id/status-string', protect, updateJobStatus);
 router.post('/:id/resend-notification', protect, resendJobNotification);
 router.post('/:id/complete-payment', protect, completePayment);
 
+// ─── OTP-Based Job Lifecycle Routes ────────────────────────────────────────
+router.post('/:id/assign-staff', protect, assignStaffToJob);
+router.post('/:id/start-job', protect, startJobWithOtp);
+router.post('/:id/complete-job', protect, completeJobWithOtp);
+router.get('/:id/assigned-staff', protect, getAssignedStaff);
+
 module.exports = router;
+

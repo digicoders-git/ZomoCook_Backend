@@ -273,7 +273,7 @@ const getMyApplications = async (req, res) => {
         if (status) query.status = status;
 
         const applications = await Application.find(query)
-            .populate('job', 'title jobCategory city state salaryRange salary outletName joiningType jobType jobPosition location address facilities otherFacilities leave allowedLeave image jobPreference')
+            .populate('job')
             .populate('customer', 'name email phone outletName')
             .sort({ appliedDate: -1 });
 

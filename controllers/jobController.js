@@ -11,6 +11,45 @@ const normalizeCategory = (cat) => {
     return clean;
 };
 
+const formatJobNotification = (job) => {
+    const cityText = job.city ? `in ${job.city}` : '';
+    const isDaily = (job.jobCategory === 'daily' || job.bookingType === 'daily' || (job.title && job.title.toLowerCase().includes('daily')));
+    const isEvent = (job.jobCategory === 'party' || job.bookingType === 'party' || (job.title && job.title.toLowerCase().includes('party')));
+
+    let title = 'New Chef Job Alert!';
+    let message = '';
+
+    if (isDaily && job.staffRequirements && job.staffRequirements.length > 0) {
+        title = 'New Daily Job Alert!';
+        const rolesWithRates = job.staffRequirements.map(s => {
+            const r = s.role || 'Staff';
+            const rate = s.ratePerDay || s.rate || '';
+            return rate ? `${r} (₹${rate}/Day)` : r;
+        });
+        const summary = rolesWithRates.slice(0, 2).join(', ') + (rolesWithRates.length > 2 ? ` & ${rolesWithRates.length - 2} more` : '');
+        message = `Daily Basis ${cityText}: ${summary}. Tap to view & apply!`;
+    } else if (job.commercialStaffList && job.commercialStaffList.length > 0) {
+        title = 'New Restaurant / Hotel Job!';
+        const rolesWithSal = job.commercialStaffList.map(s => {
+            const r = s.role || 'Chef';
+            const sal = s.salaryRange || s.salary || '';
+            return sal ? `${r} (${sal})` : r;
+        });
+        const summary = rolesWithSal.slice(0, 2).join(', ') + (rolesWithSal.length > 2 ? ` & ${rolesWithSal.length - 2} more` : '');
+        message = `Hotel/Restaurant ${cityText}: ${summary}. Apply now!`;
+    } else if (isEvent) {
+        title = 'New Party Event Job!';
+        const sal = job.salary ? `₹${job.salary}/Day` : (job.salaryRange || '₹2,550/Day');
+        message = `Party Chef ${cityText} • Charges: ${sal}. Tap to view & apply!`;
+    } else {
+        const role = job.jobPosition || job.title || 'Chef / Home Cook';
+        const sal = job.salaryRange || job.salary || 'Best in Industry';
+        message = `${role} ${cityText} • Salary: ${sal}. Apply now!`;
+    }
+
+    return { title, message };
+};
+
 /**
  * @desc    Create new job
  * @route   POST /api/jobs
@@ -172,12 +211,11 @@ const createJob = async (req, res) => {
         if (!requiresPayment) {
             // Send push notification to all cooks
             const notificationController = require('./notificationController');
-            const salaryText = job.salaryRange ? `Salary ${job.salaryRange}` : 'Good Salary';
-            const cityText = job.city ? `in ${job.city}` : '';
+            const notifData = formatJobNotification(job);
             notificationController.sendNotificationToRole({
                 roleName: 'Cook',
-                title: 'New Matching Job',
-                message: `New Chef Requirement ${cityText}. ${salaryText}. Apply now.`,
+                title: notifData.title,
+                message: notifData.message,
                 type: 'job_available',
                 relatedId: job._id,
                 relatedModel: 'Job',
@@ -941,13 +979,12 @@ const resendJobNotification = async (req, res) => {
             });
         }
 
-        const salaryText = job.salaryRange ? `Salary ${job.salaryRange}` : 'Good Salary';
-        const cityText = job.city ? `in ${job.city}` : '';
+        const notifData = formatJobNotification(job);
         
         await notificationController.sendNotificationToRole({
             roleName: 'Cook',
-            title: 'Matching Job Reminder',
-            message: `Chef Requirement ${cityText}. ${salaryText}. Apply now.`,
+            title: notifData.title,
+            message: notifData.message,
             type: 'job_available',
             relatedId: job._id,
             relatedModel: 'Job',
@@ -1010,12 +1047,11 @@ const completePayment = async (req, res) => {
 
         // Send push notification to all cooks now that payment is complete
         const notificationController = require('./notificationController');
-        const salaryText = job.salaryRange ? `Salary ${job.salaryRange}` : 'Good Salary';
-        const cityText = job.city ? `in ${job.city}` : '';
+        const notifData = formatJobNotification(job);
         notificationController.sendNotificationToRole({
             roleName: 'Cook',
-            title: 'New Matching Job',
-            message: `New Chef Requirement ${cityText}. ${salaryText}. Apply now.`,
+            title: notifData.title,
+            message: notifData.message,
             type: 'job_available',
             relatedId: job._id,
             relatedModel: 'Job',
@@ -1371,10 +1407,328 @@ const createCommercialWebJob = async (req, res) => {
     }
 };
 
+// ─── OTP-Based Job Lifecycle APIs ────────────────────────────────────────────
+
+/**
+ * @desc    Admin assigns staff to a daily/party job — generates startOtp for cook
+ * @route   POST /api/jobs/:id/assign-staff
+ * @access  Private (Admin)
+ */
+const assignStaffToJob = async (req, res) => {
+    try {
+        const job = await Job.findById(req.params.id);
+        if (!job) return res.status(404).json({ success: false, message: 'Job not found' });
+
+        const { candidateId, name, role, phone, experience } = req.body;
+        if (!candidateId || !name) {
+            return res.status(400).json({ success: false, message: 'candidateId and name are required' });
+        }
+
+        // Generate 6-digit OTP for starting the job
+        const startOtp = Math.floor(100000 + Math.random() * 900000).toString();
+        // Generate 6-digit OTP for completing the job (customer gets this)
+        const endOtp = Math.floor(100000 + Math.random() * 900000).toString();
+
+        // Check if already assigned
+        const existing = job.assignedStaff.find(s => s.candidate?.toString() === candidateId);
+        if (existing) {
+            return res.status(400).json({ success: false, message: 'This candidate is already assigned to this job' });
+        }
+
+        job.assignedStaff.push({
+            candidate: candidateId,
+            name,
+            role: role || 'Staff',
+            phone: phone || '',
+            experience: experience || '',
+            startOtp,
+            endOtp,
+            status: 'Assigned'
+        });
+
+        job.status = 'Assigned';
+
+        // Store job-level endOtp for customer to share with cook at end
+        if (!job.endOtp) job.endOtp = endOtp;
+
+        await job.save();
+
+        // Sync or create Application document with status 'Assigned' so it appears in Cook's bookings
+        try {
+            const Application = require('../models/Application');
+            let appDoc = await Application.findOne({ job: job._id, candidate: candidateId });
+            if (appDoc) {
+                appDoc.status = 'Assigned';
+                await appDoc.save();
+            } else {
+                await Application.create({
+                    job: job._id,
+                    candidate: candidateId,
+                    customer: job.customer || job.createdBy,
+                    status: 'Assigned',
+                    appliedDate: new Date()
+                });
+            }
+        } catch (appErr) {
+            console.error('Application sync error in assignStaffToJob:', appErr.message);
+        }
+
+        // Send notifications
+        try {
+            const notificationController = require('./notificationController');
+            // Notify cook with Start OTP
+            await notificationController.sendNotificationToUser({
+                userId: candidateId,
+                userModel: 'Candidate',
+                title: '🎉 You are Assigned!',
+                message: `You have been assigned for "${job.title}" in ${job.city}. Your Start OTP: ${startOtp}`,
+                type: 'job_assigned',
+                relatedId: job._id,
+                relatedModel: 'Job',
+                actionUrl: '/bookings'
+            }).catch(() => {});
+
+            // Also notify customer about assignment
+            if (job.customer) {
+                const Customer = require('../models/Customer');
+                const custDoc = await Customer.findById(job.customer).populate('createdBy');
+                if (custDoc) {
+                    await notificationController.sendNotificationToUser({
+                        userId: custDoc.createdBy || custDoc._id,
+                        userModel: custDoc.creatorModel || 'User',
+                        title: '👨‍🍳 Staff Assigned!',
+                        message: `Staff has been assigned for "${job.title}". Share End OTP: ${endOtp} with the cook when job is done.`,
+                        type: 'job_assigned',
+                        relatedId: job._id,
+                        relatedModel: 'Job',
+                        actionUrl: '/bookings'
+                    }).catch(() => {});
+                }
+            }
+        } catch (notifErr) {
+            console.error('Notification error in assignStaffToJob:', notifErr.message);
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Staff assigned successfully',
+            assignedStaff: job.assignedStaff,
+            startOtp,
+            endOtp
+        });
+    } catch (error) {
+        console.error('Error in assignStaffToJob:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+/**
+ * @desc    Cook enters startOtp to mark job as Started
+ * @route   POST /api/jobs/:id/start-job
+ * @access  Private (Cook/Candidate)
+ */
+const startJobWithOtp = async (req, res) => {
+    try {
+        const { otp, candidateId } = req.body;
+        if (!otp) return res.status(400).json({ success: false, message: 'OTP is required' });
+
+        const job = await Job.findById(req.params.id);
+        if (!job) return res.status(404).json({ success: false, message: 'Job not found' });
+
+        // Find the assigned staff entry for this candidate
+        const staffEntry = job.assignedStaff.find(s => {
+            const candMatch = candidateId
+                ? s.candidate?.toString() === candidateId
+                : true;
+            return candMatch && s.startOtp === otp && s.status === 'Assigned';
+        });
+
+        if (!staffEntry) {
+            return res.status(400).json({ success: false, message: 'Invalid OTP or job not in Assigned state' });
+        }
+
+        staffEntry.status = 'Started';
+        staffEntry.startedAt = new Date();
+
+        // Check if all staff have started
+        const allStarted = job.assignedStaff.every(s => s.status === 'Started' || s.status === 'Completed');
+        if (allStarted || job.assignedStaff.length === 1) {
+            job.status = 'In Progress';
+            job.jobStartedAt = new Date();
+        }
+
+        await job.save();
+
+        // Update Application status to Started
+        try {
+            const Application = require('../models/Application');
+            await Application.findOneAndUpdate(
+                { job: job._id, candidate: staffEntry.candidate },
+                { status: 'Started' }
+            );
+        } catch (appErr) {
+            console.error('Application status update error on start:', appErr.message);
+        }
+
+        // Notify customer that job has started
+        try {
+            const notificationController = require('./notificationController');
+            if (job.customer) {
+                const Customer = require('../models/Customer');
+                const custDoc = await Customer.findById(job.customer);
+                if (custDoc) {
+                    await notificationController.sendNotificationToUser({
+                        userId: custDoc.createdBy || custDoc._id,
+                        userModel: custDoc.creatorModel || 'User',
+                        title: '🚀 Job Started!',
+                        message: `${staffEntry.name} has started working on "${job.title}". End OTP: ${staffEntry.endOtp}`,
+                        type: 'job_started',
+                        relatedId: job._id,
+                        relatedModel: 'Job',
+                        actionUrl: '/bookings'
+                    }).catch(() => {});
+                }
+            }
+        } catch (e) { console.error('Notify error:', e.message); }
+
+        res.status(200).json({
+            success: true,
+            message: 'Job started successfully',
+            jobStatus: job.status,
+            startedAt: staffEntry.startedAt,
+            endOtp: staffEntry.endOtp
+        });
+    } catch (error) {
+        console.error('Error in startJobWithOtp:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+/**
+ * @desc    Cook enters endOtp (given by customer) to mark job as Completed
+ * @route   POST /api/jobs/:id/complete-job
+ * @access  Private (Cook/Candidate)
+ */
+const completeJobWithOtp = async (req, res) => {
+    try {
+        const { otp, candidateId } = req.body;
+        if (!otp) return res.status(400).json({ success: false, message: 'OTP is required' });
+
+        const job = await Job.findById(req.params.id);
+        if (!job) return res.status(404).json({ success: false, message: 'Job not found' });
+
+        // Find the started staff entry
+        const staffEntry = job.assignedStaff.find(s => {
+            const candMatch = candidateId
+                ? s.candidate?.toString() === candidateId
+                : true;
+            return candMatch && s.endOtp === otp && s.status === 'Started';
+        });
+
+        if (!staffEntry) {
+            return res.status(400).json({ success: false, message: 'Invalid OTP or job has not been started yet' });
+        }
+
+        staffEntry.status = 'Completed';
+        staffEntry.completedAt = new Date();
+
+        // Check if all staff completed
+        const allCompleted = job.assignedStaff.every(s => s.status === 'Completed');
+        if (allCompleted) {
+            job.status = 'Closed';
+            job.jobCompletedAt = new Date();
+        }
+
+        await job.save();
+
+        // Update Application status to Completed
+        try {
+            const Application = require('../models/Application');
+            await Application.findOneAndUpdate(
+                { job: job._id, candidate: staffEntry.candidate },
+                { status: 'Completed' }
+            );
+        } catch (appErr) {
+            console.error('Application status update error on complete:', appErr.message);
+        }
+
+        // Notify customer about completion
+        try {
+            const notificationController = require('./notificationController');
+            if (job.customer) {
+                const Customer = require('../models/Customer');
+                const custDoc = await Customer.findById(job.customer);
+                if (custDoc) {
+                    await notificationController.sendNotificationToUser({
+                        userId: custDoc.createdBy || custDoc._id,
+                        userModel: custDoc.creatorModel || 'User',
+                        title: '✅ Job Completed!',
+                        message: `${staffEntry.name} has completed the job "${job.title}". Thank you for using ZomoCook!`,
+                        type: 'job_completed',
+                        relatedId: job._id,
+                        relatedModel: 'Job',
+                        actionUrl: '/bookings'
+                    }).catch(() => {});
+                }
+            }
+        } catch (e) { console.error('Notify error:', e.message); }
+
+        res.status(200).json({
+            success: true,
+            message: 'Job completed successfully',
+            jobStatus: job.status,
+            completedAt: staffEntry.completedAt
+        });
+    } catch (error) {
+        console.error('Error in completeJobWithOtp:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+/**
+ * @desc    Get assigned staff list for a job (cook can also fetch own assignment)
+ * @route   GET /api/jobs/:id/assigned-staff
+ * @access  Private
+ */
+const getAssignedStaff = async (req, res) => {
+    try {
+        const job = await Job.findById(req.params.id)
+            .populate('assignedStaff.candidate', 'name phone profilePhoto experience')
+            .populate('customer', 'name outletName phone');
+
+        if (!job) return res.status(404).json({ success: false, message: 'Job not found' });
+
+        res.status(200).json({
+            success: true,
+            job: {
+                _id: job._id,
+                title: job.title,
+                status: job.status,
+                city: job.city,
+                jobStartedAt: job.jobStartedAt,
+                jobCompletedAt: job.jobCompletedAt,
+                startDate: job.startDate,
+                staffRequirements: job.staffRequirements,
+                partyRequirement: job.partyRequirement,
+                jobCategory: job.jobCategory,
+                customer: job.customer
+            },
+            assignedStaff: job.assignedStaff
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
 module.exports = {
     ...oldExports,
     applyForJob,
     resendJobNotification,
     completePayment,
-    createCommercialWebJob
+    createCommercialWebJob,
+    assignStaffToJob,
+    startJobWithOtp,
+    completeJobWithOtp,
+    getAssignedStaff
 };
+

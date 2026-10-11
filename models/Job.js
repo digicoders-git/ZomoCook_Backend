@@ -85,7 +85,7 @@ const jobSchema = new mongoose.Schema({
   image: String,
   status: {
     type: String,
-    enum: ['Urgent', 'New', 'Assigned', 'Active', 'Inactive', 'Cancelled', 'Expired', 'Open', 'In Progress', 'Closed', 'Hold'],
+    enum: ['Urgent', 'New', 'Assigned', 'Active', 'Inactive', 'Cancelled', 'Expired', 'Open', 'In Progress', 'Closed', 'Hold', 'Started', 'Completed'],
     default: 'New'
   },
   jobType: {
@@ -231,9 +231,16 @@ const jobSchema = new mongoose.Schema({
     phone: String,
     experience: String,
     startOtp: String,
+    endOtp: String,
+    startedAt: Date,
+    completedAt: Date,
     assignedAt: { type: Date, default: Date.now },
-    status: { type: String, default: 'Assigned' }
+    status: { type: String, enum: ['Assigned', 'Started', 'Completed', 'Cancelled'], default: 'Assigned' }
   }],
+  jobStartedAt: Date,
+  jobCompletedAt: Date,
+  startOtp: String,
+  endOtp: String,
   source: {
     type: String,
     enum: ['app', 'web', 'admin'],
