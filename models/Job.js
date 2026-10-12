@@ -155,6 +155,7 @@ const jobSchema = new mongoose.Schema({
   serviceDuration: String,
   familyMembers: String,
   startDate: String,
+  endDate: String,
   dailyHiringPurpose: String,
   venueAddress: String,
   eventDays: {

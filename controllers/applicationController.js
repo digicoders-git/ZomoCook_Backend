@@ -83,7 +83,10 @@ const applyJob = async (req, res) => {
         if (!candidate) return res.status(404).json({ success: false, message: 'Candidate not found' });
 
         // ✅ CHECK PROFILE APPROVAL BEFORE ALLOWING JOB APPLICATION
-        if (!candidate.profileVerification?.canApplyForJobs) {
+        const canApply = candidate.profileVerification?.canApplyForJobs || 
+                         candidate.profileVerification?.status === 'approved' || 
+                         candidate.kycStatus === 'approved';
+        if (!canApply) {
             return res.status(403).json({
                 success: false,
                 message: 'Your profile is pending admin approval. You cannot apply for jobs until your profile is approved.',
@@ -92,11 +95,17 @@ const applyJob = async (req, res) => {
             });
         }
 
-        const targetRole = req.body.appliedRole || req.body.role || applicationData?.role || applicationData?.appliedRole || '';
+        const rawRole = req.body.appliedRole || req.body.role || applicationData?.role || applicationData?.appliedRole || '';
+        const targetRole = rawRole.replace(/\s*\(daily basis\)/i, '').trim();
 
         const existingAppQuery = { job: jobId, candidate: candidate._id };
         if (targetRole) {
-            existingAppQuery.appliedRole = targetRole;
+            const escapedRole = targetRole.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            existingAppQuery.$or = [
+                { appliedRole: targetRole },
+                { appliedRole: `${targetRole} (Daily Basis)` },
+                { appliedRole: new RegExp(`^${escapedRole}`, 'i') }
+            ];
         }
         const existingApp = await Application.findOne(existingAppQuery);
         if (existingApp) {

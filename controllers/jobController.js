@@ -982,16 +982,42 @@ const applyForJob = async (req, res) => {
         });
         if (!candidate) return res.status(404).json({ success: false, message: 'Candidate not found' });
 
-        const existingApp = await Application.findOne({ job: jobId, candidate: candidate._id });
+        const rawRole = req.body.appliedRole || req.body.role || '';
+        const targetRole = rawRole.replace(/\s*\(daily basis\)/i, '').trim();
+
+        const canApply = candidate.profileVerification?.canApplyForJobs || 
+                         candidate.profileVerification?.status === 'approved' || 
+                         candidate.kycStatus === 'approved';
+        if (!canApply) {
+            return res.status(403).json({
+                success: false,
+                message: 'Your profile is pending admin approval. You cannot apply for jobs until your profile is approved.',
+                profileStatus: candidate.profileVerification?.status || 'pending_approval',
+                requiresApproval: true
+            });
+        }
+
+        const existingAppQuery = { job: jobId, candidate: candidate._id };
+        if (targetRole) {
+            const escapedRole = targetRole.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            existingAppQuery.$or = [
+                { appliedRole: targetRole },
+                { appliedRole: `${targetRole} (Daily Basis)` },
+                { appliedRole: new RegExp(`^${escapedRole}`, 'i') }
+            ];
+        }
+        const existingApp = await Application.findOne(existingAppQuery);
         if (existingApp) {
-            return res.status(400).json({ success: false, message: 'Already applied' });
+            return res.status(400).json({ success: false, message: `You have already applied for this job${targetRole ? ` as ${targetRole}` : ''}` });
         }
 
         const application = await Application.create({
             job: jobId,
             candidate: candidate._id,
             customer: job.createdBy || job.customer,
-            status: 'Applied'
+            status: 'Applied',
+            appliedRole: targetRole,
+            appliedDate: new Date()
         });
 
         // Determine if Daily Basis or Chef for Party job (admin assignment flow, no applicant notification to customer)
@@ -1333,9 +1359,12 @@ const createCommercialWebJob = async (req, res) => {
 
         // Resolve Event Date: Use explicit dateOfEvent or derive from earliest staff requirement date
         let resolvedDateOfEvent = req.body.dateOfEvent ? new Date(req.body.dateOfEvent) : undefined;
-        if (!resolvedDateOfEvent && staffList && staffList.length > 0) {
-            const startDates = staffList.map(s => s.startDate).filter(Boolean).sort();
-            if (startDates.length > 0) {
+        let startDates = [];
+        let endDates = [];
+        if (staffList && staffList.length > 0) {
+            startDates = staffList.map(s => s.startDate).filter(Boolean).sort();
+            endDates = staffList.map(s => s.endDate || s.startDate).filter(Boolean).sort();
+            if (!resolvedDateOfEvent && startDates.length > 0) {
                 resolvedDateOfEvent = new Date(startDates[0]);
             }
         }
@@ -1410,24 +1439,48 @@ const createCommercialWebJob = async (req, res) => {
                 requirements: `Qualified and verified ${item.category || item.role || 'Candidate'}.`,
                 jobType: isParty ? 'Party Event' : (targetCategory === 'daily' ? 'Daily Pay' : 'Full Time'),
                 jobPosition: item.category || item.role || 'Chef',
-                salaryRange: item.salary ? `₹${item.salary}${targetCategory === 'daily' ? '' : '/month'}` : (targetCategory === 'daily' ? '₹1500/day' : '₹20000 - ₹35000'),
+                salaryRange: (() => {
+                    if (targetCategory === 'daily' && staffList && staffList.length > 0) {
+                        const rates = staffList.map(s => Number(s.ratePerDay || s.rate || s.salary || 0)).filter(r => r > 0);
+                        if (rates.length > 0) {
+                            const minR = Math.min(...rates);
+                            const maxR = Math.max(...rates);
+                            return minR === maxR ? `₹${minR}/day` : `₹${minR} - ₹${maxR}/day`;
+                        }
+                    }
+                    return item.salary ? `₹${item.salary}${targetCategory === 'daily' ? '' : '/month'}` : (targetCategory === 'daily' ? 'Fixed Charges / Day' : '₹20000 - ₹35000');
+                })(),
                 packageOrGuestOrVacancy: `${item.count || 1} Staff`,
                 event: req.body.occasion || req.body.event || (targetCategory === 'daily' || isParty ? 'Party / Event' : undefined),
                 noOfGuests: req.body.noOfGuests ? String(req.body.noOfGuests) : undefined,
-                staffRequirements: (staffList && staffList.length > 0) ? staffList.map(s => ({
-                    role: s.role || s.category || s.staffCategory || 'Staff',
-                    genderPref: s.genderPreference || s.genderPref || 'Any Gender',
-                    count: Number(s.count || s.noOfStaff || 1),
-                    ratePerDay: Number(s.ratePerDay || s.salary || 0),
-                    days: Number(s.days || s.noOfDays || 1),
-                    startDate: s.startDate || '',
-                    endDate: s.endDate || s.startDate || '',
-                    startTime: s.startTime || (s.timing ? s.timing.split('–')[0]?.trim() : ''),
-                    endTime: s.endTime || (s.timing ? s.timing.split('–')[1]?.trim() : '')
-                })) : undefined,
+                staffRequirements: (staffList && staffList.length > 0) ? staffList.map(s => {
+                    const days = Number(s.days || s.noOfDays || 1);
+                    const sDate = s.startDate || '';
+                    let eDate = s.endDate || sDate;
+                    if (!s.endDate && sDate && days > 1) {
+                        try {
+                            const d = new Date(sDate);
+                            d.setDate(d.getDate() + (days - 1));
+                            eDate = d.toISOString().split('T')[0];
+                        } catch(e) {}
+                    }
+                    return {
+                        role: s.role || s.category || s.staffCategory || 'Staff',
+                        genderPref: s.genderPreference || s.genderPref || 'Any Gender',
+                        count: Number(s.count || s.noOfStaff || 1),
+                        ratePerDay: Number(s.ratePerDay || s.salary || 0),
+                        days: days,
+                        startDate: sDate,
+                        endDate: eDate,
+                        startTime: s.startTime || (s.timing ? s.timing.split('–')[0]?.trim() : ''),
+                        endTime: s.endTime || (s.timing ? s.timing.split('–')[1]?.trim() : '')
+                    };
+                }) : undefined,
                 partyRequirement: partyRequirement || undefined,
                 pricing: pricing || undefined,
                 dateOfEvent: resolvedDateOfEvent,
+                startDate: req.body.startDate || (startDates.length > 0 ? startDates[0] : (resolvedDateOfEvent ? resolvedDateOfEvent.toISOString().split('T')[0] : undefined)),
+                endDate: req.body.endDate || (endDates.length > 0 ? endDates[endDates.length - 1] : undefined),
                 foodPreference: item.food || 'Available',
                 status: 'New',
                 isActive: true,
