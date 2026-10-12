@@ -550,6 +550,22 @@ const updateJob = async (req, res) => {
             try { req.body.pricing = JSON.parse(req.body.pricing); } catch(e) {}
         }
 
+        if (req.body.assignedStaff && Array.isArray(req.body.assignedStaff)) {
+            req.body.assignedStaff = req.body.assignedStaff.map(s => {
+                if (typeof s === 'object' && s !== null) {
+                    if (!s.startOtp) s.startOtp = Math.floor(100000 + Math.random() * 900000).toString();
+                    if (!s.endOtp) s.endOtp = Math.floor(100000 + Math.random() * 900000).toString();
+                }
+                return s;
+            });
+            if (!req.body.startOtp && req.body.assignedStaff[0]?.startOtp) {
+                req.body.startOtp = req.body.assignedStaff[0].startOtp;
+            }
+            if (!req.body.endOtp && req.body.assignedStaff[0]?.endOtp) {
+                req.body.endOtp = req.body.assignedStaff[0].endOtp;
+            }
+        }
+
         const wasNotAssigned = job.status !== 'Assigned';
         const isNowAssigned = req.body.status === 'Assigned' || (req.body.assignedStaff && Array.isArray(req.body.assignedStaff) && req.body.assignedStaff.length > 0);
 
@@ -1619,7 +1635,8 @@ const assignStaffToJob = async (req, res) => {
 
         job.status = 'Assigned';
 
-        // Store job-level endOtp for customer to share with cook at end
+        // Store job-level startOtp & endOtp for customer to share with cook
+        if (!job.startOtp) job.startOtp = startOtp;
         if (!job.endOtp) job.endOtp = endOtp;
 
         await job.save();
@@ -1652,29 +1669,35 @@ const assignStaffToJob = async (req, res) => {
                 userId: candidateId,
                 userModel: 'Candidate',
                 title: '🎉 You are Assigned!',
-                message: `You have been assigned for "${job.title}" in ${job.city}. Your Start OTP: ${startOtp}`,
+                message: `You have been assigned as ${role || 'Staff'} for "${job.title}" in ${job.city || 'your area'}. Your Start OTP: ${startOtp}`,
                 type: 'job_assigned',
                 relatedId: job._id,
                 relatedModel: 'Job',
                 actionUrl: '/bookings'
             }).catch(() => {});
 
-            // Also notify customer about assignment
+            // Also notify customer about assignment with Start & End OTP
+            let custUserId = job.createdBy;
+            let custUserModel = job.creatorModel || 'User';
             if (job.customer) {
                 const Customer = require('../models/Customer');
                 const custDoc = await Customer.findById(job.customer).populate('createdBy');
                 if (custDoc) {
-                    await notificationController.sendNotificationToUser({
-                        userId: custDoc.createdBy || custDoc._id,
-                        userModel: custDoc.creatorModel || 'User',
-                        title: '👨‍🍳 Staff Assigned!',
-                        message: `Staff has been assigned for "${job.title}". Share End OTP: ${endOtp} with the cook when job is done.`,
-                        type: 'job_assigned',
-                        relatedId: job._id,
-                        relatedModel: 'Job',
-                        actionUrl: '/bookings'
-                    }).catch(() => {});
+                    custUserId = custDoc.createdBy || custDoc._id;
+                    custUserModel = custDoc.creatorModel || 'User';
                 }
+            }
+            if (custUserId) {
+                await notificationController.sendNotificationToUser({
+                    userId: custUserId,
+                    userModel: custUserModel,
+                    title: '👨‍🍳 Staff Assigned!',
+                    message: `${name} has been assigned as ${role || 'Staff'} for "${job.title}". Start OTP: ${startOtp}, End OTP: ${endOtp}.`,
+                    type: 'job_assigned',
+                    relatedId: job._id,
+                    relatedModel: 'Job',
+                    actionUrl: '/bookings'
+                }).catch(() => {});
             }
         } catch (notifErr) {
             console.error('Notification error in assignStaffToJob:', notifErr.message);
@@ -1703,16 +1726,49 @@ const startJobWithOtp = async (req, res) => {
         const { otp, candidateId } = req.body;
         if (!otp) return res.status(400).json({ success: false, message: 'OTP is required' });
 
+        const enteredOtp = otp.toString().trim();
         const job = await Job.findById(req.params.id);
         if (!job) return res.status(404).json({ success: false, message: 'Job not found' });
 
-        // Find the assigned staff entry for this candidate
-        const staffEntry = job.assignedStaff.find(s => {
-            const candMatch = candidateId
-                ? s.candidate?.toString() === candidateId
+        // Collect possible candidate IDs (candidateId from body, req.user._id, req.admin._id)
+        const possibleCandIds = [];
+        if (candidateId) possibleCandIds.push(candidateId.toString());
+        if (req.user?._id) possibleCandIds.push(req.user._id.toString());
+        if (req.admin?._id) possibleCandIds.push(req.admin._id.toString());
+
+        try {
+            const Candidate = require('../models/Candidate');
+            const cDocs = await Candidate.find({
+                $or: [
+                    { _id: { $in: possibleCandIds.filter(id => id.match(/^[0-9a-fA-F]{24}$/)) } },
+                    { createdBy: { $in: possibleCandIds.filter(id => id.match(/^[0-9a-fA-F]{24}$/)) } }
+                ]
+            }).select('_id createdBy');
+            cDocs.forEach(c => {
+                possibleCandIds.push(c._id.toString());
+                if (c.createdBy) possibleCandIds.push(c.createdBy.toString());
+            });
+        } catch (_) {}
+
+        // Find the assigned staff entry for this candidate and OTP
+        let staffEntry = job.assignedStaff.find(s => {
+            const candMatch = possibleCandIds.length > 0
+                ? possibleCandIds.includes(s.candidate?.toString())
                 : true;
-            return candMatch && s.startOtp === otp && s.status === 'Assigned';
+            return candMatch && s.startOtp?.toString().trim() === enteredOtp && (s.status === 'Assigned' || !s.status);
         });
+
+        // Fallback: match by OTP among assigned staff
+        if (!staffEntry) {
+            staffEntry = job.assignedStaff.find(s => 
+                s.startOtp?.toString().trim() === enteredOtp && (s.status === 'Assigned' || !s.status)
+            );
+        }
+
+        // Job-level fallback
+        if (!staffEntry && job.startOtp && job.startOtp.toString().trim() === enteredOtp) {
+            staffEntry = job.assignedStaff.find(s => s.status === 'Assigned') || job.assignedStaff[0];
+        }
 
         if (!staffEntry) {
             return res.status(400).json({ success: false, message: 'Invalid OTP or job not in Assigned state' });
@@ -1733,8 +1789,14 @@ const startJobWithOtp = async (req, res) => {
         // Update Application status to Started
         try {
             const Application = require('../models/Application');
-            await Application.findOneAndUpdate(
-                { job: job._id, candidate: staffEntry.candidate },
+            await Application.updateMany(
+                {
+                    job: job._id,
+                    $or: [
+                        { candidate: staffEntry.candidate },
+                        { candidate: { $in: possibleCandIds.filter(id => id.match(/^[0-9a-fA-F]{24}$/)) } }
+                    ]
+                },
                 { status: 'Started' }
             );
         } catch (appErr) {
@@ -1744,21 +1806,27 @@ const startJobWithOtp = async (req, res) => {
         // Notify customer that job has started
         try {
             const notificationController = require('./notificationController');
+            let custUserId = job.createdBy;
+            let custUserModel = job.creatorModel || 'User';
             if (job.customer) {
                 const Customer = require('../models/Customer');
                 const custDoc = await Customer.findById(job.customer);
                 if (custDoc) {
-                    await notificationController.sendNotificationToUser({
-                        userId: custDoc.createdBy || custDoc._id,
-                        userModel: custDoc.creatorModel || 'User',
-                        title: '🚀 Job Started!',
-                        message: `${staffEntry.name} has started working on "${job.title}". End OTP: ${staffEntry.endOtp}`,
-                        type: 'job_started',
-                        relatedId: job._id,
-                        relatedModel: 'Job',
-                        actionUrl: '/bookings'
-                    }).catch(() => {});
+                    custUserId = custDoc.createdBy || custDoc._id;
+                    custUserModel = custDoc.creatorModel || 'User';
                 }
+            }
+            if (custUserId) {
+                await notificationController.sendNotificationToUser({
+                    userId: custUserId,
+                    userModel: custUserModel,
+                    title: '🚀 Job Started!',
+                    message: `${staffEntry.name} has started working on "${job.title}". End OTP: ${staffEntry.endOtp}`,
+                    type: 'job_started',
+                    relatedId: job._id,
+                    relatedModel: 'Job',
+                    actionUrl: '/bookings'
+                }).catch(() => {});
             }
         } catch (e) { console.error('Notify error:', e.message); }
 
@@ -1785,16 +1853,49 @@ const completeJobWithOtp = async (req, res) => {
         const { otp, candidateId } = req.body;
         if (!otp) return res.status(400).json({ success: false, message: 'OTP is required' });
 
+        const enteredOtp = otp.toString().trim();
         const job = await Job.findById(req.params.id);
         if (!job) return res.status(404).json({ success: false, message: 'Job not found' });
 
+        // Collect possible candidate IDs
+        const possibleCandIds = [];
+        if (candidateId) possibleCandIds.push(candidateId.toString());
+        if (req.user?._id) possibleCandIds.push(req.user._id.toString());
+        if (req.admin?._id) possibleCandIds.push(req.admin._id.toString());
+
+        try {
+            const Candidate = require('../models/Candidate');
+            const cDocs = await Candidate.find({
+                $or: [
+                    { _id: { $in: possibleCandIds.filter(id => id.match(/^[0-9a-fA-F]{24}$/)) } },
+                    { createdBy: { $in: possibleCandIds.filter(id => id.match(/^[0-9a-fA-F]{24}$/)) } }
+                ]
+            }).select('_id createdBy');
+            cDocs.forEach(c => {
+                possibleCandIds.push(c._id.toString());
+                if (c.createdBy) possibleCandIds.push(c.createdBy.toString());
+            });
+        } catch (_) {}
+
         // Find the started staff entry
-        const staffEntry = job.assignedStaff.find(s => {
-            const candMatch = candidateId
-                ? s.candidate?.toString() === candidateId
+        let staffEntry = job.assignedStaff.find(s => {
+            const candMatch = possibleCandIds.length > 0
+                ? possibleCandIds.includes(s.candidate?.toString())
                 : true;
-            return candMatch && s.endOtp === otp && s.status === 'Started';
+            return candMatch && s.endOtp?.toString().trim() === enteredOtp && s.status === 'Started';
         });
+
+        // Fallback: match by endOtp among started staff
+        if (!staffEntry) {
+            staffEntry = job.assignedStaff.find(s => 
+                s.endOtp?.toString().trim() === enteredOtp && s.status === 'Started'
+            );
+        }
+
+        // Job-level fallback
+        if (!staffEntry && job.endOtp && job.endOtp.toString().trim() === enteredOtp) {
+            staffEntry = job.assignedStaff.find(s => s.status === 'Started') || job.assignedStaff[0];
+        }
 
         if (!staffEntry) {
             return res.status(400).json({ success: false, message: 'Invalid OTP or job has not been started yet' });
@@ -1815,8 +1916,14 @@ const completeJobWithOtp = async (req, res) => {
         // Update Application status to Completed
         try {
             const Application = require('../models/Application');
-            await Application.findOneAndUpdate(
-                { job: job._id, candidate: staffEntry.candidate },
+            await Application.updateMany(
+                {
+                    job: job._id,
+                    $or: [
+                        { candidate: staffEntry.candidate },
+                        { candidate: { $in: possibleCandIds.filter(id => id.match(/^[0-9a-fA-F]{24}$/)) } }
+                    ]
+                },
                 { status: 'Completed' }
             );
         } catch (appErr) {
@@ -1826,21 +1933,27 @@ const completeJobWithOtp = async (req, res) => {
         // Notify customer about completion
         try {
             const notificationController = require('./notificationController');
+            let custUserId = job.createdBy;
+            let custUserModel = job.creatorModel || 'User';
             if (job.customer) {
                 const Customer = require('../models/Customer');
                 const custDoc = await Customer.findById(job.customer);
                 if (custDoc) {
-                    await notificationController.sendNotificationToUser({
-                        userId: custDoc.createdBy || custDoc._id,
-                        userModel: custDoc.creatorModel || 'User',
-                        title: '✅ Job Completed!',
-                        message: `${staffEntry.name} has completed the job "${job.title}". Thank you for using ZomoCook!`,
-                        type: 'job_completed',
-                        relatedId: job._id,
-                        relatedModel: 'Job',
-                        actionUrl: '/bookings'
-                    }).catch(() => {});
+                    custUserId = custDoc.createdBy || custDoc._id;
+                    custUserModel = custDoc.creatorModel || 'User';
                 }
+            }
+            if (custUserId) {
+                await notificationController.sendNotificationToUser({
+                    userId: custUserId,
+                    userModel: custUserModel,
+                    title: '✅ Job Completed!',
+                    message: `${staffEntry.name} has completed the job "${job.title}". Thank you for using ZomoCook!`,
+                    type: 'job_completed',
+                    relatedId: job._id,
+                    relatedModel: 'Job',
+                    actionUrl: '/bookings'
+                }).catch(() => {});
             }
         } catch (e) { console.error('Notify error:', e.message); }
 
