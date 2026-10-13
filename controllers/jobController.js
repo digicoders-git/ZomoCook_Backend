@@ -1251,14 +1251,33 @@ const createCommercialWebJob = async (req, res) => {
         const Role = require('../models/Role');
         const cleanedPhone = rawPhone.toString().trim();
 
-        // 1. Find or create User with this phone number
-        let user = await User.findOne({
-            $or: [
-                { phone: cleanedPhone },
-                { phone: `+91${cleanedPhone}` },
-                { phone: cleanedPhone.replace('+91', '') }
-            ]
-        });
+        // 1. Find or create User with this phone number (check JWT auth token or userId first if available)
+        let loggedInUserId = req.body.userId || req.body.createdBy || null;
+        if (!loggedInUserId && req.headers && req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+            try {
+                const jwt = require('jsonwebtoken');
+                const token = req.headers.authorization.split(' ')[1];
+                const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secretkey');
+                if (decoded && (decoded.id || decoded._id)) {
+                    loggedInUserId = decoded.id || decoded._id;
+                }
+            } catch (jwtErr) {}
+        }
+
+        let user = null;
+        if (loggedInUserId) {
+            user = await User.findById(loggedInUserId);
+        }
+
+        if (!user) {
+            user = await User.findOne({
+                $or: [
+                    { phone: cleanedPhone },
+                    { phone: `+91${cleanedPhone}` },
+                    { phone: cleanedPhone.replace('+91', '') }
+                ]
+            });
+        }
 
         let customerRole = await Role.findOne({ name: { $regex: /^customer$/i } });
         if (!customerRole) {
@@ -1353,41 +1372,165 @@ const createCommercialWebJob = async (req, res) => {
             else targetCategory = 'hotel';
         }
 
+        const rawDates = req.body.eventDates || [];
+        const rawAddons = req.body.addOns || req.body.addons || {};
+
+        let computedGuests = Number(req.body.noOfGuests) || 0;
+        if (!computedGuests && rawDates.length > 0) {
+            rawDates.forEach(d => {
+                (d.meals || []).forEach(m => {
+                    const g = Number(m.guests || 0) || (Number(m.vegGuests || 0) + Number(m.nonVegGuests || 0));
+                    computedGuests += g;
+                });
+            });
+        }
+
         // Standardize partyRequirement from either web format or Flutter app format
         let partyRequirement = req.body.partyRequirement;
         if (!partyRequirement && isParty) {
-            const rawDates = req.body.eventDates || [];
             partyRequirement = {
                 eventType: req.body.occasion || req.body.event || 'Party Event',
-                guestCount: req.body.noOfGuests || 0,
+                guestCount: computedGuests || 30,
                 datesCount: rawDates.length || 1,
                 dates: rawDates.map(d => ({
                     date: d.date || '',
-                    eventType: d.eventType || req.body.occasion || 'Event',
-                    meals: (d.meals || []).map(m => ({
-                        mealType: m.name || m.mealType || 'Meal',
-                        guests: (Number(m.vegGuests || 0) + Number(m.nonVegGuests || 0)) || m.guests || 0,
-                        dishes: m.selectedMenu || m.dishes || m.menu || req.body.selectedMenuItems || []
-                    }))
+                    occasion: d.occasion || req.body.occasion || 'Party Event',
+                    eventType: d.eventType || d.occasion || req.body.occasion || 'Party Event',
+                    meals: (d.meals || []).map(m => {
+                        const dishList = Array.isArray(m.selectedMenu) && m.selectedMenu.length > 0
+                            ? m.selectedMenu
+                            : (Array.isArray(m.dishes) ? m.dishes : (Array.isArray(m.menu) ? m.menu : []));
+                        return {
+                            mealType: m.mealType || m.name || 'Meal',
+                            guests: m.guests || (Number(m.vegGuests || 0) + Number(m.nonVegGuests || 0)) || 0,
+                            servingTime: m.servingTime || '',
+                            foodPreference: m.foodPreference || '',
+                            menuChoice: m.menuChoice || 'now',
+                            categoryDishCounts: m.categoryDishCounts || {},
+                            totalDishes: m.totalDishes || dishList.length || 0,
+                            selectedCuisines: m.selectedCuisines || [],
+                            selectedMenu: dishList,
+                            dishes: dishList,
+                            notes: m.notes || ''
+                        };
+                    })
                 }))
             };
+        } else if (partyRequirement && isParty && Array.isArray(partyRequirement.dates)) {
+            partyRequirement.dates = partyRequirement.dates.map(d => ({
+                ...d,
+                meals: (d.meals || []).map(m => {
+                    const dishList = Array.isArray(m.selectedMenu) && m.selectedMenu.length > 0
+                        ? m.selectedMenu
+                        : (Array.isArray(m.dishes) ? m.dishes : (Array.isArray(m.menu) ? m.menu : []));
+                    return {
+                        ...m,
+                        selectedMenu: dishList,
+                        dishes: dishList
+                    };
+                })
+            }));
         }
 
-        // Resolve Event Date: Use explicit dateOfEvent or derive from earliest staff requirement date
+        // Extract all selected dishes across all meals
+        const allDishes = [];
+        const sourceDates = (partyRequirement && partyRequirement.dates) ? partyRequirement.dates : rawDates;
+        sourceDates.forEach(d => {
+            (d.meals || []).forEach(m => {
+                const list = m.selectedMenu || m.dishes || [];
+                list.forEach(dish => {
+                    const dishName = typeof dish === 'string' ? dish : (dish.name || dish.dishName || '');
+                    if (dishName && !allDishes.includes(dishName)) {
+                        allDishes.push(dishName);
+                    }
+                });
+            });
+        });
+        const flattenedMenuDetails = req.body.menuDetails || allDishes.join(', ');
+        if (partyRequirement) {
+            partyRequirement.menuDetails = flattenedMenuDetails;
+            partyRequirement.addOns = rawAddons;
+            partyRequirement.addons = rawAddons;
+            if (!partyRequirement.guestCount) {
+                partyRequirement.guestCount = computedGuests || 30;
+            }
+        }
+
+        // Resolve Event Date: Use explicit dateOfEvent or derive from staff requirements / event dates
         let resolvedDateOfEvent = req.body.dateOfEvent ? new Date(req.body.dateOfEvent) : undefined;
         let startDates = [];
         let endDates = [];
+        if (req.body.startDate) startDates.push(req.body.startDate);
+        if (req.body.endDate) endDates.push(req.body.endDate);
+
         if (staffList && staffList.length > 0) {
-            startDates = staffList.map(s => s.startDate).filter(Boolean).sort();
-            endDates = staffList.map(s => s.endDate || s.startDate).filter(Boolean).sort();
-            if (!resolvedDateOfEvent && startDates.length > 0) {
-                resolvedDateOfEvent = new Date(startDates[0]);
+            startDates.push(...staffList.map(s => s.startDate).filter(Boolean));
+            endDates.push(...staffList.map(s => s.endDate || s.startDate).filter(Boolean));
+        }
+
+        if (rawDates.length > 0) {
+            const dateStrings = rawDates.map(d => d.date).filter(Boolean).sort();
+            if (dateStrings.length > 0) {
+                startDates.push(dateStrings[0]);
+                endDates.push(dateStrings[dateStrings.length - 1]);
+                if (!resolvedDateOfEvent) {
+                    resolvedDateOfEvent = new Date(dateStrings[0]);
+                }
             }
+        }
+        startDates = startDates.sort();
+        endDates = endDates.sort();
+        if (!resolvedDateOfEvent && startDates.length > 0) {
+            resolvedDateOfEvent = new Date(startDates[0]);
+        }
+
+        // Resolve staff requirements
+        let resolvedStaffRequirements = undefined;
+        if (staffList && staffList.length > 0) {
+            resolvedStaffRequirements = staffList.map(s => {
+                const days = Number(s.days || s.noOfDays || 1);
+                const sDate = s.startDate || (startDates[0] || '');
+                let eDate = s.endDate || sDate;
+                if (!s.endDate && sDate && days > 1) {
+                    try {
+                        const d = new Date(sDate);
+                        d.setDate(d.getDate() + (days - 1));
+                        eDate = d.toISOString().split('T')[0];
+                    } catch(e) {}
+                }
+                return {
+                    role: s.role || s.category || s.staffCategory || 'Staff',
+                    genderPref: s.genderPreference || s.genderPref || 'Any Gender',
+                    count: Number(s.count || s.noOfStaff || 1),
+                    ratePerDay: Number(s.ratePerDay || s.salary || 0),
+                    days: days,
+                    startDate: sDate,
+                    endDate: eDate,
+                    startTime: s.startTime || (s.timing ? s.timing.split('–')[0]?.trim() : ''),
+                    endTime: s.endTime || (s.timing ? s.timing.split('–')[1]?.trim() : '')
+                };
+            });
+        } else if (isParty) {
+            const partyDaysCount = rawDates.length || 1;
+            const sDate = startDates.length > 0 ? startDates[0] : (resolvedDateOfEvent ? resolvedDateOfEvent.toISOString().split('T')[0] : '');
+            const eDate = endDates.length > 0 ? endDates[endDates.length - 1] : sDate;
+            const chefFee = Number(pricing?.staffCharges || (1999 * partyDaysCount));
+            resolvedStaffRequirements = [{
+                role: 'Chef for Party',
+                genderPref: 'Any Gender',
+                count: 1,
+                ratePerDay: Math.round(chefFee / partyDaysCount),
+                days: partyDaysCount,
+                startDate: sDate,
+                endDate: eDate,
+                startTime: 'Event Time',
+                endTime: 'Completion'
+            }];
         }
 
         // 3. Create Jobs: Exactly ONE job containing all staff requirements
         const items = [(staffList && staffList.length > 0) ? staffList[0] : {
-            category: 'Chef',
+            category: isParty ? 'Chef for Party' : 'Chef',
             count: 1,
             salary: 25000,
             food: 'Available',
@@ -1420,22 +1563,39 @@ const createCommercialWebJob = async (req, res) => {
                 : '';
 
             const defaultTitle = isParty
-                ? (!isGenericOccasion ? occasionName : `Chef for Party Booking for ${name} (${partyRequirement?.datesCount || 1} Day Event)`)
+                ? (!isGenericOccasion ? `${occasionName} - Chef for Party` : `Chef for Party Booking for ${name} (${partyRequirement?.datesCount || 1} Day Event)`)
                 : (targetCategory === 'daily'
                     ? (req.body.title || (rolesListSummary ? `Daily Staff Requirement (${rolesListSummary})` : `Daily Staff Requirement at ${outletName || name}`))
                     : (targetCategory === 'home' 
                         ? `${item.category || 'Home Cook'} Required at ${outletName || name}`
                         : `${item.category || 'Hospitality Staff'} Required at ${outletName || name}`));
 
-            const jobTitle = defaultTitle;
+            const jobTitle = req.body.title || defaultTitle;
             const partyDetailsDesc = isParty && partyRequirement
-                ? `Party Details: Dates Count: ${partyRequirement.datesCount || 1}, City: ${req.body.city || address}, Amount: ₹${pricing?.total || pricing?.advance || 0}. Payment: ${partyRequirement.paymentMethod || 'Online'}`
+                ? `Party Details: Dates Count: ${partyRequirement.datesCount || 1}, City: ${req.body.city || city || address}, Amount: ₹${pricing?.total || pricing?.advance || 0}. Payment: ${partyRequirement.paymentMethod || 'Online'}`
                 : '';
             const jobDesc = isParty
                 ? `Chef for Party requirement booked by ${name} (+91 ${cleanedPhone}). Location: ${address}. ${partyDetailsDesc}`
                 : (targetCategory === 'daily'
                     ? `Daily Staff requirement (${rolesListSummary || 'Staff'}). Location: ${address || 'Lucknow'}. Notes: ${message || 'On time reporting required'}.`
                     : `Hiring ${item.count || 1} ${item.category || 'Staff'}. Salary ₹${item.salary || 'Negotiable'}. Food: ${item.food || 'Available'}, Accommodation: ${item.accommodation || 'Not Required'}. Plan: ${selectedPlan?.name || 'Basic'}. Location: ${address || 'On Request'}. ${message ? `Notes: ${message}` : ''}`);
+
+            const salaryRangeValue = (() => {
+                if (isParty) {
+                    const totalEst = pricing?.total || pricing?.staffCharges || 1999;
+                    const days = rawDates.length || 1;
+                    return days > 1 ? `₹${Math.round(totalEst / days)}/day (Total: ₹${totalEst})` : `₹${totalEst} (Party Event)`;
+                }
+                if (targetCategory === 'daily' && staffList && staffList.length > 0) {
+                    const rates = staffList.map(s => Number(s.ratePerDay || s.rate || s.salary || 0)).filter(r => r > 0);
+                    if (rates.length > 0) {
+                        const minR = Math.min(...rates);
+                        const maxR = Math.max(...rates);
+                        return minR === maxR ? `₹${minR}/day` : `₹${minR} - ₹${maxR}/day`;
+                    }
+                }
+                return item.salary ? `₹${item.salary}${targetCategory === 'daily' ? '' : '/month'}` : (targetCategory === 'daily' ? 'Fixed Charges / Day' : '₹20000 - ₹35000');
+            })();
 
             const newJob = await Job.create({
                 jobCategory: isParty ? 'party' : targetCategory,
@@ -1444,60 +1604,34 @@ const createCommercialWebJob = async (req, res) => {
                 customer: customer._id,
                 propertyCategory: isParty ? 'Event/Party' : (targetCategory === 'daily' ? 'Event/Party' : (targetCategory === 'home' ? 'Residence/Home' : 'Hotel/Restaurant')),
                 state: 'India',
-                city: req.body.city || address || 'Delhi NCR',
+                city: req.body.city || city || 'Lucknow',
                 address: address || '',
+                venueAddress: req.body.venueAddress || address || '',
                 email: email || (customer && customer.email) || (user && user.email) || '',
                 outletName: outletName || '',
                 hiringPurpose: req.body.hiringPurpose ? req.body.hiringPurpose.toLowerCase() : ((req.body.bookingType || '').toLowerCase() === 'commercial' ? 'commercial' : 'domestic'),
                 bookingType: isParty ? 'party' : (['regular', 'daily'].includes((req.body.bookingType || '').toLowerCase()) ? req.body.bookingType.toLowerCase() : (targetCategory === 'daily' ? 'daily' : 'regular')),
                 overview: jobDesc,
-                responsibilities: `Work as ${item.category || item.role || 'Staff'} for ${name}.`,
-                requirements: `Qualified and verified ${item.category || item.role || 'Candidate'}.`,
+                responsibilities: `Work as ${item.category || item.role || (isParty ? 'Chef for Party' : 'Staff')} for ${name}.`,
+                requirements: `Qualified and verified ${item.category || item.role || (isParty ? 'Party Chef' : 'Candidate')}.`,
                 jobType: isParty ? 'Party Event' : (targetCategory === 'daily' ? 'Daily Pay' : 'Full Time'),
-                jobPosition: item.category || item.role || 'Chef',
-                salaryRange: (() => {
-                    if (targetCategory === 'daily' && staffList && staffList.length > 0) {
-                        const rates = staffList.map(s => Number(s.ratePerDay || s.rate || s.salary || 0)).filter(r => r > 0);
-                        if (rates.length > 0) {
-                            const minR = Math.min(...rates);
-                            const maxR = Math.max(...rates);
-                            return minR === maxR ? `₹${minR}/day` : `₹${minR} - ₹${maxR}/day`;
-                        }
-                    }
-                    return item.salary ? `₹${item.salary}${targetCategory === 'daily' ? '' : '/month'}` : (targetCategory === 'daily' ? 'Fixed Charges / Day' : '₹20000 - ₹35000');
-                })(),
-                packageOrGuestOrVacancy: `${item.count || 1} Staff`,
+                jobPosition: isParty ? 'Chef for Party' : (item.category || item.role || 'Chef'),
+                salaryRange: salaryRangeValue,
+                packageOrGuestOrVacancy: isParty ? `${computedGuests || 30} Guests` : `${item.count || 1} Staff`,
                 event: req.body.occasion || req.body.event || (targetCategory === 'daily' || isParty ? 'Party / Event' : undefined),
-                noOfGuests: req.body.noOfGuests ? String(req.body.noOfGuests) : undefined,
-                staffRequirements: (staffList && staffList.length > 0) ? staffList.map(s => {
-                    const days = Number(s.days || s.noOfDays || 1);
-                    const sDate = s.startDate || '';
-                    let eDate = s.endDate || sDate;
-                    if (!s.endDate && sDate && days > 1) {
-                        try {
-                            const d = new Date(sDate);
-                            d.setDate(d.getDate() + (days - 1));
-                            eDate = d.toISOString().split('T')[0];
-                        } catch(e) {}
-                    }
-                    return {
-                        role: s.role || s.category || s.staffCategory || 'Staff',
-                        genderPref: s.genderPreference || s.genderPref || 'Any Gender',
-                        count: Number(s.count || s.noOfStaff || 1),
-                        ratePerDay: Number(s.ratePerDay || s.salary || 0),
-                        days: days,
-                        startDate: sDate,
-                        endDate: eDate,
-                        startTime: s.startTime || (s.timing ? s.timing.split('–')[0]?.trim() : ''),
-                        endTime: s.endTime || (s.timing ? s.timing.split('–')[1]?.trim() : '')
-                    };
-                }) : undefined,
+                noOfGuests: (computedGuests > 0 ? String(computedGuests) : (req.body.noOfGuests ? String(req.body.noOfGuests) : undefined)),
+                staffRequirements: resolvedStaffRequirements,
+                eventDays: (req.body.eventDates && req.body.eventDates.length > 0) ? req.body.eventDates : (partyRequirement?.dates || rawDates),
                 partyRequirement: partyRequirement || undefined,
+                addOns: rawAddons,
+                addons: rawAddons,
+                appliedCoupon: req.body.appliedCoupon || '',
+                menuDetails: flattenedMenuDetails,
                 pricing: pricing || undefined,
                 dateOfEvent: resolvedDateOfEvent,
                 startDate: req.body.startDate || (startDates.length > 0 ? startDates[0] : (resolvedDateOfEvent ? resolvedDateOfEvent.toISOString().split('T')[0] : undefined)),
                 endDate: req.body.endDate || (endDates.length > 0 ? endDates[endDates.length - 1] : undefined),
-                foodPreference: item.food || 'Available',
+                foodPreference: req.body.foodPreference || (rawDates[0]?.meals[0]?.foodPreference) || item.food || 'Available',
                 status: 'New',
                 isActive: true,
                 createdBy: user._id,
@@ -1506,7 +1640,7 @@ const createCommercialWebJob = async (req, res) => {
                 advanceAmount: pricing?.advance || pricing?.advanceAmount || 0,
                 totalAmount: pricing?.total || pricing?.totalAmount || 0,
                 leadManager: assignedManagerId,
-                source: 'web'
+                source: req.body.source || (req.headers.authorization ? 'app' : 'web')
             });
 
             createdJobs.push(newJob);

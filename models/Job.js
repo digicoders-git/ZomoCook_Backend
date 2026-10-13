@@ -176,6 +176,34 @@ const jobSchema = new mongoose.Schema({
       return val;
     }
   },
+  addOns: {
+    type: mongoose.Schema.Types.Mixed,
+    default: {},
+    set: function(val) {
+      if (typeof val === 'string') {
+        try { return JSON.parse(val); } catch (e) { return val; }
+      }
+      return val;
+    }
+  },
+  addons: {
+    type: mongoose.Schema.Types.Mixed,
+    default: {},
+    set: function(val) {
+      if (typeof val === 'string') {
+        try { return JSON.parse(val); } catch (e) { return val; }
+      }
+      return val;
+    }
+  },
+  appliedCoupon: {
+    type: String,
+    default: ''
+  },
+  totalAmount: {
+    type: Number,
+    default: 0
+  },
   allowedLeave: String,
   salaryRange: String,
   experienceRange: String,
@@ -267,6 +295,12 @@ jobSchema.pre('validate', function() {
   }
   if (typeof this.pricing === 'string') {
     try { this.pricing = JSON.parse(this.pricing); } catch(e) {}
+  }
+  if (typeof this.addOns === 'string') {
+    try { this.addOns = JSON.parse(this.addOns); } catch(e) {}
+  }
+  if (typeof this.addons === 'string') {
+    try { this.addons = JSON.parse(this.addons); } catch(e) {}
   }
 });
 
