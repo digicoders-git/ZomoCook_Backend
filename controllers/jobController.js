@@ -259,7 +259,7 @@ const getJobs = async (req, res) => {
             );
         // Role name detection
         const roleName = (req.admin.role && req.admin.role.name) ? req.admin.role.name.toLowerCase() : '';
-        const isCook = roleName === 'cook';
+        const isCook = roleName === 'cook' || roleName === 'chef' || roleName.includes('cook') || roleName.includes('chef') || req.admin.userType === 'cook' || req.admin.userType === 'chef';
         const canViewJobs = hasPermission(req.admin, 'job_management:view');
         // isCustomer = mobile app user (no admin panel role, just a regular app user)
         // Staff users (Lead Manager, Telecaller etc) are in User collection but HAVE a role assigned
@@ -324,8 +324,13 @@ const getJobs = async (req, res) => {
             if (minSalary) query.$expr = { $gte: [{ $convert: { input: { $arrayElemAt: [{ $split: ['$salaryRange', '-'] }, 0] }, to: "int", onError: 0, onNull: 0 } }, parseInt(minSalary)] };
         }
 
-        // Active jobs filter for cook viewing
-        if (isCook) query.isActive = true;
+        // Active jobs filter for cook viewing / public app feed:
+        // NEVER show jobs that are pending payment, unpaid, or on Hold!
+        if (isCook || (!isSuperAdmin && !canViewJobs && !isCustomer)) {
+            query.isActive = true;
+            query.status = { $nin: ['Hold', 'hold', 'Cancelled', 'cancelled', 'Deleted', 'deleted'] };
+            query.paymentStatus = { $nin: ['pending', 'unpaid', 'failed'] };
+        }
 
         let jobs = await Job.find(query)
             .populate('customer', 'name email contactPhone')
@@ -991,6 +996,13 @@ const applyForJob = async (req, res) => {
         const job = await Job.findById(jobId);
         if (!job) return res.status(404).json({ success: false, message: 'Job not found' });
 
+        if (!job.isActive || job.status === 'Hold' || job.paymentStatus === 'pending') {
+            return res.status(400).json({
+                success: false,
+                message: 'Yeh booking abhi active nahi hai (payment pending hai).'
+            });
+        }
+
         const last10 = req.admin.phone ? req.admin.phone.slice(-10) : '';
         const candidate = await Candidate.findOne({
             $or: [
@@ -1600,6 +1612,10 @@ const createCommercialWebJob = async (req, res) => {
                 return item.salary ? `₹${item.salary}${targetCategory === 'daily' ? '' : '/month'}` : (targetCategory === 'daily' ? 'Fixed Charges / Day' : '₹20000 - ₹35000');
             })();
 
+            const isAdvancePaid = req.body.paymentStatus === 'paid' || req.body.paymentStatus === 'advance_paid';
+            const requiresAdvance = (pricing?.advance && pricing.advance > 0) || isParty || targetCategory === 'daily';
+            const isPaymentPending = !isAdvancePaid && requiresAdvance;
+
             const newJob = await Job.create({
                 jobCategory: isParty ? 'party' : targetCategory,
                 jobCode,
@@ -1635,11 +1651,11 @@ const createCommercialWebJob = async (req, res) => {
                 startDate: req.body.startDate || (startDates.length > 0 ? startDates[0] : (resolvedDateOfEvent ? resolvedDateOfEvent.toISOString().split('T')[0] : undefined)),
                 endDate: req.body.endDate || (endDates.length > 0 ? endDates[endDates.length - 1] : undefined),
                 foodPreference: req.body.foodPreference || (rawDates[0]?.meals[0]?.foodPreference) || item.food || 'Available',
-                status: 'New',
-                isActive: true,
+                status: isPaymentPending ? 'Hold' : 'New',
+                isActive: !isPaymentPending,
                 createdBy: user._id,
                 creatorModel: 'User',
-                paymentStatus: 'pending',
+                paymentStatus: isAdvancePaid ? 'paid' : (isPaymentPending ? 'pending' : (req.body.paymentStatus || 'free')),
                 advanceAmount: pricing?.advance || pricing?.advanceAmount || 0,
                 totalAmount: pricing?.total || pricing?.totalAmount || 0,
                 leadManager: assignedManagerId,
