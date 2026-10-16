@@ -546,6 +546,9 @@ const updateJob = async (req, res) => {
         if (typeof req.body.eventDays === 'string') {
             try { req.body.eventDays = JSON.parse(req.body.eventDays); } catch(e) {}
         }
+        if (req.body.eventDates && !req.body.eventDays) {
+            req.body.eventDays = typeof req.body.eventDates === 'string' ? JSON.parse(req.body.eventDates) : req.body.eventDates;
+        }
         if (typeof req.body.pricing === 'string') {
             try { req.body.pricing = JSON.parse(req.body.pricing); } catch(e) {}
         }
@@ -1781,16 +1784,25 @@ const assignStaffToJob = async (req, res) => {
             let appDoc = await Application.findOne({ job: job._id, candidate: candidateId });
             if (appDoc) {
                 appDoc.status = 'Assigned';
+                if (role) appDoc.appliedRole = role;
                 await appDoc.save();
             } else {
-                await Application.create({
+                appDoc = await Application.create({
                     job: job._id,
                     candidate: candidateId,
                     customer: job.customer || job.createdBy,
                     status: 'Assigned',
+                    appliedRole: role || 'Staff',
                     appliedDate: new Date()
                 });
             }
+            try {
+                const Candidate = require('../models/Candidate');
+                await Candidate.updateOne(
+                    { _id: candidateId, 'applications.job': job._id },
+                    { $set: { 'applications.$.status': 'Assigned' } }
+                );
+            } catch (_) {}
         } catch (appErr) {
             console.error('Application sync error in assignStaffToJob:', appErr.message);
         }

@@ -306,12 +306,12 @@ const updateApplicationStatus = async (req, res) => {
         const { status } = req.body;
         const applicationId = req.params.id;
 
-        const validStatuses = ['Applied', 'Shortlisted', 'Profile Reviewed', 'Package Selected', 'Package Paid', 'Demo Scheduled', 'Demo In Progress', 'Demo Completed', 'Demo Cancelled', 'Reschedule Requested', 'Hired', 'Rejected', 'On Hold', 'Not Interested', 'Cancelled'];
+        const validStatuses = ['Applied', 'Shortlisted', 'Profile Reviewed', 'Package Selected', 'Package Paid', 'Demo Scheduled', 'Demo In Progress', 'Demo Completed', 'Demo Cancelled', 'Reschedule Requested', 'Hired', 'Rejected', 'On Hold', 'Not Interested', 'Cancelled', 'Assigned'];
         if (!validStatuses.includes(status)) {
             return res.status(400).json({ success: false, message: 'Invalid status' });
         }
 
-        const existingApp = await Application.findById(applicationId).populate('job');
+        const existingApp = await Application.findById(applicationId).populate('job').populate('candidate');
         if (!existingApp) {
             return res.status(404).json({ success: false, message: 'Application not found' });
         }
@@ -357,7 +357,106 @@ const updateApplicationStatus = async (req, res) => {
             }
         }
 
+        // ─── OTP-Based Staff Assignment Workflow for 'Assigned' / 'Shortlisted' / 'Hired' ────
+        let generatedStartOtp = null;
+        let generatedEndOtp = null;
+
+        if ((status === 'Assigned' || status === 'Shortlisted' || status === 'Hired') && existingApp.job) {
+            const Job = require('../models/Job');
+            const job = await Job.findById(existingApp.job._id || existingApp.job);
+            const isDailyOrParty = job && (
+                job.jobCategory === 'daily' || job.jobCategory === 'party' || 
+                job.bookingType === 'daily' || job.bookingType === 'party' || 
+                (job.staffRequirements && Array.isArray(job.staffRequirements) && job.staffRequirements.length > 0)
+            );
+
+            if (job && (status === 'Assigned' || isDailyOrParty)) {
+                const candidateId = existingApp.candidate?._id || existingApp.candidate;
+                const Candidate = require('../models/Candidate');
+                const candidateDoc = await Candidate.findById(candidateId);
+
+                if (!job.assignedStaff) job.assignedStaff = [];
+                let staffEntry = job.assignedStaff.find(s => s.candidate?.toString() === candidateId.toString());
+
+                if (!staffEntry) {
+                    generatedStartOtp = Math.floor(100000 + Math.random() * 900000).toString();
+                    generatedEndOtp = Math.floor(100000 + Math.random() * 900000).toString();
+
+                    const assignedRole = req.body.role || existingApp.appliedRole || existingApp.applicationData?.role || job.staffRequirements?.[0]?.role || candidateDoc?.jobPreference?.jobPositions?.[0] || 'Staff';
+                    const expStr = candidateDoc?.jobPreference?.experience
+                        ? `${candidateDoc.jobPreference.experience.value || ''} ${candidateDoc.jobPreference.experience.unit || 'years'}`
+                        : '';
+
+                    staffEntry = {
+                        candidate: candidateId,
+                        name: candidateDoc?.name || existingApp.candidateName || 'Staff',
+                        role: assignedRole,
+                        phone: candidateDoc?.phone || existingApp.candidatePhone || '',
+                        experience: expStr,
+                        startOtp: generatedStartOtp,
+                        endOtp: generatedEndOtp,
+                        status: 'Assigned'
+                    };
+
+                    job.assignedStaff.push(staffEntry);
+                    job.status = 'Assigned';
+                    if (!job.startOtp) job.startOtp = generatedStartOtp;
+                    if (!job.endOtp) job.endOtp = generatedEndOtp;
+
+                    await job.save();
+
+                    // Send push notifications
+                    try {
+                        const notificationController = require('./notificationController');
+                        await notificationController.sendNotificationToUser({
+                            userId: candidateId,
+                            userModel: 'Candidate',
+                            title: '🎉 You are Assigned!',
+                            message: `You have been assigned as ${assignedRole} for "${job.title}". Your Start OTP: ${generatedStartOtp}`,
+                            type: 'job_assigned',
+                            relatedId: job._id,
+                            relatedModel: 'Job',
+                            actionUrl: '/bookings'
+                        }).catch(() => {});
+
+                        let custUserId = job.createdBy;
+                        let custUserModel = job.creatorModel || 'User';
+                        if (job.customer) {
+                            const Customer = require('../models/Customer');
+                            const custDoc = await Customer.findById(job.customer);
+                            if (custDoc) {
+                                custUserId = custDoc.createdBy || custDoc._id;
+                                custUserModel = custDoc.creatorModel || 'User';
+                            }
+                        }
+                        if (custUserId) {
+                            await notificationController.sendNotificationToUser({
+                                userId: custUserId,
+                                userModel: custUserModel,
+                                title: '👨‍🍳 Staff Assigned!',
+                                message: `${candidateDoc?.name || 'Staff'} has been assigned as ${assignedRole} for "${job.title}". Start OTP: ${generatedStartOtp}, End OTP: ${generatedEndOtp}.`,
+                                type: 'job_assigned',
+                                relatedId: job._id,
+                                relatedModel: 'Job',
+                                actionUrl: '/bookings'
+                            }).catch(() => {});
+                        }
+                    } catch (notifErr) {
+                        console.error('Notification error in updateApplicationStatus:', notifErr.message);
+                    }
+                } else {
+                    generatedStartOtp = staffEntry.startOtp;
+                    generatedEndOtp = staffEntry.endOtp;
+                }
+            }
+        }
+
         const updateData = { status };
+        // For daily/party bookings, shortlisting assigns staff with OTP flow
+        if (generatedStartOtp) {
+            updateData.status = 'Assigned';
+        }
+        if (req.body.role) updateData.appliedRole = req.body.role;
         if (req.body.demoDate) updateData.demoDate = req.body.demoDate;
         if (req.body.demoTime) updateData.demoTime = req.body.demoTime;
         if (req.body.demoMenu) updateData.demoMenu = Array.isArray(req.body.demoMenu) ? req.body.demoMenu : [req.body.demoMenu];
@@ -380,6 +479,12 @@ const updateApplicationStatus = async (req, res) => {
             let notifMessage = '';
 
             switch (status) {
+                case 'Assigned':
+                    notifTitle = '🎉 You are Assigned!';
+                    notifMessage = generatedStartOtp
+                        ? `You have been assigned to "${application.job?.title}". Your Start OTP: ${generatedStartOtp}`
+                        : `You have been assigned to "${application.job?.title}".`;
+                    break;
                 case 'Shortlisted':
                     notifTitle = '🌟 Profile Shortlisted';
                     notifMessage = 'Your profile has been shortlisted by the employer.';
@@ -422,15 +527,17 @@ const updateApplicationStatus = async (req, res) => {
                 userModel: 'Candidate',
                 title: notifTitle,
                 message: notifMessage,
-                type: status === 'Hired' ? 'hired' : 'application_status',
+                type: (status === 'Hired' || status === 'Assigned') ? 'job_assigned' : 'application_status',
                 relatedId: application._id,
                 relatedModel: 'Application',
-                actionUrl: status === 'Hired' ? '/bookings' : '/applications'
+                actionUrl: (status === 'Hired' || status === 'Assigned') ? '/bookings' : '/applications'
             }).catch(err => console.error('Error sending application status update push notification:', err));
 
-            if (status === 'Shortlisted' || status === 'Hired') {
-                const customerTitle = status === 'Shortlisted' ? '🌟 Cook Shortlisted' : '🎉 Cook Hired';
-                const customerMessage = `"${application.candidate?.name || 'A candidate'}" has been ${status === 'Shortlisted' ? 'shortlisted' : 'hired'} for your job "${application.job?.title || 'hiring requirement'}".`;
+            if (status === 'Shortlisted' || status === 'Hired' || status === 'Assigned') {
+                const customerTitle = status === 'Shortlisted' ? '🌟 Cook Shortlisted' : '🎉 Staff Assigned';
+                const customerMessage = generatedStartOtp
+                    ? `"${application.candidate?.name || 'Staff'}" has been assigned for your job "${application.job?.title}". Start OTP: ${generatedStartOtp}, End OTP: ${generatedEndOtp}.`
+                    : `"${application.candidate?.name || 'A candidate'}" has been ${status.toLowerCase()} for your job "${application.job?.title || 'hiring requirement'}".`;
                 
                 notificationController.sendNotificationToUser({
                     userId: application.customer,
@@ -481,7 +588,9 @@ const updateApplicationStatus = async (req, res) => {
         res.status(200).json({
             success: true,
             message: `Application status updated to ${status}`,
-            application
+            application,
+            startOtp: generatedStartOtp,
+            endOtp: generatedEndOtp
         });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
