@@ -1896,28 +1896,33 @@ const startJobWithOtp = async (req, res) => {
             });
         } catch (_) {}
 
-        // Find the assigned staff entry for this candidate and OTP
+        // Find the assigned staff entry for this candidate and OTP (accept startOtp, or endOtp as fallback)
         let staffEntry = job.assignedStaff.find(s => {
             const candMatch = possibleCandIds.length > 0
                 ? possibleCandIds.includes(s.candidate?.toString())
                 : true;
-            return candMatch && s.startOtp?.toString().trim() === enteredOtp && (s.status === 'Assigned' || !s.status);
+            const otpMatch = (s.startOtp?.toString().trim() === enteredOtp) || (s.endOtp?.toString().trim() === enteredOtp);
+            return candMatch && otpMatch && (s.status === 'Assigned' || !s.status);
         });
 
         // Fallback: match by OTP among assigned staff
         if (!staffEntry) {
             staffEntry = job.assignedStaff.find(s => 
-                s.startOtp?.toString().trim() === enteredOtp && (s.status === 'Assigned' || !s.status)
+                ((s.startOtp?.toString().trim() === enteredOtp) || (s.endOtp?.toString().trim() === enteredOtp)) &&
+                (s.status === 'Assigned' || !s.status)
             );
         }
 
         // Job-level fallback
-        if (!staffEntry && job.startOtp && job.startOtp.toString().trim() === enteredOtp) {
+        if (!staffEntry && (
+            (job.startOtp && job.startOtp.toString().trim() === enteredOtp) ||
+            (job.endOtp && job.endOtp.toString().trim() === enteredOtp)
+        )) {
             staffEntry = job.assignedStaff.find(s => s.status === 'Assigned') || job.assignedStaff[0];
         }
 
         if (!staffEntry) {
-            return res.status(400).json({ success: false, message: 'Invalid OTP or job not in Assigned state' });
+            return res.status(400).json({ success: false, message: 'Invalid OTP. Please enter the correct OTP.' });
         }
 
         staffEntry.status = 'Started';
