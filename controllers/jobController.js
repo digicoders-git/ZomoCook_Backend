@@ -1637,7 +1637,7 @@ const createCommercialWebJob = async (req, res) => {
                 jobPosition: isParty ? 'Chef for Party' : (item.category || item.role || 'Chef'),
                 salaryRange: salaryRangeValue,
                 packageOrGuestOrVacancy: isParty ? `${computedGuests || 30} Guests` : `${item.count || 1} Staff`,
-                event: req.body.occasion || req.body.event || (targetCategory === 'daily' || isParty ? 'Party / Event' : undefined),
+                event: req.body.occasion || req.body.event || (isParty ? 'Party / Event' : undefined),
                 noOfGuests: (computedGuests > 0 ? String(computedGuests) : (req.body.noOfGuests ? String(req.body.noOfGuests) : undefined)),
                 staffRequirements: resolvedStaffRequirements,
                 eventDays: (req.body.eventDates && req.body.eventDates.length > 0) ? req.body.eventDates : (partyRequirement?.dates || rawDates),
