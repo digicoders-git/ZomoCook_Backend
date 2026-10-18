@@ -11,6 +11,19 @@ const getWebSettings = async (req, res) => {
         if (!settings) {
             // Create default settings if none exist
             settings = await WebSetting.create({});
+        } else if (!settings.dailyCharges || !settings.dailyCharges.partyCharges) {
+            if (!settings.dailyCharges) settings.dailyCharges = {};
+            settings.dailyCharges.partyCharges = {
+                perPersonCookingCharge: 65,
+                addOns: [
+                    { key: 'burnerStove', name: 'Commercial Burner / Stove Setup', description: 'High flame burner for bulk party cooking', rate: 350, isActive: true },
+                    { key: 'crockery', name: 'Crockery & Cutlery Rental Support', description: 'Serving platters, plates & cutlery arrangements', rate: 500, isActive: false },
+                    { key: 'kitchenCleaner', name: 'Kitchen Deep Cleaning Helper', description: 'Helper to clean counter & utensils after party', rate: 400, isActive: true },
+                    { key: 'waiterStaff', name: 'Waiter / Serving Staff', description: 'Professional waiter for serving guests', rate: 600, isActive: true }
+                ]
+            };
+            settings.markModified('dailyCharges');
+            await settings.save();
         }
         res.json({ success: true, settings });
     } catch (error) {

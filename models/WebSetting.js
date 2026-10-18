@@ -169,6 +169,18 @@ const WebSettingSchema = new mongoose.Schema({
       threeMealsRate: { type: Number, default: 1399 },
       guestRatePerDay: { type: Number, default: 65 }
     },
+    partyCharges: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {
+        perPersonCookingCharge: 65,
+        addOns: [
+          { key: 'burnerStove', name: 'Commercial Burner / Stove Setup', description: 'High flame burner for bulk party cooking', rate: 350, isActive: true },
+          { key: 'crockery', name: 'Crockery & Cutlery Rental Support', description: 'Serving platters, plates & cutlery arrangements', rate: 500, isActive: false },
+          { key: 'kitchenCleaner', name: 'Kitchen Deep Cleaning Helper', description: 'Helper to clean counter & utensils after party', rate: 400, isActive: true },
+          { key: 'waiterStaff', name: 'Waiter / Serving Staff', description: 'Professional waiter for serving guests', rate: 600, isActive: true }
+        ]
+      }
+    },
     advancePercentage: { type: Number, default: 25 },
     platformFeePercentage: { type: Number, default: 10 },
     gstPercentage: { type: Number, default: 18 }
