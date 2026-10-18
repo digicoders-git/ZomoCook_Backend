@@ -181,19 +181,32 @@ const updateBooking = async (req, res) => {
             notificationController.sendNotificationToUser({
                 userId: booking.customer._id,
                 userModel: 'User',
-                title: '👨‍🍳 Staff Assigned Successfully',
-                message: 'Staff assigned successfully. View details and contact information.',
+                title: 'Zomocook Partner Assigned! 👨‍🍳',
+                message: 'Great news! A Zomocook Partner has been assigned to your booking. Open the app to view the details.',
                 type: 'booking',
                 relatedId: booking._id,
                 relatedModel: 'Booking',
                 actionUrl: '/bookings'
             }).catch(err => console.error('Error sending staff assigned notification:', err));
-        }
 
-        // Notify cook about booking update
-        if (booking.cook) {
+            // Notify cook about assignment
+            const cookId = booking.cook?._id || booking.cook;
+            if (cookId) {
+                notificationController.sendNotificationToUser({
+                    userId: cookId,
+                    userModel: 'Candidate',
+                    title: '🔔 New Booking Assigned to You!',
+                    message: 'Great news! You have been assigned to a new booking through Zomocook. Open the app to view the booking details, date, time, location, and service requirements.',
+                    type: 'booking',
+                    relatedId: booking._id,
+                    relatedModel: 'Booking',
+                    actionUrl: '/bookings'
+                }).catch(err => console.error('Error sending cook assignment push notification:', err));
+            }
+        } else if (booking.cook) {
+            // Notify cook about booking update
             notificationController.sendNotificationToUser({
-                userId: booking.cook._id,
+                userId: booking.cook._id || booking.cook,
                 userModel: 'Candidate',
                 title: '📅 Booking Updated',
                 message: `Your booking for job "${booking.job?.title || 'Cooking'}" status has been updated to "${status || booking.status}".`,

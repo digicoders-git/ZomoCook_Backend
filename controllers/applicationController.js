@@ -411,8 +411,8 @@ const updateApplicationStatus = async (req, res) => {
                         await notificationController.sendNotificationToUser({
                             userId: candidateId,
                             userModel: 'Candidate',
-                            title: '🎉 You are Assigned!',
-                            message: `You have been assigned as ${assignedRole} for "${job.title}". Your Start OTP: ${generatedStartOtp}`,
+                            title: '🔔 New Booking Assigned to You!',
+                            message: 'Great news! You have been assigned to a new booking through Zomocook. Open the app to view the booking details, date, time, location, and service requirements.',
                             type: 'job_assigned',
                             relatedId: job._id,
                             relatedModel: 'Job',
@@ -433,8 +433,8 @@ const updateApplicationStatus = async (req, res) => {
                             await notificationController.sendNotificationToUser({
                                 userId: custUserId,
                                 userModel: custUserModel,
-                                title: '👨‍🍳 Staff Assigned!',
-                                message: `${candidateDoc?.name || 'Staff'} has been assigned as ${assignedRole} for "${job.title}". Start OTP: ${generatedStartOtp}, End OTP: ${generatedEndOtp}.`,
+                                title: 'Zomocook Partner Assigned! 👨‍🍳',
+                                message: 'Great news! A Zomocook Partner has been assigned to your booking. Open the app to view the details.',
                                 type: 'job_assigned',
                                 relatedId: job._id,
                                 relatedModel: 'Job',
@@ -480,10 +480,8 @@ const updateApplicationStatus = async (req, res) => {
 
             switch (status) {
                 case 'Assigned':
-                    notifTitle = '🎉 You are Assigned!';
-                    notifMessage = generatedStartOtp
-                        ? `You have been assigned to "${application.job?.title}". Your Start OTP: ${generatedStartOtp}`
-                        : `You have been assigned to "${application.job?.title}".`;
+                    notifTitle = '🔔 New Booking Assigned to You!';
+                    notifMessage = 'Great news! You have been assigned to a new booking through Zomocook. Open the app to view the booking details, date, time, location, and service requirements.';
                     break;
                 case 'Shortlisted':
                     notifTitle = '🌟 Profile Shortlisted';
@@ -534,10 +532,14 @@ const updateApplicationStatus = async (req, res) => {
             }).catch(err => console.error('Error sending application status update push notification:', err));
 
             if (status === 'Shortlisted' || status === 'Hired' || status === 'Assigned') {
-                const customerTitle = status === 'Shortlisted' ? '🌟 Cook Shortlisted' : '🎉 Staff Assigned';
-                const customerMessage = generatedStartOtp
-                    ? `"${application.candidate?.name || 'Staff'}" has been assigned for your job "${application.job?.title}". Start OTP: ${generatedStartOtp}, End OTP: ${generatedEndOtp}.`
-                    : `"${application.candidate?.name || 'A candidate'}" has been ${status.toLowerCase()} for your job "${application.job?.title || 'hiring requirement'}".`;
+                const customerTitle = status === 'Assigned'
+                    ? 'Zomocook Partner Assigned! 👨‍🍳'
+                    : (status === 'Shortlisted' ? '🌟 Cook Shortlisted' : '🎉 Staff Assigned');
+                const customerMessage = status === 'Assigned'
+                    ? 'Great news! A Zomocook Partner has been assigned to your booking. Open the app to view the details.'
+                    : (generatedStartOtp
+                        ? `"${application.candidate?.name || 'Staff'}" has been assigned for your job "${application.job?.title}". Start OTP: ${generatedStartOtp}, End OTP: ${generatedEndOtp}.`
+                        : `"${application.candidate?.name || 'A candidate'}" has been ${status.toLowerCase()} for your job "${application.job?.title || 'hiring requirement'}".`);
                 
                 notificationController.sendNotificationToUser({
                     userId: application.customer,

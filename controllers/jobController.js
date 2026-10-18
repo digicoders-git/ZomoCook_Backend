@@ -693,7 +693,7 @@ const updateJob = async (req, res) => {
             }
         }
 
-        // Send push notification to customer when chef/staff is assigned
+        // Send push notification to customer and cook when chef/staff is assigned
         if (wasNotAssigned && isNowAssigned) {
             let jobPosterId = job.createdBy;
             let jobPosterModel = job.creatorModel || 'User';
@@ -710,13 +710,33 @@ const updateJob = async (req, res) => {
                 notificationController.sendNotificationToUser({
                     userId: jobPosterId,
                     userModel: jobPosterModel,
-                    title: '👨‍🍳 Chef Assigned!',
-                    message: `Chef / Staff has been assigned for your booking "${job.title || job.jobCode || 'requirement'}". You can now view chef details and share Start OTP in your app.`,
+                    title: 'Zomocook Partner Assigned! 👨‍🍳',
+                    message: 'Great news! A Zomocook Partner has been assigned to your booking. Open the app to view the details.',
                     type: 'candidate_assigned',
                     relatedId: job._id,
                     relatedModel: 'Job',
                     actionUrl: '/bookings'
                 }).catch(err => console.error('Error sending chef assigned push notification to customer:', err));
+            }
+
+            // Also notify assigned cook(s)
+            if (job.assignedStaff && job.assignedStaff.length > 0) {
+                const notificationController = require('./notificationController');
+                for (const staff of job.assignedStaff) {
+                    const cId = staff.candidate?._id || staff.candidate;
+                    if (cId) {
+                        notificationController.sendNotificationToUser({
+                            userId: cId,
+                            userModel: 'Candidate',
+                            title: '🔔 New Booking Assigned to You!',
+                            message: 'Great news! You have been assigned to a new booking through Zomocook. Open the app to view the booking details, date, time, location, and service requirements.',
+                            type: 'job_assigned',
+                            relatedId: job._id,
+                            relatedModel: 'Job',
+                            actionUrl: '/bookings'
+                        }).catch(err => console.error('Error sending booking assigned notification to cook:', err));
+                    }
+                }
             }
         }
 
@@ -859,13 +879,32 @@ const updateJobStatus = async (req, res) => {
                     notificationController.sendNotificationToUser({
                         userId: jobPosterId,
                         userModel: jobPosterModel,
-                        title: '👨‍🍳 Chef Assigned!',
-                        message: `Chef / Staff has been assigned for your booking "${job.title || job.jobCode || 'requirement'}". You can now view chef details and share Start OTP in your app.`,
+                        title: 'Zomocook Partner Assigned! 👨‍🍳',
+                        message: 'Great news! A Zomocook Partner has been assigned to your booking. Open the app to view the details.',
                         type: 'candidate_assigned',
                         relatedId: job._id,
                         relatedModel: 'Job',
                         actionUrl: '/bookings'
                     }).catch(err => console.error('Error sending chef assigned push notification to customer:', err));
+
+                    // Also notify assigned cook(s)
+                    if (job.assignedStaff && job.assignedStaff.length > 0) {
+                        for (const staff of job.assignedStaff) {
+                            const cId = staff.candidate?._id || staff.candidate;
+                            if (cId) {
+                                notificationController.sendNotificationToUser({
+                                    userId: cId,
+                                    userModel: 'Candidate',
+                                    title: '🔔 New Booking Assigned to You!',
+                                    message: 'Great news! You have been assigned to a new booking through Zomocook. Open the app to view the booking details, date, time, location, and service requirements.',
+                                    type: 'job_assigned',
+                                    relatedId: job._id,
+                                    relatedModel: 'Job',
+                                    actionUrl: '/bookings'
+                                }).catch(err => console.error('Error sending booking assigned notification to cook:', err));
+                            }
+                        }
+                    }
                 } else {
                     const statusEmoji = {
                         'Active': '✅', 'New': '🆕', 'Urgent': '🚨', 'Open': '🔓',
@@ -1843,19 +1882,19 @@ const assignStaffToJob = async (req, res) => {
         // Send notifications
         try {
             const notificationController = require('./notificationController');
-            // Notify cook with Start OTP
+            // Notify cook
             await notificationController.sendNotificationToUser({
                 userId: candidateId,
                 userModel: 'Candidate',
-                title: '🎉 You are Assigned!',
-                message: `You have been assigned as ${role || 'Staff'} for "${job.title}" in ${job.city || 'your area'}. Your Start OTP: ${startOtp}`,
+                title: '🔔 New Booking Assigned to You!',
+                message: 'Great news! You have been assigned to a new booking through Zomocook. Open the app to view the booking details, date, time, location, and service requirements.',
                 type: 'job_assigned',
                 relatedId: job._id,
                 relatedModel: 'Job',
                 actionUrl: '/bookings'
             }).catch(() => {});
 
-            // Also notify customer about assignment with Start & End OTP
+            // Also notify customer about assignment
             let custUserId = job.createdBy;
             let custUserModel = job.creatorModel || 'User';
             if (job.customer) {
@@ -1870,8 +1909,8 @@ const assignStaffToJob = async (req, res) => {
                 await notificationController.sendNotificationToUser({
                     userId: custUserId,
                     userModel: custUserModel,
-                    title: '👨‍🍳 Staff Assigned!',
-                    message: `${name} has been assigned as ${role || 'Staff'} for "${job.title}". Start OTP: ${startOtp}, End OTP: ${endOtp}.`,
+                    title: 'Zomocook Partner Assigned! 👨‍🍳',
+                    message: 'Great news! A Zomocook Partner has been assigned to your booking. Open the app to view the details.',
                     type: 'job_assigned',
                     relatedId: job._id,
                     relatedModel: 'Job',
