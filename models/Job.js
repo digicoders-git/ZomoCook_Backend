@@ -254,6 +254,10 @@ const jobSchema = new mongoose.Schema({
   },
   advanceAmount: { type: Number, default: 0 },
   jobPostFee: { type: Number, default: 0 },
+  isRemainingPaid: { type: Boolean, default: false },
+  remainingPaid: { type: Boolean, default: false },
+  remainingPaymentMethod: { type: String, default: '' },
+  remainingPaidAt: { type: Date },
   assignedStaff: [{
     candidate: { type: mongoose.Schema.Types.ObjectId, ref: 'Candidate' },
     name: String,

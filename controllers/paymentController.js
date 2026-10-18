@@ -463,8 +463,27 @@ const verifyPayment = async (req, res) => {
             }
 
             message = type === 'daily_job_advance' ? 'Advance paid and Plan activated. Daily job is now live.' : 'Job post fee paid. Job is now live.';
-        } else if (type === 'daily_job_remaining' && jobId) {
-            message = 'Remaining 75% payment verified successfully. You can now hire the candidate.';
+        } else if ((type === 'daily_job_remaining' || type === 'party_job_remaining' || type === 'job_remaining') && jobId) {
+            const Job = require('../models/Job');
+            const jobDoc = await Job.findById(jobId);
+            if (jobDoc) {
+                jobDoc.isRemainingPaid = true;
+                jobDoc.remainingPaid = true;
+                jobDoc.paymentStatus = 'paid';
+                jobDoc.remainingPaymentMethod = 'cashfree';
+                jobDoc.remainingPaidAt = new Date();
+                if (!jobDoc.pricing) jobDoc.pricing = {};
+                if (typeof jobDoc.pricing === 'object') {
+                    jobDoc.pricing.isRemainingPaid = true;
+                    jobDoc.pricing.remainingPaid = true;
+                    jobDoc.pricing.duePaid = true;
+                    jobDoc.pricing.dueAmount = 0;
+                    jobDoc.pricing.duePay = 0;
+                }
+                jobDoc.markModified('pricing');
+                await jobDoc.save();
+            }
+            message = 'Remaining balance payment verified successfully.';
         }
 
         res.status(200).json({ success: true, message, paymentId: targetPaymentId, orderId: targetOrderId });

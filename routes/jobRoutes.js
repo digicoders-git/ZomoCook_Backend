@@ -14,6 +14,7 @@ const {
     applyForJob,
     resendJobNotification,
     completePayment,
+    completeRemainingPayment,
     createCommercialWebJob,
     assignStaffToJob,
     startJobWithOtp,
@@ -61,6 +62,7 @@ router.patch('/:id/status', protect, toggleJobStatus);
 router.patch('/:id/status-string', protect, updateJobStatus);
 router.post('/:id/resend-notification', protect, resendJobNotification);
 router.post('/:id/complete-payment', protect, completePayment);
+router.post('/:id/pay-remaining', protect, completeRemainingPayment);
 
 // ─── OTP-Based Job Lifecycle Routes ────────────────────────────────────────
 router.post('/:id/assign-staff', protect, assignStaffToJob);

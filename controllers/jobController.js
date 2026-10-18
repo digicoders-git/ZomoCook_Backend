@@ -580,6 +580,23 @@ const updateJob = async (req, res) => {
         const wasNotPaid = job.paymentStatus !== 'paid';
         const isNowPaid = req.body.paymentStatus === 'paid';
 
+        if (req.body.isRemainingPaid === true || req.body.remainingPaid === true) {
+            req.body.isRemainingPaid = true;
+            req.body.remainingPaid = true;
+            req.body.remainingPaidAt = new Date();
+            const existingPricing = (job.pricing && typeof job.pricing === 'object') ? job.pricing : {};
+            const incomingPricing = (req.body.pricing && typeof req.body.pricing === 'object') ? req.body.pricing : {};
+            req.body.pricing = {
+                ...existingPricing,
+                ...incomingPricing,
+                isRemainingPaid: true,
+                remainingPaid: true,
+                duePaid: true,
+                dueAmount: 0,
+                duePay: 0
+            };
+        }
+
         if (wasNotPaid && isNowPaid) {
             req.body.paymentStatus = 'paid';
             req.body.isActive = true;
@@ -1599,7 +1616,7 @@ const createCommercialWebJob = async (req, res) => {
                 if (isParty) {
                     const totalEst = pricing?.total || pricing?.staffCharges || 1999;
                     const days = rawDates.length || 1;
-                    return days > 1 ? `₹${Math.round(totalEst / days)}/day (Total: ₹${totalEst})` : `₹${totalEst} (Party Event)`;
+                    return days > 1 ? `₹${Math.round(totalEst / days)}/day (Total: ₹${totalEst})` : `₹${totalEst}`;
                 }
                 if (targetCategory === 'daily' && staffList && staffList.length > 0) {
                     const rates = staffList.map(s => Number(s.ratePerDay || s.rate || s.salary || 0)).filter(r => r > 0);
@@ -2171,11 +2188,79 @@ const getAssignedStaff = async (req, res) => {
     }
 };
 
+/**
+ * @desc    Complete remaining payment for a job (online or manual/cash)
+ * @route   POST /api/jobs/:id/pay-remaining
+ * @access  Private
+ */
+const completeRemainingPayment = async (req, res) => {
+    try {
+        const jobId = req.params.id;
+        const job = await Job.findById(jobId);
+        if (!job) {
+            return res.status(404).json({ success: false, message: 'Job not found' });
+        }
+
+        const paymentMethod = req.body.paymentMethod || 'online';
+        const amount = Number(req.body.amount) || (job.pricing?.dueAmount || job.pricing?.duePay || 0);
+
+        job.isRemainingPaid = true;
+        job.remainingPaid = true;
+        job.remainingPaymentMethod = paymentMethod;
+        job.remainingPaidAt = new Date();
+
+        if (!job.pricing) job.pricing = {};
+        if (typeof job.pricing === 'object') {
+            job.pricing.isRemainingPaid = true;
+            job.pricing.remainingPaid = true;
+            job.pricing.duePaid = true;
+            job.pricing.dueAmount = 0;
+            job.pricing.duePay = 0;
+        }
+        job.markModified('pricing');
+        await job.save();
+
+        // Create transaction log
+        try {
+            const Transaction = require('../models/Transaction');
+            const adminUser = req.admin || req.user;
+            const isCustomer = adminUser && adminUser.constructor && adminUser.constructor.modelName === 'Customer';
+            const txnData = {
+                type: 'daily_job_remaining',
+                amount: amount > 0 ? amount : 0,
+                status: 'success',
+                relatedJob: jobId,
+                razorpayOrderId: req.body.orderId || ('REMAINING_' + Date.now()),
+                razorpayPaymentId: req.body.paymentId || ('PAY_' + Date.now()),
+                description: `Remaining payment (${paymentMethod}) marked for: ${job.title}`
+            };
+            if (isCustomer) {
+                txnData.customer = adminUser._id;
+            } else if (adminUser) {
+                txnData.user = adminUser._id;
+            }
+            await Transaction.create(txnData);
+        } catch (txnErr) {
+            console.error('Error logging remaining payment transaction:', txnErr.message);
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Remaining payment completed successfully',
+            job
+        });
+    } catch (error) {
+        console.error('completeRemainingPayment error:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
 module.exports = {
     ...oldExports,
     applyForJob,
     resendJobNotification,
     completePayment,
+    completeRemainingPayment,
     createCommercialWebJob,
     assignStaffToJob,
     startJobWithOtp,
