@@ -16,7 +16,7 @@ const notificationSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['job_available', 'application_status', 'demo_scheduled', 'hired', 'booking', 'rating', 'profile', 'profile_status', 'offer', 'package_upgrade', 'job_status', 'system'],
+    trim: true,
     default: 'system'
   },
   relatedId: {

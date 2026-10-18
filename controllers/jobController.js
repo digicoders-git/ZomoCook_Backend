@@ -199,11 +199,36 @@ const createJob = async (req, res) => {
         if (!jobData.dateOfEvent || jobData.dateOfEvent === '' || jobData.dateOfEvent === 'null') {
             delete jobData.dateOfEvent;
         }
-        if (jobData.latitude === '' || jobData.latitude === null || isNaN(jobData.latitude)) {
-            delete jobData.latitude;
+        if (jobData.latitude !== undefined && jobData.latitude !== null && jobData.latitude !== '') {
+            const parsedLat = parseFloat(jobData.latitude);
+            if (!isNaN(parsedLat)) jobData.latitude = parsedLat;
+            else delete jobData.latitude;
         }
-        if (jobData.longitude === '' || jobData.longitude === null || isNaN(jobData.longitude)) {
-            delete jobData.longitude;
+        if (jobData.longitude !== undefined && jobData.longitude !== null && jobData.longitude !== '') {
+            const parsedLng = parseFloat(jobData.longitude);
+            if (!isNaN(parsedLng)) jobData.longitude = parsedLng;
+            else delete jobData.longitude;
+        }
+
+        // If coordinates not provided, try geocoding fallback from address + city
+        if ((!jobData.latitude || !jobData.longitude) && (jobData.address || jobData.city)) {
+            try {
+                const queryAddr = `${jobData.address || ''}, ${jobData.city || ''}`.trim();
+                const apiKey = process.env.GOOGLE_MAPS_API_KEY || 'AIzaSyBEss4wpsQ0o9WPBjDgHsSByUzFuo2oSNE';
+                const geoRes = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(queryAddr)}&key=${apiKey}`);
+                if (geoRes.ok) {
+                    const geoData = await geoRes.json();
+                    if (geoData.status === 'OK' && geoData.results && geoData.results.length > 0) {
+                        const loc = geoData.results[0].geometry?.location;
+                        if (loc && loc.lat && loc.lng) {
+                            jobData.latitude = loc.lat;
+                            jobData.longitude = loc.lng;
+                        }
+                    }
+                }
+            } catch (geoErr) {
+                console.error('[Geocoding Fallback] Error:', geoErr.message);
+            }
         }
 
         const job = await Job.create(jobData);
@@ -610,6 +635,61 @@ const updateJob = async (req, res) => {
             new: true,
             runValidators: true
         });
+
+        // Send notification to Cook and Customer if staff was assigned or status transitioned to Assigned
+        if (wasNotAssigned && isNowAssigned) {
+            try {
+                const notificationController = require('./notificationController');
+                // 1. Notify assigned cooks
+                if (job.assignedStaff && job.assignedStaff.length > 0) {
+                    for (const staff of job.assignedStaff) {
+                        const cId = staff.candidate?._id || staff.candidate;
+                        if (cId) {
+                            await notificationController.sendNotificationToUser({
+                                userId: cId,
+                                userModel: 'Candidate',
+                                title: '🔔 New Booking Assigned to You!',
+                                message: 'Great news! You have been assigned to a new booking through Zomocook. Open the app to view the booking details, date, time, location, and service requirements.',
+                                type: 'job_assigned',
+                                relatedId: job._id,
+                                relatedModel: 'Job',
+                                actionUrl: '/bookings',
+                                phone: staff.phone
+                            }).catch(() => {});
+                        }
+                    }
+                }
+
+                // 2. Notify customer
+                let custUserId = job.createdBy;
+                let custUserModel = job.creatorModel || 'User';
+                let custPhone = job.contactPhone || job.phone;
+                if (job.customer) {
+                    const Customer = require('../models/Customer');
+                    const custDoc = await Customer.findById(job.customer);
+                    if (custDoc) {
+                        custUserId = custDoc.createdBy || custDoc._id || custUserId;
+                        custUserModel = custDoc.createdBy ? 'User' : 'Customer';
+                        custPhone = custDoc.contactPhone || custDoc.phone || custPhone;
+                    }
+                }
+                if (custUserId || custPhone) {
+                    await notificationController.sendNotificationToUser({
+                        userId: custUserId,
+                        userModel: custUserModel,
+                        title: 'Zomocook Partner Assigned! 👨‍🍳',
+                        message: 'Great news! A Zomocook Partner has been assigned to your booking. Open the app to view the details.',
+                        type: 'job_assigned',
+                        relatedId: job._id,
+                        relatedModel: 'Job',
+                        actionUrl: '/bookings',
+                        phone: custPhone
+                    }).catch(() => {});
+                }
+            } catch (assignNotifErr) {
+                console.error('Error sending assigned notification in updateJob:', assignNotifErr.message);
+            }
+        }
 
         // Send push notification to all cooks if payment status just transitioned to 'paid'
         if (wasNotPaid && isNowPaid) {
@@ -1672,6 +1752,29 @@ const createCommercialWebJob = async (req, res) => {
             const requiresAdvance = (pricing?.advance && pricing.advance > 0) || isParty || targetCategory === 'daily';
             const isPaymentPending = !isAdvancePaid && requiresAdvance;
 
+            let jobLat = (req.body.latitude !== undefined && req.body.latitude !== null && !isNaN(req.body.latitude)) ? parseFloat(req.body.latitude) : undefined;
+            let jobLng = (req.body.longitude !== undefined && req.body.longitude !== null && !isNaN(req.body.longitude)) ? parseFloat(req.body.longitude) : undefined;
+
+            if ((!jobLat || !jobLng) && (address || req.body.venueAddress || req.body.city || city)) {
+                try {
+                    const queryAddr = `${address || req.body.venueAddress || ''}, ${req.body.city || city || 'Lucknow'}`.trim();
+                    const apiKey = process.env.GOOGLE_MAPS_API_KEY || 'AIzaSyBEss4wpsQ0o9WPBjDgHsSByUzFuo2oSNE';
+                    const geoRes = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(queryAddr)}&key=${apiKey}`);
+                    if (geoRes.ok) {
+                        const geoData = await geoRes.json();
+                        if (geoData.status === 'OK' && geoData.results && geoData.results.length > 0) {
+                            const loc = geoData.results[0].geometry?.location;
+                            if (loc && loc.lat && loc.lng) {
+                                jobLat = loc.lat;
+                                jobLng = loc.lng;
+                            }
+                        }
+                    }
+                } catch (geoErr) {
+                    console.error('[Geocoding Fallback in createCommercialWebJob] Error:', geoErr.message);
+                }
+            }
+
             const newJob = await Job.create({
                 jobCategory: isParty ? 'party' : targetCategory,
                 jobCode,
@@ -1682,6 +1785,8 @@ const createCommercialWebJob = async (req, res) => {
                 city: req.body.city || city || 'Lucknow',
                 address: address || '',
                 venueAddress: req.body.venueAddress || address || '',
+                latitude: jobLat,
+                longitude: jobLng,
                 email: email || (customer && customer.email) || (user && user.email) || '',
                 outletName: outletName || '',
                 hiringPurpose: req.body.hiringPurpose ? req.body.hiringPurpose.toLowerCase() : ((req.body.bookingType || '').toLowerCase() === 'commercial' ? 'commercial' : 'domestic'),
@@ -1882,7 +1987,7 @@ const assignStaffToJob = async (req, res) => {
         // Send notifications
         try {
             const notificationController = require('./notificationController');
-            // Notify cook
+            // 1. Notify cook
             await notificationController.sendNotificationToUser({
                 userId: candidateId,
                 userModel: 'Candidate',
@@ -1891,21 +1996,24 @@ const assignStaffToJob = async (req, res) => {
                 type: 'job_assigned',
                 relatedId: job._id,
                 relatedModel: 'Job',
-                actionUrl: '/bookings'
-            }).catch(() => {});
+                actionUrl: '/bookings',
+                phone: phone
+            });
 
-            // Also notify customer about assignment
+            // 2. Also notify customer about assignment
             let custUserId = job.createdBy;
             let custUserModel = job.creatorModel || 'User';
+            let custPhone = job.contactPhone || job.phone;
             if (job.customer) {
                 const Customer = require('../models/Customer');
-                const custDoc = await Customer.findById(job.customer).populate('createdBy');
+                const custDoc = await Customer.findById(job.customer);
                 if (custDoc) {
-                    custUserId = custDoc.createdBy || custDoc._id;
-                    custUserModel = custDoc.creatorModel || 'User';
+                    custUserId = custDoc.createdBy || custDoc._id || custUserId;
+                    custUserModel = custDoc.createdBy ? 'User' : 'Customer';
+                    custPhone = custDoc.contactPhone || custDoc.phone || custPhone;
                 }
             }
-            if (custUserId) {
+            if (custUserId || custPhone) {
                 await notificationController.sendNotificationToUser({
                     userId: custUserId,
                     userModel: custUserModel,
@@ -1914,8 +2022,9 @@ const assignStaffToJob = async (req, res) => {
                     type: 'job_assigned',
                     relatedId: job._id,
                     relatedModel: 'Job',
-                    actionUrl: '/bookings'
-                }).catch(() => {});
+                    actionUrl: '/bookings',
+                    phone: custPhone
+                });
             }
         } catch (notifErr) {
             console.error('Notification error in assignStaffToJob:', notifErr.message);
@@ -2130,8 +2239,26 @@ const completeJobWithOtp = async (req, res) => {
         // Check if all staff completed
         const allCompleted = job.assignedStaff.every(s => s.status === 'Completed');
         if (allCompleted) {
-            job.status = 'Closed';
+            job.status = 'Completed';
             job.jobCompletedAt = new Date();
+        }
+
+        // If cook indicated payment received during completion
+        if (req.body.paymentReceived === true || req.body.paymentReceived === 'yes' || req.body.paymentMode) {
+            job.isRemainingPaid = true;
+            job.remainingPaid = true;
+            job.remainingPaymentMethod = req.body.paymentMode || 'cash';
+            job.remainingPaidAt = new Date();
+            job.paymentStatus = 'paid';
+            if (!job.pricing) job.pricing = {};
+            if (typeof job.pricing === 'object') {
+                job.pricing.isRemainingPaid = true;
+                job.pricing.remainingPaid = true;
+                job.pricing.duePaid = true;
+                job.pricing.dueAmount = 0;
+                job.pricing.duePay = 0;
+            }
+            job.markModified('pricing');
         }
 
         await job.save();
@@ -2247,6 +2374,10 @@ const completeRemainingPayment = async (req, res) => {
         job.remainingPaid = true;
         job.remainingPaymentMethod = paymentMethod;
         job.remainingPaidAt = new Date();
+        job.paymentStatus = 'paid';
+        if (job.status === 'Assigned' || job.status === 'Started' || job.status === 'In Progress' || job.status === 'Closed') {
+            job.status = 'Completed';
+        }
 
         if (!job.pricing) job.pricing = {};
         if (typeof job.pricing === 'object') {
@@ -2257,7 +2388,21 @@ const completeRemainingPayment = async (req, res) => {
             job.pricing.duePay = 0;
         }
         job.markModified('pricing');
+
+        if (job.assignedStaff && job.assignedStaff.length > 0) {
+            job.assignedStaff.forEach(s => {
+                if (s.status !== 'Cancelled') {
+                    s.status = 'Completed';
+                    if (!s.completedAt) s.completedAt = new Date();
+                }
+            });
+        }
         await job.save();
+
+        try {
+            const Application = require('../models/Application');
+            await Application.updateMany({ job: job._id }, { status: 'Completed' });
+        } catch (_) {}
 
         // Create transaction log
         try {

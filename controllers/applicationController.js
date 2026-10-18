@@ -416,20 +416,23 @@ const updateApplicationStatus = async (req, res) => {
                             type: 'job_assigned',
                             relatedId: job._id,
                             relatedModel: 'Job',
-                            actionUrl: '/bookings'
-                        }).catch(() => {});
+                            actionUrl: '/bookings',
+                            phone: candidateDoc?.phone
+                        });
 
                         let custUserId = job.createdBy;
                         let custUserModel = job.creatorModel || 'User';
+                        let custPhone = job.contactPhone || job.phone;
                         if (job.customer) {
                             const Customer = require('../models/Customer');
                             const custDoc = await Customer.findById(job.customer);
                             if (custDoc) {
-                                custUserId = custDoc.createdBy || custDoc._id;
-                                custUserModel = custDoc.creatorModel || 'User';
+                                custUserId = custDoc.createdBy || custDoc._id || custUserId;
+                                custUserModel = custDoc.createdBy ? 'User' : 'Customer';
+                                custPhone = custDoc.contactPhone || custDoc.phone || custPhone;
                             }
                         }
-                        if (custUserId) {
+                        if (custUserId || custPhone) {
                             await notificationController.sendNotificationToUser({
                                 userId: custUserId,
                                 userModel: custUserModel,
@@ -438,8 +441,9 @@ const updateApplicationStatus = async (req, res) => {
                                 type: 'job_assigned',
                                 relatedId: job._id,
                                 relatedModel: 'Job',
-                                actionUrl: '/bookings'
-                            }).catch(() => {});
+                                actionUrl: '/bookings',
+                                phone: custPhone
+                            });
                         }
                     } catch (notifErr) {
                         console.error('Notification error in updateApplicationStatus:', notifErr.message);

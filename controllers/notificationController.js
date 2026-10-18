@@ -347,122 +347,150 @@ exports.sendNotificationToUser = async ({
     userModel = 'User',
     title,
     message,
-    type,
+    type = 'system',
     relatedId,
-    relatedModel,
-    actionUrl
+    relatedModel = 'Job',
+    actionUrl = '/bookings',
+    phone
 }) => {
     try {
-        let resolvedRecipientId = userId;
+        const rawId = (userId && typeof userId === 'object' && userId._id) ? userId._id : userId;
+        let resolvedRecipientId = rawId;
         let resolvedRecipientModel = userModel;
-        let recipientDoc;
+        const tokens = new Set();
 
-        if (userModel === 'Admin') {
-            recipientDoc = await Admin.findById(userId).select('fcmToken');
-        } else if (userModel === 'Candidate') {
-            const Candidate = require('../models/Candidate');
-            let candidateDoc = await Candidate.findById(userId);
-            if (!candidateDoc) {
-                candidateDoc = await Candidate.findOne({ createdBy: userId });
-            }
-            if (candidateDoc && candidateDoc.phone) {
-                const last10 = candidateDoc.phone.replace(/\D/g, '').slice(-10);
-                recipientDoc = await User.findOne({ phone: new RegExp(last10 + '$') }).select('fcmToken');
-                if (recipientDoc) {
-                    resolvedRecipientId = recipientDoc._id;
-                    resolvedRecipientModel = 'User';
-                }
-                if (!recipientDoc?.fcmToken && candidateDoc.fcmToken) {
-                    recipientDoc = candidateDoc;
-                }
-            } else if (candidateDoc && candidateDoc.fcmToken) {
-                recipientDoc = candidateDoc;
-            }
-        } else if (userModel === 'Customer') {
-            const Customer = require('../models/Customer');
-            const custDoc = await Customer.findById(userId);
-            if (custDoc) {
-                if (custDoc.createdBy) {
-                    resolvedRecipientId = custDoc.createdBy;
-                    resolvedRecipientModel = 'User';
-                    recipientDoc = await User.findById(custDoc.createdBy).select('fcmToken phone');
-                }
-                if (!recipientDoc && custDoc.contactPhone) {
-                    const last10 = custDoc.contactPhone.replace(/\D/g, '').slice(-10);
-                    recipientDoc = await User.findOne({ phone: new RegExp(last10 + '$') }).select('fcmToken');
-                    if (recipientDoc) {
-                        resolvedRecipientId = recipientDoc._id;
-                        resolvedRecipientModel = 'User';
-                    }
-                }
-            }
-        } else {
-            recipientDoc = await User.findById(userId).select('fcmToken phone');
-            if (!recipientDoc) {
-                const Customer = require('../models/Customer');
-                const custDoc = await Customer.findById(userId);
-                if (custDoc && custDoc.createdBy) {
-                    recipientDoc = await User.findById(custDoc.createdBy).select('fcmToken phone');
-                    if (recipientDoc) {
-                        resolvedRecipientId = recipientDoc._id;
-                    }
-                }
-            }
-            if (!recipientDoc?.fcmToken) {
-                const Candidate = require('../models/Candidate');
-                let candidateDoc = null;
-                if (recipientDoc?.phone) {
-                    const last10 = recipientDoc.phone.replace(/\D/g, '').slice(-10);
-                    candidateDoc = await Candidate.findOne({ phone: new RegExp(last10 + '$') }).select('fcmToken');
-                }
-                if (!candidateDoc) {
-                    candidateDoc = await Candidate.findOne({ createdBy: userId }).select('fcmToken');
-                }
-                if (candidateDoc?.fcmToken) {
-                    recipientDoc = candidateDoc;
-                }
+        const Candidate = require('../models/Candidate');
+        const Customer = require('../models/Customer');
+        const User = require('../models/User');
+
+        let candidateDoc = null;
+        let customerDoc = null;
+        let userDoc = null;
+
+        // 1. Try finding directly by rawId
+        if (rawId) {
+            if (userModel === 'Admin') {
+                const adminDoc = await Admin.findById(rawId).select('fcmToken');
+                if (adminDoc?.fcmToken) tokens.add(adminDoc.fcmToken);
+            } else {
+                userDoc = await User.findById(rawId).select('fcmToken phone role');
+                if (userDoc?.fcmToken) tokens.add(userDoc.fcmToken);
+
+                candidateDoc = await Candidate.findById(rawId).select('fcmToken phone createdBy');
+                if (candidateDoc?.fcmToken) tokens.add(candidateDoc.fcmToken);
+
+                customerDoc = await Customer.findById(rawId).select('fcmToken contactPhone phone createdBy');
+                if (customerDoc?.fcmToken) tokens.add(customerDoc.fcmToken);
             }
         }
 
-        const notification = await Notification.create({
-            title,
-            message,
-            type,
-            relatedId,
-            relatedModel,
-            actionUrl,
-            target: 'all',
-            recipient: resolvedRecipientId,
-            recipientModel: resolvedRecipientModel,
-            status: 'active'
-        });
+        // 2. Cross-reference phone number if available
+        let targetPhone = phone || userDoc?.phone || candidateDoc?.phone || customerDoc?.contactPhone || customerDoc?.phone;
+        if (targetPhone) {
+            const last10 = String(targetPhone).replace(/\D/g, '').slice(-10);
+            if (last10) {
+                const phoneRegex = new RegExp(last10 + '$');
+                const [matchedUsers, matchedCandidates, matchedCustomers] = await Promise.all([
+                    User.find({ phone: phoneRegex }).select('_id fcmToken'),
+                    Candidate.find({ phone: phoneRegex }).select('_id fcmToken createdBy'),
+                    Customer.find({ $or: [{ contactPhone: phoneRegex }, { phone: phoneRegex }] }).select('_id fcmToken createdBy')
+                ]);
 
+                matchedUsers.forEach(u => {
+                    if (u.fcmToken) tokens.add(u.fcmToken);
+                    if (!userDoc) userDoc = u;
+                });
+                matchedCandidates.forEach(c => {
+                    if (c.fcmToken) tokens.add(c.fcmToken);
+                    if (!candidateDoc) candidateDoc = c;
+                });
+                matchedCustomers.forEach(cu => {
+                    if (cu.fcmToken) tokens.add(cu.fcmToken);
+                    if (!customerDoc) customerDoc = cu;
+                });
+            }
+        }
+
+        // Also check if Candidate has a createdBy user
+        if (candidateDoc?.createdBy) {
+            const cbId = candidateDoc.createdBy._id || candidateDoc.createdBy;
+            const cbUser = await User.findById(cbId).select('fcmToken');
+            if (cbUser?.fcmToken) tokens.add(cbUser.fcmToken);
+        }
+        // Also check if Customer has a createdBy user
+        if (customerDoc?.createdBy) {
+            const cbId = customerDoc.createdBy._id || customerDoc.createdBy;
+            const cbUser = await User.findById(cbId).select('fcmToken');
+            if (cbUser?.fcmToken) tokens.add(cbUser.fcmToken);
+        }
+
+        // Determine best recipient for the DB record
+        if (userDoc?._id) {
+            resolvedRecipientId = userDoc._id;
+            resolvedRecipientModel = 'User';
+        } else if (candidateDoc?._id) {
+            resolvedRecipientId = candidateDoc._id;
+            resolvedRecipientModel = 'Candidate';
+        } else if (customerDoc?._id) {
+            resolvedRecipientId = customerDoc._id;
+            resolvedRecipientModel = 'Customer';
+        }
+
+        // Save notification document in DB
+        let notification = null;
+        try {
+            notification = await Notification.create({
+                title,
+                message,
+                type: type || 'system',
+                relatedId,
+                relatedModel: relatedModel || 'Job',
+                actionUrl: actionUrl || '/bookings',
+                target: 'all',
+                recipient: resolvedRecipientId,
+                recipientModel: resolvedRecipientModel || 'User',
+                status: 'active'
+            });
+        } catch (dbErr) {
+            console.error('[Notification DB Error]:', dbErr.message);
+        }
+
+        // Send FCM push notifications
+        const tokenList = [...tokens].filter(t => t && typeof t === 'string' && t.trim().length > 10);
         let fcmResult = null;
-        if (recipientDoc && recipientDoc.fcmToken) {
+        if (tokenList.length > 0) {
             try {
                 const payload = buildFCMPayload(title, message, type, relatedId, actionUrl);
-                console.log(`[FCM] Sending push to: ${recipientDoc.fcmToken.substring(0, 20)}...`);
-                fcmResult = await admin.messaging().send({
-                    token: recipientDoc.fcmToken,
-                    ...payload
-                });
-                console.log('[FCM] Push sent. Message ID:', fcmResult);
-            } catch (fcmErr) {
-                console.error('[FCM] Failed to send push notification:', fcmErr.message);
-                if (fcmErr.code === 'messaging/registration-token-not-registered' || fcmErr.code === 'messaging/invalid-registration-token') {
+                console.log(`[FCM] Sending push notification to ${tokenList.length} token(s) for recipient: ${resolvedRecipientId}`);
+                for (const t of tokenList) {
                     try {
-                        recipientDoc.fcmToken = null;
-                        await recipientDoc.save();
-                    } catch (_) {}
+                        const res = await admin.messaging().send({
+                            token: t,
+                            ...payload
+                        });
+                        console.log(`[FCM] Successfully sent push to token ${t.substring(0, 15)}... Message ID: ${res}`);
+                        fcmResult = res;
+                    } catch (singleErr) {
+                        console.error(`[FCM] Failed sending to token ${t.substring(0, 15)}...:`, singleErr.message);
+                        if (singleErr.code === 'messaging/registration-token-not-registered' || singleErr.code === 'messaging/invalid-registration-token') {
+                            await Promise.all([
+                                User.updateMany({ fcmToken: t }, { $set: { fcmToken: null } }),
+                                Candidate.updateMany({ fcmToken: t }, { $set: { fcmToken: null } })
+                            ]).catch(() => {});
+                        }
+                    }
                 }
+            } catch (fcmErr) {
+                console.error('[FCM] Push send error:', fcmErr.message);
             }
         } else {
-            console.log(`[FCM] No FCM token for recipient: ${userId} (${userModel})`);
+            console.log(`[FCM] No valid FCM token found for recipient: ${userId} (${userModel})`);
         }
+
         return { success: true, notification, fcmResult };
     } catch (err) {
         console.error('Error in sendNotificationToUser:', err);
-        throw err;
+        return { success: false, error: err.message };
     }
 };
 
