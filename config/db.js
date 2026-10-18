@@ -47,6 +47,14 @@ const connectDB = async () => {
       } catch (err) {
         console.log('users email_1 index cleanup status:', err.message);
       }
+
+      // Drop old job_1_candidate_1 index on applications so candidate can apply for different roles in same job
+      try {
+        await db.collection('applications').dropIndex('job_1_candidate_1');
+        console.log('Successfully dropped old job_1_candidate_1 index on applications collection.');
+      } catch (err) {
+        // Ignored if already dropped
+      }
     } catch (indexErr) {
       console.error('Error during index cleanup:', indexErr.message);
     }
