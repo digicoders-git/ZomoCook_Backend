@@ -98,18 +98,9 @@ const applyJob = async (req, res) => {
         const rawRole = req.body.appliedRole || req.body.role || applicationData?.role || applicationData?.appliedRole || '';
         const targetRole = rawRole.replace(/\s*\(daily basis\)/i, '').trim();
 
-        const existingAppQuery = { job: jobId, candidate: candidate._id };
-        if (targetRole) {
-            const escapedRole = targetRole.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            existingAppQuery.$or = [
-                { appliedRole: targetRole },
-                { appliedRole: `${targetRole} (Daily Basis)` },
-                { appliedRole: new RegExp(`^${escapedRole}`, 'i') }
-            ];
-        }
-        const existingApp = await Application.findOne(existingAppQuery);
+        const existingApp = await Application.findOne({ job: jobId, candidate: candidate._id });
         if (existingApp) {
-            return res.status(400).json({ success: false, message: `You have already applied for this job${targetRole ? ` as ${targetRole}` : ''}` });
+            return res.status(400).json({ success: false, message: 'You have already applied for 1 position' });
         }
 
         const application = await Application.create({

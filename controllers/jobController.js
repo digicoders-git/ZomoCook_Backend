@@ -1164,18 +1164,9 @@ const applyForJob = async (req, res) => {
             });
         }
 
-        const existingAppQuery = { job: jobId, candidate: candidate._id };
-        if (targetRole) {
-            const escapedRole = targetRole.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            existingAppQuery.$or = [
-                { appliedRole: targetRole },
-                { appliedRole: `${targetRole} (Daily Basis)` },
-                { appliedRole: new RegExp(`^${escapedRole}`, 'i') }
-            ];
-        }
-        const existingApp = await Application.findOne(existingAppQuery);
+        const existingApp = await Application.findOne({ job: jobId, candidate: candidate._id });
         if (existingApp) {
-            return res.status(400).json({ success: false, message: `You have already applied for this job${targetRole ? ` as ${targetRole}` : ''}` });
+            return res.status(400).json({ success: false, message: 'You have already applied for 1 position' });
         }
 
         const application = await Application.create({
@@ -1726,10 +1717,10 @@ const createCommercialWebJob = async (req, res) => {
                 ? `Party Details: Dates Count: ${partyRequirement.datesCount || 1}, City: ${req.body.city || city || address}, Amount: ₹${pricing?.total || pricing?.advance || 0}. Payment: ${partyRequirement.paymentMethod || 'Online'}`
                 : '';
             const jobDesc = isParty
-                ? `Chef for Party requirement booked by ${name} (+91 ${cleanedPhone}). Location: ${address}. ${partyDetailsDesc}`
+                ? (message ? `Special Notes: ${message}` : `Chef for Party requirement at ${address || city || 'Lucknow'}.`)
                 : (targetCategory === 'daily'
-                    ? `Daily Staff requirement (${rolesListSummary || 'Staff'}). Location: ${address || 'Lucknow'}. Notes: ${message || 'On time reporting required'}.`
-                    : `Hiring ${item.count || 1} ${item.category || 'Staff'}. Salary ₹${item.salary || 'Negotiable'}. Food: ${item.food || 'Available'}, Accommodation: ${item.accommodation || 'Not Required'}. Plan: ${selectedPlan?.name || 'Basic'}. Location: ${address || 'On Request'}. ${message ? `Notes: ${message}` : ''}`);
+                    ? `Daily Staff requirement (${rolesListSummary || 'Staff'}). Location: ${address || 'Lucknow'}.${message ? ` Notes: ${message}` : ''}`
+                    : `Hiring ${item.count || 1} ${item.category || 'Staff'}. Salary ₹${item.salary || 'Negotiable'}. Food: ${item.food || 'Available'}, Accommodation: ${item.accommodation || 'Not Required'}. Plan: ${selectedPlan?.name || 'Basic'}. Location: ${address || 'On Request'}.${message ? ` Notes: ${message}` : ''}`);
 
             const salaryRangeValue = (() => {
                 if (isParty) {
