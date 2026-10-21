@@ -23,7 +23,8 @@ const formatJobNotification = (job) => {
         title = 'New Daily Job Alert!';
         const rolesWithRates = job.staffRequirements.map(s => {
             const r = s.role || 'Staff';
-            const rate = s.ratePerDay || s.rate || '';
+            const rawRate = Number(s.ratePerDay || s.rate || 0);
+            const rate = rawRate > 0 ? Math.round(rawRate * 0.75) : (s.ratePerDay || s.rate || '');
             return rate ? `${r} (₹${rate}/Day)` : r;
         });
         const summary = rolesWithRates.slice(0, 2).join(', ') + (rolesWithRates.length > 2 ? ` & ${rolesWithRates.length - 2} more` : '');
@@ -292,7 +293,14 @@ const getJobs = async (req, res) => {
             (!req.admin.role || roleName === 'user' || roleName === 'customer');
 
         if (isCustomer) {
-            query.createdBy = req.admin._id;
+            query.$or = [
+                { createdBy: req.admin._id },
+                { customer: req.admin._id }
+            ];
+            if (req.admin.phone) {
+                const cleanP = req.admin.phone.replace('+91', '').trim();
+                query.$or.push({ contactPhone: new RegExp(cleanP, 'i') });
+            }
         } else if (!isSuperAdmin && !isCook) {
             // Staff User / Lead Manager — show only assigned leads
             query.$and = query.$and || [];
@@ -350,15 +358,26 @@ const getJobs = async (req, res) => {
         }
 
         // Active jobs filter for cook viewing / public app feed:
-        // NEVER show jobs that are pending payment, unpaid, or on Hold!
+        // NEVER show other people's jobs that are pending payment, unpaid, or on Hold!
+        // But if the user posted the job themselves, allow them to see it in their hirings.
         if (isCook || (!isSuperAdmin && !canViewJobs && !isCustomer)) {
-            query.isActive = true;
-            query.status = { $nin: ['Hold', 'hold', 'Cancelled', 'cancelled', 'Deleted', 'deleted'] };
-            query.paymentStatus = { $nin: ['pending', 'unpaid', 'failed'] };
+            query.$and = query.$and || [];
+            query.$and.push({
+                $or: [
+                    { createdBy: req.admin._id },
+                    { customer: req.admin._id },
+                    {
+                        isActive: true,
+                        status: { $nin: ['Hold', 'hold', 'Cancelled', 'cancelled', 'Deleted', 'deleted'] },
+                        paymentStatus: { $nin: ['pending', 'unpaid', 'failed'] }
+                    }
+                ]
+            });
         }
 
         let jobs = await Job.find(query)
             .populate('customer', 'name email contactPhone')
+            .populate('assignedStaff.candidate', 'name phone profilePhoto experience rating totalReviews')
             .sort({ createdAt: -1 })
             .limit(parseInt(limit))
             .skip(parseInt(skip));
@@ -415,8 +434,22 @@ const getJobs = async (req, res) => {
                 }
             }
 
+            const jobObj = job.toObject();
+            if (jobObj.assignedStaff && Array.isArray(jobObj.assignedStaff)) {
+                jobObj.assignedStaff = jobObj.assignedStaff.map(s => {
+                    const cand = s.candidate;
+                    const r = (cand && cand.rating !== undefined) ? cand.rating : (s.rating || 5.0);
+                    const tr = (cand && cand.totalReviews !== undefined) ? cand.totalReviews : (s.totalReviews || 0);
+                    return {
+                        ...s,
+                        rating: Number(r) || 5.0,
+                        totalReviews: Number(tr) || 0
+                    };
+                });
+            }
+
             return {
-                ...job.toObject(),
+                ...jobObj,
                 customer: customerData,
                 assignedCandidates,
                 interviews,
@@ -447,7 +480,9 @@ const getJobs = async (req, res) => {
  */
 const getJob = async (req, res) => {
     try {
-        const job = await Job.findById(req.params.id).populate('customer');
+        const job = await Job.findById(req.params.id)
+            .populate('customer')
+            .populate('assignedStaff.candidate', 'name phone profilePhoto experience rating totalReviews');
 
         if (!job) {
             return res.status(404).json({ success: false, message: 'Job not found' });
@@ -517,8 +552,22 @@ const getJob = async (req, res) => {
             }
         }
 
+        const jobObj = job.toObject();
+        if (jobObj.assignedStaff && Array.isArray(jobObj.assignedStaff)) {
+            jobObj.assignedStaff = jobObj.assignedStaff.map(s => {
+                const cand = s.candidate;
+                const r = (cand && cand.rating !== undefined) ? cand.rating : (s.rating || 5.0);
+                const tr = (cand && cand.totalReviews !== undefined) ? cand.totalReviews : (s.totalReviews || 0);
+                return {
+                    ...s,
+                    rating: Number(r) || 5.0,
+                    totalReviews: Number(tr) || 0
+                };
+            });
+        }
+
         const jobWithCounts = {
-            ...job.toObject(),
+            ...jobObj,
             customer: customerData,
             assignedCandidates,
             interviews,
@@ -1516,6 +1565,10 @@ const createCommercialWebJob = async (req, res) => {
 
         const rawDates = req.body.eventDates || [];
         const rawAddons = req.body.addOns || req.body.addons || {};
+        if (rawAddons && (rawAddons.waiterStaff === false || rawAddons.waiterStaff === 'false' || rawAddons.waiterStaff === 0 || rawAddons.waiterStaff === '0')) {
+            rawAddons.waiterCount = 0;
+            rawAddons.waiters = 0;
+        }
 
         let computedGuests = Number(req.body.noOfGuests) || 0;
         if (!computedGuests && rawDates.length > 0) {
@@ -1729,7 +1782,7 @@ const createCommercialWebJob = async (req, res) => {
                     return days > 1 ? `₹${Math.round(totalEst / days)}/day (Total: ₹${totalEst})` : `₹${totalEst}`;
                 }
                 if (targetCategory === 'daily' && staffList && staffList.length > 0) {
-                    const rates = staffList.map(s => Number(s.ratePerDay || s.rate || s.salary || 0)).filter(r => r > 0);
+                    const rates = staffList.map(s => Number(s.ratePerDay || s.rate || s.salary || 0)).filter(r => r > 0).map(r => Math.round(r * 0.75));
                     if (rates.length > 0) {
                         const minR = Math.min(...rates);
                         const maxR = Math.max(...rates);
@@ -1927,12 +1980,25 @@ const assignStaffToJob = async (req, res) => {
             return res.status(400).json({ success: false, message: 'This candidate is already assigned to this job' });
         }
 
+        // Fetch candidate rating and reviews
+        let candRating = 5.0;
+        let candTotalReviews = 0;
+        try {
+            const candDoc = await Candidate.findById(candidateId).select('rating totalReviews');
+            if (candDoc) {
+                candRating = candDoc.rating || 5.0;
+                candTotalReviews = candDoc.totalReviews || 0;
+            }
+        } catch(e) {}
+
         job.assignedStaff.push({
             candidate: candidateId,
             name,
             role: role || 'Staff',
             phone: phone || '',
             experience: experience || '',
+            rating: candRating,
+            totalReviews: candTotalReviews,
             startOtp,
             endOtp,
             status: 'Assigned'

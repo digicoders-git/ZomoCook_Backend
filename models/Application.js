@@ -83,6 +83,8 @@ const applicationSchema = new mongoose.Schema({
     trialCancellationReason: String,
     trialCancellationNotes: String,
     trialOtp: String,
+    startTrialOtp: String,
+    endTrialOtp: String,
     trialOtpExpiresAt: Date,
     trialDurationSeconds: Number,
     appliedRole: {

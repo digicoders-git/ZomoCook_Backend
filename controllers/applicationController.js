@@ -274,7 +274,8 @@ const getMyApplications = async (req, res) => {
 
         const applications = await Application.find(query)
             .populate('job')
-            .populate('customer', 'name email phone outletName')
+            .populate('candidate', 'name email phone profileImage photo category role')
+            .populate('customer', 'name email phone outletName contactPhone')
             .sort({ appliedDate: -1 });
 
         res.status(200).json({
@@ -692,10 +693,14 @@ const scheduleDemo = async (req, res) => {
         if (demoNotes !== undefined) application.demoNotes = demoNotes;
         if (remarks) application.remarks = remarks;
 
-        // Generate random 4-digit OTP for demo/trial verification
-        if (!application.trialOtp) {
-            application.trialOtp = Math.floor(1000 + Math.random() * 9000).toString();
+        // Generate random 4-digit OTPs for start and end trial verification
+        if (!application.startTrialOtp) {
+            application.startTrialOtp = Math.floor(1000 + Math.random() * 9000).toString();
         }
+        if (!application.endTrialOtp) {
+            application.endTrialOtp = Math.floor(1000 + Math.random() * 9000).toString();
+        }
+        application.trialOtp = application.endTrialOtp; // Backward compatibility
         await application.save();
 
         const notificationController = require('./notificationController');
@@ -1044,14 +1049,30 @@ const startTrial = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Application not found' });
         }
 
-        // Generate random 4-digit OTP or keep existing
-        const otp = application.trialOtp || Math.floor(1000 + Math.random() * 9000).toString();
+        const { otp } = req.body;
+
+        // If application has startTrialOtp, verify entered otp matches it
+        if (application.startTrialOtp) {
+            const enteredOtp = (otp || '').toString().trim();
+            if (!enteredOtp) {
+                return res.status(400).json({ success: false, message: 'Please enter Start Trial OTP from customer' });
+            }
+            if (enteredOtp !== application.startTrialOtp.trim()) {
+                return res.status(400).json({ success: false, message: 'Invalid Start Trial OTP. Please check with customer.' });
+            }
+        }
+
+        // Generate endTrialOtp if not already set
+        if (!application.endTrialOtp) {
+            application.endTrialOtp = application.trialOtp || Math.floor(1000 + Math.random() * 9000).toString();
+        }
+        const endOtp = application.endTrialOtp;
         const otpExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // Active until trial ends
 
         application.trialStatus = 'in_progress';
         application.trialStartedAt = new Date();
         application.status = 'Demo In Progress';
-        application.trialOtp = otp;
+        application.trialOtp = endOtp;
         application.trialOtpExpiresAt = otpExpiresAt;
         await application.save();
 
@@ -1061,7 +1082,7 @@ const startTrial = async (req, res) => {
                 userId: application.customer._id || application.customer,
                 userModel: 'User',
                 title: '👨‍🍳 Trial Started',
-                message: `Chef ${application.candidate?.name || 'Cook'} has started the trial for "${application.job?.title || 'your job'}". Trial completion OTP is: ${otp}`,
+                message: `Chef ${application.candidate?.name || 'Cook'} has started the trial for "${application.job?.title || 'your job'}". Trial completion OTP is: ${endOtp}`,
                 type: 'trial_started',
                 relatedId: application._id,
                 relatedModel: 'Application',
@@ -1075,7 +1096,7 @@ const startTrial = async (req, res) => {
             success: true,
             message: 'Trial started successfully',
             application,
-            otp
+            otp: endOtp
         });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -1099,8 +1120,13 @@ const sendTrialOtp = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Application not found' });
         }
 
-        const otp = application.trialOtp || Math.floor(1000 + Math.random() * 9000).toString();
-        application.trialOtp = otp;
+        if (!application.startTrialOtp) {
+            application.startTrialOtp = Math.floor(1000 + Math.random() * 9000).toString();
+        }
+        if (!application.endTrialOtp) {
+            application.endTrialOtp = application.trialOtp || Math.floor(1000 + Math.random() * 9000).toString();
+        }
+        application.trialOtp = application.endTrialOtp;
         application.trialOtpExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
         await application.save();
 
@@ -1109,8 +1135,8 @@ const sendTrialOtp = async (req, res) => {
             notificationController.sendNotificationToUser({
                 userId: application.customer._id || application.customer,
                 userModel: 'User',
-                title: '🔐 Trial Verification OTP',
-                message: `Your trial completion OTP for "${application.job?.title || 'Job'}" is: ${otp}.`,
+                title: '🔐 Trial Verification OTPs',
+                message: `Start OTP: ${application.startTrialOtp} | End OTP: ${application.endTrialOtp} for "${application.job?.title || 'Job'}".`,
                 type: 'trial_otp',
                 relatedId: application._id,
                 relatedModel: 'Application',
@@ -1120,8 +1146,10 @@ const sendTrialOtp = async (req, res) => {
 
         res.status(200).json({
             success: true,
-            message: 'Trial OTP sent successfully to customer',
-            otp
+            message: 'Trial OTPs sent successfully to customer',
+            startTrialOtp: application.startTrialOtp,
+            endTrialOtp: application.endTrialOtp,
+            otp: application.endTrialOtp
         });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -1152,11 +1180,11 @@ const completeTrial = async (req, res) => {
         }
 
         const enteredOtp = otp.toString().trim();
-        const validOtps = [application.trialOtp].filter(Boolean);
+        const validOtps = [application.endTrialOtp, application.trialOtp].filter(Boolean);
 
         const isMatch = validOtps.includes(enteredOtp);
         if (!isMatch) {
-            return res.status(400).json({ success: false, message: 'Invalid OTP. Please ask customer for the correct OTP.' });
+            return res.status(400).json({ success: false, message: 'Invalid OTP. Please ask customer for the correct End Trial OTP.' });
         }
 
         const completedAt = new Date();

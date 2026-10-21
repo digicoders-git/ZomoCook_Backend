@@ -33,6 +33,7 @@ const protect = async (req, res, next) => {
 
             req.admin = account; // Keep it as req.admin for backward compatibility or change to req.user
             req.admin.type = accountType;
+            req.user = account;
             next();
         } catch (error) {
             return res.status(401).json({ success: false, message: 'Invalid token' });
