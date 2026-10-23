@@ -235,6 +235,28 @@ const getApplications = async (req, res) => {
             });
         }
 
+        // Auto-generate startTrialOtp and endTrialOtp for any demo/trial application if missing
+        for (const app of filteredApplications) {
+            const s = (app.status || '').toLowerCase();
+            const isTrialOrDemo = s.includes('demo') || s.includes('trial') || app.demoDate || app.trialStatus === 'in_progress';
+            if (isTrialOrDemo && (!app.startTrialOtp || !app.endTrialOtp)) {
+                if (!app.startTrialOtp) {
+                    app.startTrialOtp = Math.floor(1000 + Math.random() * 9000).toString();
+                }
+                if (!app.endTrialOtp) {
+                    app.endTrialOtp = app.trialOtp || Math.floor(1000 + Math.random() * 9000).toString();
+                }
+                app.trialOtp = app.endTrialOtp;
+                await Application.findByIdAndUpdate(app._id, {
+                    $set: {
+                        startTrialOtp: app.startTrialOtp,
+                        endTrialOtp: app.endTrialOtp,
+                        trialOtp: app.endTrialOtp
+                    }
+                });
+            }
+        }
+
         res.status(200).json({
             success: true,
             count: filteredApplications.length,
@@ -467,6 +489,18 @@ const updateApplicationStatus = async (req, res) => {
             updateData,
             { new: true }
         ).populate('candidate').populate('job');
+
+        if (status === 'Demo Scheduled' || req.body.demoDate) {
+            if (!application.startTrialOtp) {
+                application.startTrialOtp = Math.floor(1000 + Math.random() * 9000).toString();
+            }
+            if (!application.endTrialOtp) {
+                application.endTrialOtp = application.trialOtp || Math.floor(1000 + Math.random() * 9000).toString();
+            }
+            application.trialOtp = application.endTrialOtp;
+            application.trialOtpExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+            await application.save();
+        }
 
         if (application.candidate) {
             const notificationController = require('./notificationController');
@@ -1021,6 +1055,19 @@ const getApplicationById = async (req, res) => {
                     actionUrl: '/applications'
                 }).catch(err => console.error('Error sending profile viewed notification:', err));
             }
+        }
+
+        const s = (application.status || '').toLowerCase();
+        const isTrialOrDemo = s.includes('demo') || s.includes('trial') || application.demoDate || application.trialStatus === 'in_progress';
+        if (isTrialOrDemo && (!application.startTrialOtp || !application.endTrialOtp)) {
+            if (!application.startTrialOtp) {
+                application.startTrialOtp = Math.floor(1000 + Math.random() * 9000).toString();
+            }
+            if (!application.endTrialOtp) {
+                application.endTrialOtp = application.trialOtp || Math.floor(1000 + Math.random() * 9000).toString();
+            }
+            application.trialOtp = application.endTrialOtp;
+            await application.save();
         }
 
         res.status(200).json({

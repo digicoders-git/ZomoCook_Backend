@@ -176,7 +176,13 @@ const candidateSchema = new mongoose.Schema({
             job: { type: mongoose.Schema.Types.ObjectId, ref: 'Job' },
             status: {
                 type: String,
-                enum: ['Applied', 'Shortlisted', 'Demo Scheduled', 'Reschedule Requested', 'Hired', 'Rejected', 'On Hold', 'Not Interested'],
+                enum: [
+                    // Purana Flow statuses
+                    'Applied', 'Shortlisted', 'Demo Scheduled', 'Reschedule Requested', 'Hired', 'Rejected', 'On Hold', 'Not Interested',
+                    // Naya Flow statuses
+                    'Assigned', 'Offer Accepted', 'Offer Rejected', 'Profile Reviewed', 'Package Selected', 'Package Paid',
+                    'Demo In Progress', 'Demo Completed', 'Demo Cancelled', 'Joined', 'Started', 'Completed', 'Cancelled', 'Rejected by Cook'
+                ],
                 default: 'Applied'
             },
             remarks: { type: String },

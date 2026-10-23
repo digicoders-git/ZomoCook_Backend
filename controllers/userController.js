@@ -363,8 +363,10 @@ exports.verifyOtp = async (req, res) => {
                 });
             } else {
                 if (user.fcmToken && candidateDoc.fcmToken !== user.fcmToken) {
-                    candidateDoc.fcmToken = user.fcmToken;
-                    await candidateDoc.save();
+                    await Candidate.updateOne(
+                        { _id: candidateDoc._id },
+                        { $set: { fcmToken: user.fcmToken } }
+                    );
                 }
             }
         }
