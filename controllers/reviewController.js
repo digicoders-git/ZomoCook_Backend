@@ -204,6 +204,23 @@ exports.submitReview = async (req, res) => {
             }
         }
 
+        // Send push notification to cook about the new rating
+        if (candidate) {
+            const notificationController = require('./notificationController');
+            const starText = `${numRating}-star`;
+            const cookUserId = candidate.createdBy || candidate._id;
+            notificationController.sendNotificationToUser({
+                userId: cookUserId,
+                userModel: 'Candidate',
+                title: '⭐ New Customer Rating!',
+                message: `You've received a ${starText} rating from a customer. Tap to view your feedback and rating.`,
+                type: 'review',
+                relatedId: savedReview._id,
+                relatedModel: 'Review',
+                actionUrl: '/profile/reviews'
+            }).catch(err => console.error('Error sending review notification to cook:', err));
+        }
+
         res.status(200).json({
             success: true,
             message: 'Feedback submitted successfully',

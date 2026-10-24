@@ -461,6 +461,10 @@ const getApplications = async (req, res) => {
                     rejectionReason: app.rejectionReason,
                     joiningDate: app.joiningDate,
                     appliedDate: app.appliedDate,
+                    startTrialOtp: app.startTrialOtp,
+                    endTrialOtp: app.endTrialOtp,
+                    trialOtp: app.trialOtp,
+                    trialStatus: app.trialStatus,
                     applicationData: app.applicationData
                 };
             });

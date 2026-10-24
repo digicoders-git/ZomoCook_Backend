@@ -238,7 +238,7 @@ const getApplications = async (req, res) => {
         // Auto-generate startTrialOtp and endTrialOtp for any demo/trial application if missing
         for (const app of filteredApplications) {
             const s = (app.status || '').toLowerCase();
-            const isTrialOrDemo = s.includes('demo') || s.includes('trial') || app.demoDate || app.trialStatus === 'in_progress';
+            const isTrialOrDemo = s.includes('demo') || s.includes('trial') || Boolean(app.demoDate) || app.trialStatus === 'in_progress' || s === 'reschedule requested' || s === 'package selected' || s === 'package paid' || s === 'selected';
             if (isTrialOrDemo && (!app.startTrialOtp || !app.endTrialOtp)) {
                 if (!app.startTrialOtp) {
                     app.startTrialOtp = Math.floor(1000 + Math.random() * 9000).toString();
@@ -247,6 +247,11 @@ const getApplications = async (req, res) => {
                     app.endTrialOtp = app.trialOtp || Math.floor(1000 + Math.random() * 9000).toString();
                 }
                 app.trialOtp = app.endTrialOtp;
+                if (app._doc) {
+                    app._doc.startTrialOtp = app.startTrialOtp;
+                    app._doc.endTrialOtp = app.endTrialOtp;
+                    app._doc.trialOtp = app.trialOtp;
+                }
                 await Application.findByIdAndUpdate(app._id, {
                     $set: {
                         startTrialOtp: app.startTrialOtp,
@@ -299,6 +304,33 @@ const getMyApplications = async (req, res) => {
             .populate('candidate', 'name email phone profileImage photo category role')
             .populate('customer', 'name email phone outletName contactPhone')
             .sort({ appliedDate: -1 });
+
+        // Auto-generate startTrialOtp and endTrialOtp for any demo/trial application if missing
+        for (const app of applications) {
+            const s = (app.status || '').toLowerCase();
+            const isTrialOrDemo = s.includes('demo') || s.includes('trial') || Boolean(app.demoDate) || app.trialStatus === 'in_progress' || s === 'reschedule requested' || s === 'package selected' || s === 'package paid' || s === 'selected';
+            if (isTrialOrDemo && (!app.startTrialOtp || !app.endTrialOtp)) {
+                if (!app.startTrialOtp) {
+                    app.startTrialOtp = Math.floor(1000 + Math.random() * 9000).toString();
+                }
+                if (!app.endTrialOtp) {
+                    app.endTrialOtp = app.trialOtp || Math.floor(1000 + Math.random() * 9000).toString();
+                }
+                app.trialOtp = app.endTrialOtp;
+                if (app._doc) {
+                    app._doc.startTrialOtp = app.startTrialOtp;
+                    app._doc.endTrialOtp = app.endTrialOtp;
+                    app._doc.trialOtp = app.trialOtp;
+                }
+                await Application.findByIdAndUpdate(app._id, {
+                    $set: {
+                        startTrialOtp: app.startTrialOtp,
+                        endTrialOtp: app.endTrialOtp,
+                        trialOtp: app.endTrialOtp
+                    }
+                });
+            }
+        }
 
         res.status(200).json({
             success: true,
@@ -622,7 +654,10 @@ const updateApplicationStatus = async (req, res) => {
             message: `Application status updated to ${status}`,
             application,
             startOtp: generatedStartOtp,
-            endOtp: generatedEndOtp
+            endOtp: generatedEndOtp,
+            startTrialOtp: application.startTrialOtp,
+            endTrialOtp: application.endTrialOtp,
+            trialOtp: application.endTrialOtp
         });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -749,12 +784,28 @@ const scheduleDemo = async (req, res) => {
             actionUrl: '/bookings'
         }).catch(err => console.error('Error sending demo scheduled push notification:', err));
 
+        if (application.customer) {
+            notificationController.sendNotificationToUser({
+                userId: application.customer._id || application.customer,
+                userModel: 'User',
+                title: '📅 Trial Scheduled',
+                message: `Trial scheduled with ${application.candidate?.name || 'Cook'} on ${demoDate} at ${demoTime}. Start Trial OTP: ${application.startTrialOtp} (share with cook on arrival).`,
+                type: 'demo_scheduled',
+                relatedId: application._id,
+                relatedModel: 'Application',
+                actionUrl: '/bookings'
+            }).catch(err => console.error('Error sending customer demo scheduled push notification:', err));
+        }
+
         await syncCandidateApplication(application);
 
         res.status(200).json({
             success: true,
             message: 'Demo scheduled successfully',
-            application
+            application,
+            startTrialOtp: application.startTrialOtp,
+            endTrialOtp: application.endTrialOtp,
+            otp: application.endTrialOtp
         });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -795,6 +846,16 @@ const rescheduleDemo = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Application not found' });
         }
 
+        // Ensure startTrialOtp and endTrialOtp are present
+        if (!application.startTrialOtp) {
+            application.startTrialOtp = Math.floor(1000 + Math.random() * 9000).toString();
+        }
+        if (!application.endTrialOtp) {
+            application.endTrialOtp = application.trialOtp || Math.floor(1000 + Math.random() * 9000).toString();
+        }
+        application.trialOtp = application.endTrialOtp;
+        await application.save();
+
         const notificationController = require('./notificationController');
         const isChef = req.admin && req.admin.role && req.admin.role.name && req.admin.role.name.toLowerCase() !== 'cook';
         
@@ -816,7 +877,7 @@ const rescheduleDemo = async (req, res) => {
                 userId: application.customer,
                 userModel: 'User',
                 title: '📅 Demo Reschedule Requested',
-                message: `Cook has requested to reschedule the demo for "${application.job?.title}" to ${demoDate} at ${demoTime}.`,
+                message: `Cook has requested to reschedule the demo for "${application.job?.title}" to ${demoDate} at ${demoTime}. Start OTP: ${application.startTrialOtp}.`,
                 type: 'demo_scheduled',
                 relatedId: application._id,
                 relatedModel: 'Application',
@@ -829,7 +890,10 @@ const rescheduleDemo = async (req, res) => {
         res.status(200).json({
             success: true,
             message: 'Demo rescheduled successfully',
-            application
+            application,
+            startTrialOtp: application.startTrialOtp,
+            endTrialOtp: application.endTrialOtp,
+            otp: application.endTrialOtp
         });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });

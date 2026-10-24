@@ -368,7 +368,7 @@ const getJobs = async (req, res) => {
                     { customer: req.admin._id },
                     {
                         isActive: true,
-                        status: { $nin: ['Hold', 'hold', 'Cancelled', 'cancelled', 'Deleted', 'deleted'] },
+                        status: { $nin: ['Hold', 'hold', 'Cancelled', 'cancelled', 'Deleted', 'deleted', 'Completed', 'completed', 'Closed', 'closed'] },
                         paymentStatus: { $nin: ['pending', 'unpaid', 'failed'] }
                     }
                 ]
