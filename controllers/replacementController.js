@@ -20,13 +20,39 @@ exports.createReplacement = async (req, res) => {
         let linkedJobId = null;
         let packagePayment = null;
         
-        const hiredApp = await Application.findOne({
-            customer: req.admin._id,
-            status: 'Hired'
-        }).populate({
-            path: 'candidate',
-            match: { name: new RegExp('^' + String(staffName || '').trim() + '$', 'i') }
-        }).populate('servicePackagePaymentId').sort('-updatedAt');
+        const Customer = require('../models/Customer');
+        const last10 = req.admin.phone ? req.admin.phone.slice(-10) : '';
+        const customerDocs = await Customer.find({
+            $or: [
+                { createdBy: req.admin._id },
+                { contactPhone: new RegExp(last10 + '$') }
+            ]
+        });
+        const customerIds = customerDocs.map(c => c._id);
+        const myJobs = await Job.find({ 
+            $or: [
+                { createdBy: req.admin._id },
+                { customer: { $in: [req.admin._id, ...customerIds] } }
+            ]
+        });
+        const jobIds = myJobs.map(j => j._id);
+
+        const hiredApps = await Application.find({
+            $or: [
+                { customer: req.admin._id },
+                { customer: { $in: customerIds } },
+                { job: { $in: jobIds } }
+            ],
+            $or: [
+                { status: { $regex: /hired|offer accepted|joined/i } },
+                { offerStatus: 'accepted' }
+            ]
+        }).populate('candidate').populate('servicePackagePaymentId').sort('-updatedAt');
+
+        const hiredApp = hiredApps.find(a => 
+            a.candidate && a.candidate.name && 
+            a.candidate.name.trim().toLowerCase() === String(staffName || '').trim().toLowerCase()
+        ) || (hiredApps.length > 0 ? hiredApps[0] : null);
 
         if (hiredApp && hiredApp.candidate) {
             linkedJobId = hiredApp.job;
@@ -53,7 +79,12 @@ exports.createReplacement = async (req, res) => {
             }
         } else {
             // Fallback: get the customer's most recent job
-            const recentJob = await Job.findOne({ customer: req.admin._id }).sort('-createdAt');
+            const recentJob = await Job.findOne({ 
+                $or: [
+                    { createdBy: req.admin._id },
+                    { customer: { $in: [req.admin._id, ...customerIds] } }
+                ]
+            }).sort('-createdAt');
             if (recentJob) {
                 linkedJobId = recentJob._id;
             }

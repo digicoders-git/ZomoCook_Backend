@@ -12,7 +12,7 @@ const legacyAliases = {
     'customer_client:export': ['Export Customer', 'customer_client'],
     'customer_client:manage': ['Manage Customer', 'customer_client'],
 
-    'job_management:view': ['Jobs', 'Job List', 'Pending Jobs', 'job_management'],
+    'job_management:view': ['Jobs', 'Job List', 'Pending Jobs', 'job_management', 'Quick Bookings & Events', 'Booking Dashboard', 'Bookings', 'Daily Basis Jobs', 'Chef for Party', 'Party Menu Catalog', 'Staff Assignments', 'Replacements', 'Live / Ongoing', 'Completed Bookings', 'Cancelled & Refunds', 'Reviews', 'Reports'],
     'job_management:add': ['Add Job', 'job_management'],
     'job_management:edit': ['Edit Job', 'job_management'],
     'job_management:delete': ['Delete Job', 'job_management'],
@@ -20,7 +20,22 @@ const legacyAliases = {
     'job_management:export': ['Export Job', 'job_management'],
     'job_management:manage': ['Manage Jobs', 'job_management'],
 
-    'candidates:view': ['Candidates', 'Candidate List', 'All Applications', 'Applied Candidates List', 'Shortlisted Candidate List', 'candidates'],
+    'quick_bookings:view': ['Quick Bookings & Events', 'Booking Dashboard', 'Bookings', 'Daily Basis Jobs', 'Chef for Party', 'Party Menu Catalog', 'Staff Assignments', 'Live / Ongoing', 'Completed Bookings', 'Cancelled & Refunds', 'Reviews', 'Reports', 'quick_bookings', 'job_management'],
+    'quick_bookings:add': ['quick_bookings', 'job_management'],
+    'quick_bookings:edit': ['quick_bookings', 'job_management'],
+    'quick_bookings:delete': ['quick_bookings', 'job_management'],
+    'quick_bookings:manage': ['quick_bookings', 'job_management'],
+
+    'party_menu:view': ['Party Menu Items', 'Party Menu Catalog', 'Add Menu Item', 'Menu Item List', 'party_menu', 'job_management'],
+    'party_menu:add': ['Add Menu Item', 'party_menu', 'job_management'],
+    'party_menu:edit': ['party_menu', 'job_management'],
+    'party_menu:delete': ['party_menu', 'job_management'],
+    'party_menu:manage': ['party_menu', 'job_management'],
+
+    'replacements:view': ['Replacements', 'Replacement Requests', 'Replacement History', 'Staff Assignments', 'replacements', 'job_management'],
+    'replacements:manage': ['replacements', 'job_management'],
+
+    'candidates:view': ['Candidates', 'Candidate List', 'All Applications', 'Applied Candidates List', 'Applied Candidates', 'Shortlisted Candidate List', 'Shortlisted Candidates', 'Demo Scheduled', 'Reschedule Requests', 'Hired Candidates', 'Rejected Candidates', 'On Hold Candidates', 'Not Interested', 'candidates'],
     'candidates:add': ['Add Candidate', 'candidates'],
     'candidates:edit': ['Edit Candidate', 'candidates'],
     'candidates:delete': ['Delete Candidate', 'candidates'],
@@ -36,7 +51,7 @@ const legacyAliases = {
     'dashboard:approve': ['dashboard'],
     'dashboard:delete': ['dashboard'],
 
-    'service_packages:view': ['Subscription Plans', 'Plan List', 'Subscription History', 'service_packages', 'Hiring Processing Fee', 'hiring_processing_fee'],
+    'service_packages:view': ['Subscription Plans', 'Plan List', 'Subscription History', 'service_packages', 'Hiring Processing Fee', 'hiring_processing_fee', 'Platform Fees Settings', 'Daily Basis Charges', 'Hiring & Support Packages', 'Add Subscription Plan'],
     'service_packages:add': ['Add Plan', 'service_packages', 'hiring_processing_fee'],
     'service_packages:edit': ['Edit Plan', 'service_packages', 'hiring_processing_fee'],
     'service_packages:delete': ['Delete Plan', 'service_packages', 'hiring_processing_fee'],

@@ -36,6 +36,141 @@ const syncCandidateApplication = async (application) => {
     }
 };
 
+const sanitizeApplicationForCandidate = (app) => {
+    if (!app) return app;
+    const a = app.toObject ? app.toObject() : JSON.parse(JSON.stringify(app));
+
+    const status = (a.status || '').toLowerCase();
+    const trialStatus = (a.trialStatus || '').toLowerCase();
+    const jobCat = (a.job?.jobCategory || a.job?.jobType || a.job?.bookingType || '').toLowerCase();
+    const isPartyOrDaily = jobCat.includes('party') || jobCat.includes('daily') || Boolean(a.job?.partyRequirement);
+
+    // Privacy gating:
+    // Party & Daily: Unlocked ONLY when Admin assigned
+    // Commercial & Domestic: Unlocked ONLY when Trial is scheduled or hired/assigned
+    const isTrialScheduled = status.includes('demo') || status.includes('trial') || trialStatus === 'scheduled' || trialStatus === 'in_progress' || status === 'hired' || status === 'offer accepted';
+    const isAssigned = status === 'assigned' || status === 'started' || status === 'in progress' || status === 'in_progress' || status === 'completed';
+
+    const isContactUnlocked = isPartyOrDaily ? isAssigned : (isTrialScheduled || isAssigned);
+
+    if (!isContactUnlocked) {
+        if (a.customer) {
+            delete a.customer.phone;
+            delete a.customer.contactPhone;
+            delete a.customer.email;
+            delete a.customer.ownerPhone;
+            delete a.customer.ownerEmail;
+        }
+        if (a.job) {
+            delete a.job.ownerPhone;
+            delete a.job.ownerEmail;
+            delete a.job.contactPhone;
+            if (a.job.venueAddress) {
+                a.job.venueAddress = a.job.city || '';
+            }
+        }
+    }
+
+    if (a.job) {
+
+        const stripPhoneAndAmount = (txt) => {
+            if (!txt || typeof txt !== 'string') return txt;
+            return txt
+                .replace(/\(\s*\+?91[\s-]*\d{10}\s*\)/g, '')
+                .replace(/\(\s*[6-9]\d{9}\s*\)/g, '')
+                .replace(/\+?91[\s-]*[6-9]\d{9}/g, '')
+                .replace(/\b[6-9]\d{4}\s*\d{5}\b/g, '')
+                .replace(/\b[6-9]\d{9}\b/g, '')
+                .replace(/Amount:\s*₹?\s*\d+(\.\d+)?[,\.]?\s*/gi, '')
+                .replace(/Payment:\s*\w+[,\.]?\s*/gi, '')
+                .replace(/\(\s*\)/g, '')
+                .replace(/\[\s*\]/g, '')
+                .replace(/\s+,/g, ',')
+                .replace(/,\s*,/g, ',')
+                .replace(/\.\s*\./g, '.')
+                .replace(/,\s*\./g, '.')
+                .replace(/\s+/g, ' ')
+                .trim();
+        };
+
+        if (a.job.overview) a.job.overview = stripPhoneAndAmount(a.job.overview);
+        if (a.job.description) a.job.description = stripPhoneAndAmount(a.job.description);
+        if (a.job.responsibilities) a.job.responsibilities = stripPhoneAndAmount(a.job.responsibilities);
+        if (a.job.requirements) a.job.requirements = stripPhoneAndAmount(a.job.requirements);
+        if (a.job.notes) a.job.notes = stripPhoneAndAmount(a.job.notes);
+
+        const cat = (a.job.jobCategory || a.job.bookingType || a.job.jobType || a.job.title || '').toLowerCase();
+        const isPartyOrDaily = cat.includes('party') || cat.includes('daily') || Boolean(a.job.partyRequirement);
+        if (isPartyOrDaily) {
+            let advance = a.job.advanceAmount;
+            if (!advance && a.job.pricing) {
+                advance = a.job.pricing.advance || a.job.pricing.advanceAmount || a.job.pricing.advancePayable;
+            }
+            if (!advance) {
+                const total = (a.job.pricing && (a.job.pricing.total || a.job.pricing.totalAmount)) || a.job.totalAmount;
+                if (total) advance = Math.round(total * 0.25);
+            }
+            if (advance > 0) {
+                a.job.salaryRange = `₹${advance}`;
+                a.job.salary = `₹${advance}`;
+            }
+        }
+    }
+
+    return a;
+};
+
+/**
+ * Automatically close/disable the Job when hiring is complete or offer accepted
+ */
+const checkAndCloseJobIfHiringComplete = async (jobId, forceClose = false) => {
+    if (!jobId) return;
+    try {
+        const job = await Job.findById(jobId);
+        if (!job) return;
+
+        if (forceClose) {
+            job.isActive = false;
+            job.status = 'Completed';
+            await job.save();
+            console.log(`[Job Auto-Closed] Job ${jobId} forced closed & marked Completed.`);
+            return;
+        }
+
+        // Calculate total vacancies required for this job
+        let totalNeeded = 1;
+        if (job.commercialStaffList && Array.isArray(job.commercialStaffList) && job.commercialStaffList.length > 0) {
+            totalNeeded = job.commercialStaffList.reduce((sum, item) => sum + (Number(item.noOfStaff || item.count || item.vacancies) || 1), 0);
+        } else if (job.staffRequirements && Array.isArray(job.staffRequirements) && job.staffRequirements.length > 0) {
+            totalNeeded = job.staffRequirements.reduce((sum, item) => sum + (Number(item.count) || 1), 0);
+        } else if (job.packageOrGuestOrVacancy && !isNaN(parseInt(job.packageOrGuestOrVacancy)) && job.jobCategory !== 'daily') {
+            const parsed = parseInt(job.packageOrGuestOrVacancy);
+            if (parsed > 0) totalNeeded = parsed;
+        }
+
+        // Count hired or accepted applications
+        const hiredCount = await Application.countDocuments({
+            job: jobId,
+            $or: [
+                { status: { $in: ['Offer Accepted', 'Joined', 'Hired'] } },
+                { offerStatus: 'accepted' }
+            ]
+        });
+
+        const assignedStaffCount = Array.isArray(job.assignedStaff) ? job.assignedStaff.length : 0;
+        const totalFilled = Math.max(hiredCount, assignedStaffCount);
+
+        if (totalFilled >= totalNeeded) {
+            job.isActive = false;
+            job.status = 'Completed';
+            await job.save();
+            console.log(`[Job Auto-Closed] Job ${job._id} marked as Completed & Inactive. Filled: ${totalFilled}/${totalNeeded}`);
+        }
+    } catch (err) {
+        console.error('Error in checkAndCloseJobIfHiringComplete:', err);
+    }
+};
+
 /**
  * @desc    Apply for a job (Auto-creates application)
  * @route   POST /api/applications/apply
@@ -55,6 +190,87 @@ const applyJob = async (req, res) => {
 
         const job = await Job.findById(jobId);
         if (!job) return res.status(404).json({ success: false, message: 'Job not found' });
+
+        // ✅ Block applications if job is inactive or completed/closed/cancelled
+        const isClosedStatus = ['Completed', 'completed', 'Closed', 'closed', 'Cancelled', 'cancelled', 'Hold', 'hold', 'Inactive', 'inactive'].includes(job.status);
+        if (!job.isActive || isClosedStatus) {
+            return res.status(400).json({
+                success: false,
+                message: 'This job is no longer available. Candidate hiring is completed.'
+            });
+        }
+
+        // ✅ Check if the specific requested role/position is already assigned/filled
+        const appliedRole = (applicationData?.appliedRole || applicationData?.role || req.body?.role || '').trim().toLowerCase();
+        if (appliedRole) {
+            const roleAssignedCount = (job.assignedStaff || []).filter(s => {
+                const r = (s.role || s.staffRole || '').trim().toLowerCase();
+                const sStatus = (s.status || '').trim().toLowerCase();
+                const isMatch = r && (r === appliedRole || appliedRole.includes(r) || r.includes(appliedRole));
+                const isFilled = !sStatus || sStatus === 'assigned' || sStatus === 'started' || sStatus === 'in progress' || sStatus === 'in_progress' || sStatus === 'completed';
+                return isMatch && isFilled;
+            }).length;
+
+            let roleReqCount = 1;
+            if (Array.isArray(job.staffRequirements)) {
+                const reqItem = job.staffRequirements.find(r => {
+                    const rName = (r.role || '').trim().toLowerCase();
+                    return rName && (rName === appliedRole || appliedRole.includes(rName) || rName.includes(appliedRole));
+                });
+                if (reqItem) {
+                    roleReqCount = Number(reqItem.staffCount || reqItem.count || reqItem.noOfStaff || reqItem.nop || 1);
+                }
+            } else if (Array.isArray(job.commercialStaffList)) {
+                const reqItem = job.commercialStaffList.find(r => {
+                    const rName = (r.role || r.position || '').trim().toLowerCase();
+                    return rName && (rName === appliedRole || appliedRole.includes(rName) || rName.includes(appliedRole));
+                });
+                if (reqItem) {
+                    roleReqCount = Number(reqItem.noOfStaff || reqItem.count || reqItem.vacancies || reqItem.nop || 1);
+                }
+            }
+
+            if (roleAssignedCount >= roleReqCount && roleAssignedCount > 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: `This position is already assigned or completed by another staff.`
+                });
+            }
+        }
+
+        // ✅ Check if total required openings have already been filled
+        let totalNeeded = 1;
+        if (job.commercialStaffList && Array.isArray(job.commercialStaffList) && job.commercialStaffList.length > 0) {
+            totalNeeded = job.commercialStaffList.reduce((sum, item) => sum + (Number(item.noOfStaff || item.count || item.vacancies) || 1), 0);
+        } else if (job.staffRequirements && Array.isArray(job.staffRequirements) && job.staffRequirements.length > 0) {
+            totalNeeded = job.staffRequirements.reduce((sum, item) => sum + (Number(item.count || item.staffCount || item.noOfStaff) || 1), 0);
+        } else if (job.packageOrGuestOrVacancy && !isNaN(parseInt(job.packageOrGuestOrVacancy)) && job.jobCategory !== 'daily') {
+            const parsed = parseInt(job.packageOrGuestOrVacancy);
+            if (parsed > 0) totalNeeded = parsed;
+        }
+
+        const hiredCount = await Application.countDocuments({
+            job: jobId,
+            $or: [
+                { status: { $in: ['Offer Accepted', 'Joined', 'Hired'] } },
+                { offerStatus: 'accepted' }
+            ]
+        });
+
+        const assignedStaffCount = Array.isArray(job.assignedStaff) ? job.assignedStaff.length : 0;
+        const totalFilled = Math.max(hiredCount, assignedStaffCount);
+
+        if (totalFilled >= totalNeeded) {
+            if (job.isActive || job.status !== 'Completed') {
+                job.isActive = false;
+                job.status = 'Completed';
+                await job.save();
+            }
+            return res.status(400).json({
+                success: false,
+                message: 'This job is no longer available. Candidate hiring is completed.'
+            });
+        }
 
         const last10 = req.admin.phone ? req.admin.phone.slice(-10) : '';
         let candidate = await Candidate.findOne({
@@ -332,10 +548,11 @@ const getMyApplications = async (req, res) => {
             }
         }
 
+        const sanitizedApplications = applications.map(app => sanitizeApplicationForCandidate(app));
         res.status(200).json({
             success: true,
-            count: applications.length,
-            applications
+            count: sanitizedApplications.length,
+            applications: sanitizedApplications
         });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -619,6 +836,11 @@ const updateApplicationStatus = async (req, res) => {
         await syncCandidateApplication(application);
 
         if (status === 'Hired') {
+            const targetJobId = application.job?._id || application.job;
+            if (targetJobId) {
+                await checkAndCloseJobIfHiringComplete(targetJobId);
+            }
+
             const Booking = require('../models/Booking');
             const existingBooking = await Booking.findOne({
                 job: application.job._id,
@@ -951,6 +1173,12 @@ const hireCook = async (req, res) => {
         await application.save();
         await syncCandidateApplication(application);
 
+        // Auto-close job if hiring completed
+        const hiredJobId = application.job?._id || application.job;
+        if (hiredJobId) {
+            await checkAndCloseJobIfHiringComplete(hiredJobId);
+        }
+
         if (application.candidate) {
             const notificationController = require('./notificationController');
             notificationController.sendNotificationToUser({
@@ -1136,7 +1364,7 @@ const getApplicationById = async (req, res) => {
 
         res.status(200).json({
             success: true,
-            application
+            application: sanitizeApplicationForCandidate(application)
         });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -1423,6 +1651,54 @@ const cookAcceptOffer = async (req, res) => {
 
         await syncCandidateApplication(application);
 
+        // ✅ AUTO-CLOSE & COMPLETE JOB ON OFFER ACCEPTED
+        const targetJobId = application.job?._id || application.job;
+        if (targetJobId) {
+            await checkAndCloseJobIfHiringComplete(targetJobId, true);
+
+            // Also create/confirm booking for customer & cook
+            try {
+                const Booking = require('../models/Booking');
+                const candidateId = application.candidate?._id || application.candidate;
+                const customerId = application.customer?._id || application.customer;
+                let existingBooking = await Booking.findOne({
+                    job: targetJobId,
+                    cook: candidateId
+                });
+
+                if (!existingBooking) {
+                    let amount = 15000;
+                    if (application.offeredSalary) {
+                        const cleanSalary = application.offeredSalary.toString().replace(/[^0-9.]/g, '');
+                        if (cleanSalary) amount = parseFloat(cleanSalary) || 15000;
+                    } else if (application.job && application.job.salaryRange) {
+                        const match = application.job.salaryRange.match(/\d+/);
+                        if (match) {
+                            amount = parseInt(match[0]);
+                            if (application.job.salaryRange.toLowerCase().includes('k') && amount < 100) {
+                                amount = amount * 1000;
+                            }
+                        }
+                    }
+
+                    await Booking.create({
+                        job: targetJobId,
+                        customer: customerId,
+                        cook: candidateId,
+                        totalAmount: amount,
+                        duration: (application.job && application.job.jobType) || 'Full Time',
+                        status: 'confirmed',
+                        startDate: application.joiningDate || new Date()
+                    });
+                } else if (existingBooking.status !== 'confirmed') {
+                    existingBooking.status = 'confirmed';
+                    await existingBooking.save();
+                }
+            } catch (bErr) {
+                console.error('Error creating/confirming booking on cookAcceptOffer:', bErr);
+            }
+        }
+
         // Notify customer
         if (application.customer) {
             const notificationController = require('./notificationController');
@@ -1678,6 +1954,237 @@ const customerShortlistCandidate = async (req, res) => {
     }
 };
 
+/**
+ * @desc    Generate and view/download dynamic Offer Letter HTML
+ * @route   GET /api/applications/:id/offer-letter
+ * @access  Public
+ */
+const getOfferLetter = async (req, res) => {
+    try {
+        const application = await Application.findById(req.params.id)
+            .populate('job')
+            .populate('candidate')
+            .populate('customer');
+
+        if (!application) {
+            return res.status(404).send('<h3>Offer letter not found or invalid link.</h3>');
+        }
+
+        const cat = ((application.job && (application.job.jobCategory || application.job.category || application.job.jobType)) || '').toLowerCase();
+        const bType = ((application.job && application.job.bookingType) || '').toLowerCase();
+        const title = ((application.job && application.job.title) || '').toLowerCase();
+        const isDailyOrParty = cat.includes('daily') || cat.includes('party') || cat.includes('event') || bType.includes('daily') || bType.includes('party') || bType.includes('event') || title.includes('daily') || title.includes('party');
+
+        if (isDailyOrParty) {
+            return res.status(400).send('<div style="font-family:sans-serif;padding:30px;text-align:center;"><h2>Offer letter is not applicable for Daily and Chef for Party gigs.</h2><p>Offer letters are only issued for Commercial and Domestic staff employment.</p></div>');
+        }
+
+        const fs = require('fs');
+        const path = require('path');
+        let logoB64 = '';
+        try {
+            const logoPath = path.join(__dirname, '../logo_base64.txt');
+            if (fs.existsSync(logoPath)) {
+                logoB64 = fs.readFileSync(logoPath, 'utf8').trim();
+            }
+        } catch (e) {
+            console.error('Logo read error:', e);
+        }
+
+        // Format dates
+        const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        const shortMonths = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        
+        const formatDate = (dateInput) => {
+            if (!dateInput) return '';
+            const d = new Date(dateInput);
+            if (isNaN(d.getTime())) return String(dateInput);
+            return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+        };
+
+        const formatDateTime = (dateInput) => {
+            if (!dateInput) return '';
+            const d = new Date(dateInput);
+            if (isNaN(d.getTime())) return String(dateInput);
+            let hours = d.getHours();
+            const minutes = d.getMinutes().toString().padStart(2, '0');
+            const ampm = hours >= 12 ? 'PM' : 'AM';
+            hours = hours % 12;
+            hours = hours ? hours : 12;
+            return `${d.getDate()} ${shortMonths[d.getMonth()]} ${d.getFullYear()} · ${hours}:${minutes} ${ampm}`;
+        };
+
+        const candidateName = application.candidate?.name || 'Candidate';
+        const candidatePhone = application.candidate?.phone || '';
+        const candidateId = application.candidate?.candidateCode || (candidatePhone ? 'ZC' + candidatePhone.slice(-4) : 'ZC' + application._id.toString().slice(-4).toUpperCase());
+
+        const clientName = application.job?.outletName || application.customer?.outletName || application.customer?.name || 'Employer';
+        const address = application.job?.address || application.customer?.address || `${application.job?.city || 'Lucknow'}, Uttar Pradesh`;
+
+        let salary = application.offeredSalary || application.job?.salary || '25,000';
+        if (!salary.includes('₹')) salary = '₹' + salary;
+        if (!salary.toLowerCase().includes('month')) salary = salary + ' per month';
+
+        const position = application.job?.jobPosition || application.job?.jobType || application.job?.title || 'Standard Cook';
+        const jobCategory = application.job?.propertyCategory || application.job?.jobCategory || 'Commercial';
+        const dutyHours = application.job?.workingHours || 'As mutually agreed with the employer';
+        const facilities = application.job?.facilities || application.job?.otherFacilities || 'Food, Accommodation';
+        const leave = application.job?.leave || application.job?.leavesPerMonth || 'Paid Leave';
+
+        const offerNo = `ZC-OL-${new Date().getFullYear()}-${application._id.toString().slice(-4).toUpperCase()}`;
+        const issueDate = formatDate(application.createdAt || new Date());
+        const joiningDate = formatDate(application.joiningDate || application.job?.joiningDate || new Date());
+        const candidateAcceptedTime = formatDateTime(application.offerDecisionDate || application.updatedAt || new Date());
+        const clientAuthorizedTime = formatDateTime(application.createdAt || new Date());
+
+        const isDownload = req.query.download === 'true';
+
+        const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zomocook | Offer Letter - ${candidateName}</title>
+<style>
+:root{--navy:#171b3f;--blue:#0756b8;--red:#ed1c24;--green:#16864a;--bg:#f3f5fa;--text:#24283a;--muted:#697386;--line:#e3e8f0}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);font-family:Inter,"Segoe UI",Arial,sans-serif;color:var(--text)}
+.topbar{height:76px;background:var(--navy);color:#fff;display:flex;align-items:center;gap:16px;padding:0 max(18px,calc((100% - 980px)/2));box-shadow:0 3px 12px #11152b22}
+.back{border:0;background:transparent;color:#fff;font-size:30px;cursor:pointer;line-height:1}
+.topbar h1{font-size:21px;margin:0;font-weight:700}
+.topbar .sub{margin-left:auto;font-size:12px;color:#d7dcf4}
+.wrap{max-width:980px;margin:24px auto;padding:0 16px 36px}
+.actions{display:flex;gap:12px;justify-content:flex-end;margin-bottom:16px;flex-wrap:wrap}
+.btn{border:0;border-radius:11px;padding:13px 18px;font-size:14px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 4px 10px #1b23400c}
+.btn-view{background:#16864a;color:#fff}.btn-download{background:var(--red);color:#fff}
+.paper{background:#fff;border-radius:16px;box-shadow:0 8px 28px #1820440c;padding:34px 38px;border:1px solid #edf0f6}
+.brandrow{display:flex;align-items:center;justify-content:space-between;gap:18px;border-bottom:3px solid var(--blue);padding-bottom:18px;margin-bottom:22px}
+.brand{display:flex;align-items:center;gap:13px}
+.logo{width:62px;height:62px;border-radius:17px;background:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 10px rgba(0,0,0,0.12);overflow:hidden;border:1px solid #e2e8f0;padding:2px}
+.logo img{width:100%;height:100%;object-fit:contain;border-radius:14px;display:block}
+.brandname{font-size:27px;letter-spacing:.5px;font-weight:900;color:var(--blue);line-height:1.1}
+.tagline{font-size:12px;color:#718096;margin-top:5px}
+.doc-title{text-align:right;color:var(--red);font-size:20px;font-weight:900;line-height:1.15}
+.meta{display:grid;grid-template-columns:1fr 1fr;border:1px solid #b9d5fa;border-radius:7px;overflow:hidden;margin-bottom:20px}
+.meta div{padding:12px 14px;font-size:13px;border-bottom:1px solid #d8e6fb}
+.meta div:nth-child(odd){border-right:1px solid #d8e6fb}
+.meta div:nth-last-child(-n+2){border-bottom:0}
+.meta b{color:#34415c}
+.intro{font-size:14px;line-height:1.65;margin:10px 0 18px}
+.section-title{font-size:14px;font-weight:900;color:var(--blue);margin:20px 0 10px;text-transform:uppercase;letter-spacing:.2px}
+.details{width:100%;border-collapse:collapse;font-size:13px}
+.details th{background:var(--blue);color:#fff;text-align:left;padding:12px}
+.details td{padding:12px;border:1px solid #dce5f2;vertical-align:top}
+.details tr:nth-child(even) td{background:#f8fbff}
+.highlight{font-weight:800;color:var(--blue)}
+.clause{font-size:12.5px;line-height:1.6;margin:0 0 10px}
+.clause b{color:#263552}
+.signature-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:12px}
+.signature{border:1px solid #dce5f2;background:#f8fbff;border-radius:12px;padding:18px;text-align:center;min-height:132px}
+.signature .person{font-size:15px;font-weight:800;margin:8px 0 5px}
+.signature .role{font-size:12px;color:var(--muted)}
+.badge{display:inline-flex;align-items:center;gap:5px;background:#e4f8eb;color:var(--green);border-radius:30px;padding:6px 10px;font-size:11px;font-weight:800;margin-top:10px}
+.footer{border-top:1px solid var(--line);margin-top:22px;padding-top:14px;color:#68758a;font-size:11px;line-height:1.5}
+.notice{background:#fff8e9;border:1px solid #f6dfaa;color:#72561c;padding:12px 14px;border-radius:10px;font-size:12px;line-height:1.5;margin-top:16px}
+@media(max-width:650px){
+ .topbar{height:66px;padding:0 16px}.topbar h1{font-size:18px}.topbar .sub{display:none}
+ .wrap{margin:14px auto;padding:0 10px 24px}.actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.btn{padding:12px 8px;font-size:12px}
+ .paper{padding:20px 16px;border-radius:13px}.logo{width:46px;height:46px;border-radius:13px;padding:2px}
+ .logo img{border-radius:11px}
+ .brand{gap:9px}.brandname{font-size:20px}.tagline{font-size:10px}.doc-title{font-size:14px}
+ .brandrow{gap:8px;padding-bottom:13px;margin-bottom:16px}
+ .meta{grid-template-columns:1fr}.meta div{border-right:0!important;border-bottom:1px solid #d8e6fb!important;padding:10px 11px}
+ .meta div:last-child{border-bottom:0!important}
+ .details{font-size:11px}.details th,.details td{padding:9px 7px}
+ .signature-grid{grid-template-columns:1fr}.signature{min-height:115px}
+}
+@media print{
+ body{background:#fff}.topbar,.actions{display:none!important}.wrap{max-width:none;margin:0;padding:0}.paper{border:0;box-shadow:none;border-radius:0;padding:12mm}
+ .notice{display:none}.brandrow{break-inside:avoid}
+}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <button class="back" onclick="history.back()" aria-label="Go back">‹</button>
+  <h1>View Offer Letter</h1>
+  <span class="sub">Cook App · Verified Offer</span>
+</header>
+<main class="wrap">
+  <div class="actions">
+    <button class="btn btn-view" onclick="alert('You are already viewing the offer letter preview.')">▣ View Offer Letter</button>
+    <button class="btn btn-download" onclick="window.print()">⬇ Download Offer Letter (PDF)</button>
+  </div>
+  <article class="paper" id="offer-letter">
+    <div class="brandrow">
+      <div class="brand">
+        <div class="logo" aria-label="Zomocook Logo">${logoB64 ? `<img src="data:image/png;base64,${logoB64}" alt="Zomocook Logo" />` : '♨'}</div>
+        <div><div class="brandname">ZOMOCOOK</div><div class="tagline">Your Hospitality Staffing Partner</div></div>
+      </div>
+      <div class="doc-title">CLIENT-ISSUED<br>JOB OFFER LETTER</div>
+    </div>
+    <div class="meta">
+      <div><b>Offer Letter No.:</b> ${offerNo}</div>
+      <div><b>Issue Date:</b> ${issueDate}</div>
+      <div><b>Candidate:</b> ${candidateName}</div>
+      <div><b>Candidate ID:</b> ${candidateId}</div>
+      <div><b>Offer Status:</b> Accepted</div>
+      <div><b>Joining Date:</b> ${joiningDate}</div>
+    </div>
+    <p class="intro">Dear <b>${candidateName}</b>,<br>
+      <b>${clientName}</b> is pleased to offer you employment for the position described below, subject to the terms in this letter. This offer is issued by the client/employer directly to you.</p>
+    <div class="section-title">1. Employer and employment details</div>
+    <table class="details">
+      <thead><tr><th>Client / Employer Details</th><th>Job Details</th></tr></thead>
+      <tbody>
+        <tr><td><b>Employer / Outlet:</b><br>${clientName}</td><td><b>Position:</b><br>${position}</td></tr>
+        <tr><td><b>Workplace Address:</b><br>${address}</td><td><b>Job Category:</b><br>${jobCategory}</td></tr>
+        <tr><td><b>Monthly Salary:</b><br><span class="highlight">${salary}</span></td><td><b>Duty Hours:</b><br>${dutyHours}</td></tr>
+        <tr><td><b>Facilities:</b><br>${facilities}</td><td><b>Weekly Off / Leave:</b><br>${leave}</td></tr>
+      </tbody>
+    </table>
+    <div class="section-title">2. Employment terms and conditions</div>
+    <p class="clause"><b>2.1 Offer and employment relationship.</b> This offer is made by ${clientName} (the Client/Employer). If accepted, the employment relationship is between the Client/Employer and the Candidate. Zomocook is not the offering employer under this letter.</p>
+    <p class="clause"><b>2.2 Salary and benefits.</b> The Client/Employer is responsible for paying the agreed salary and benefits directly to the Candidate in accordance with the agreed schedule and applicable law.</p>
+    <p class="clause"><b>2.3 Workplace and duties.</b> The Client/Employer is responsible for workplace supervision, work allocation, safety, hygiene, working conditions and applicable employer obligations. The Candidate agrees to perform assigned duties professionally and follow reasonable workplace rules.</p>
+    <p class="clause"><b>2.4 Candidate information.</b> The Candidate confirms that information and documents provided for employment are accurate and agrees to report on the joining date stated above, unless otherwise agreed with the Client/Employer.</p>
+    <p class="clause"><b>2.5 Role of Zomocook and limitation of responsibility.</b> Zomocook facilitates recruitment/staff introduction and may provide administrative assistance with generating or recording this offer. To the maximum extent permitted by applicable law, Zomocook is not responsible for the independent acts or omissions of the Client/Employer or Candidate, salary disputes, workplace conditions, or disputes arising solely from their employment relationship. Nothing in this clause excludes any liability or duty that applicable law does not permit to be excluded.</p>
+    <p class="clause"><b>2.6 Notice Period for Resignation or Termination.</b> Either the Candidate or the Client/Employer should provide at least 15 days’ prior written notice before resignation or termination, unless both parties mutually agree otherwise or applicable law requires a different process.</p>
+    <p class="clause"><b>2.7 Changes to terms.</b> Any change to salary, joining date or other material terms should be agreed by the Client/Employer and Candidate and recorded in the app or in writing.</p>
+    <p class="clause"><b>2.8 Applicable law.</b> This offer and the employment relationship are subject to applicable laws of India.</p>
+    <div class="section-title">3. Digital acceptance and acknowledgement</div>
+    <div class="signature-grid">
+      <div class="signature">
+        <div class="role">CANDIDATE</div>
+        <div class="person">${candidateName}</div>
+        <div class="role">Accepted electronically<br>${candidateAcceptedTime}</div>
+        <div class="badge">✓ Digitally Accepted</div>
+      </div>
+      <div class="signature">
+        <div class="role">CLIENT / EMPLOYER</div>
+        <div class="person">${clientName}</div>
+        <div class="role">Offer authorized electronically<br>${clientAuthorizedTime}</div>
+        <div class="badge">✓ Digitally Confirmed</div>
+      </div>
+    </div>
+    <div class="footer">
+      <b>Zomocook</b> · CIN: U56210UP2023OPC181997 · www.zomocook.com · hr@zomocook.com<br>
+      This document records an offer made by the Client/Employer to the Candidate. Zomocook's appearance as the recruitment facilitator does not by itself make it a party to the employment contract.
+    </div>
+  </article>
+</main>
+${isDownload ? '<script>window.onload = function() { setTimeout(function(){ window.print(); }, 400); };</script>' : ''}
+</body>
+</html>`;
+
+        res.setHeader('Content-Type', 'text/html');
+        res.send(html);
+    } catch (error) {
+        console.error('Error generating offer letter:', error);
+        res.status(500).send('<h3>Error generating offer letter. Please try again.</h3>');
+    }
+};
+
 module.exports = {
     applyJob,
     customerShortlistCandidate,
@@ -1695,6 +2202,7 @@ module.exports = {
     completeTrial,
     cancelTrial,
     cookAcceptOffer,
-    cookRejectOffer
+    cookRejectOffer,
+    getOfferLetter
 };
 

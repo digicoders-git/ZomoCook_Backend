@@ -448,6 +448,30 @@ const getJobs = async (req, res) => {
                 });
             }
 
+            if (isCook) {
+                const cookApp = apps.find(a => (a.candidate && a.candidate.toString() === req.admin._id.toString()) || (a.phone && req.admin.phone && a.phone.includes(req.admin.phone.slice(-10))));
+                const cStatus = (cookApp?.status || '').toLowerCase();
+                const cTrialStatus = (cookApp?.trialStatus || '').toLowerCase();
+                const isTrial = cStatus.includes('demo') || cStatus.includes('trial') || cStatus === 'hired' || cStatus === 'offer accepted' || cTrialStatus === 'scheduled' || cTrialStatus === 'in_progress';
+                const isAssigned = cStatus === 'assigned' || cStatus === 'started' || cStatus === 'in progress' || cStatus === 'completed' || (jobObj.assignedStaff && jobObj.assignedStaff.some(s => s.candidate && (s.candidate._id?.toString() === req.admin._id.toString() || s.candidate.toString() === req.admin._id.toString())));
+                const isUnlocked = isDailyOrParty ? isAssigned : (isTrial || isAssigned);
+
+                if (!isUnlocked) {
+                    if (customerData) {
+                        customerData = {
+                            _id: customerData._id,
+                            name: customerData.name || 'Customer'
+                        };
+                    }
+                    delete jobObj.ownerPhone;
+                    delete jobObj.contactPhone;
+                    delete jobObj.ownerEmail;
+                    if (jobObj.venueAddress) {
+                        jobObj.venueAddress = jobObj.city || '';
+                    }
+                }
+            }
+
             return {
                 ...jobObj,
                 customer: customerData,
@@ -564,6 +588,32 @@ const getJob = async (req, res) => {
                     totalReviews: Number(tr) || 0
                 };
             });
+        }
+
+        if (isCook) {
+            const cookApp = apps.find(a => (a.candidate && a.candidate.toString() === req.admin._id.toString()) || (a.phone && req.admin.phone && a.phone.includes(req.admin.phone.slice(-10))));
+            const cStatus = (cookApp?.status || '').toLowerCase();
+            const cTrialStatus = (cookApp?.trialStatus || '').toLowerCase();
+            const jobCat = (jobObj.jobCategory || jobObj.jobType || jobObj.bookingType || '').toLowerCase();
+            const isDailyOrPartyJob = jobCat.includes('party') || jobCat.includes('daily') || Boolean(jobObj.partyRequirement);
+            const isTrial = cStatus.includes('demo') || cStatus.includes('trial') || cStatus === 'hired' || cStatus === 'offer accepted' || cTrialStatus === 'scheduled' || cTrialStatus === 'in_progress';
+            const isAssigned = cStatus === 'assigned' || cStatus === 'started' || cStatus === 'in progress' || cStatus === 'completed' || (jobObj.assignedStaff && jobObj.assignedStaff.some(s => s.candidate && (s.candidate._id?.toString() === req.admin._id.toString() || s.candidate.toString() === req.admin._id.toString())));
+            const isUnlocked = isDailyOrPartyJob ? isAssigned : (isTrial || isAssigned);
+
+            if (!isUnlocked) {
+                if (customerData) {
+                    customerData = {
+                        _id: customerData._id,
+                        name: customerData.name || 'Customer'
+                    };
+                }
+                delete jobObj.ownerPhone;
+                delete jobObj.contactPhone;
+                delete jobObj.ownerEmail;
+                if (jobObj.venueAddress) {
+                    jobObj.venueAddress = jobObj.city || '';
+                }
+            }
         }
 
         const jobWithCounts = {
@@ -1181,10 +1231,14 @@ const applyForJob = async (req, res) => {
         const job = await Job.findById(jobId);
         if (!job) return res.status(404).json({ success: false, message: 'Job not found' });
 
-        if (!job.isActive || job.status === 'Hold' || job.paymentStatus === 'pending') {
+        const hasStaffCompleted = Array.isArray(job.assignedStaff) && job.assignedStaff.some(s => s.status === 'Completed' || s.completedAt);
+        const isClosedStatus = ['Completed', 'completed', 'Closed', 'closed', 'Cancelled', 'cancelled', 'Hold', 'hold', 'Inactive', 'inactive'].includes(job.status);
+        if (!job.isActive || isClosedStatus || hasStaffCompleted || job.paymentStatus === 'pending') {
             return res.status(400).json({
                 success: false,
-                message: 'Yeh booking abhi active nahi hai (payment pending hai).'
+                message: job.paymentStatus === 'pending'
+                    ? 'Yeh booking abhi active nahi hai (payment pending hai).'
+                    : 'This booking/hiring already completed by another staff.'
             });
         }
 
@@ -1777,9 +1831,8 @@ const createCommercialWebJob = async (req, res) => {
 
             const salaryRangeValue = (() => {
                 if (isParty) {
-                    const totalEst = pricing?.total || pricing?.staffCharges || 1999;
-                    const days = rawDates.length || 1;
-                    return days > 1 ? `₹${Math.round(totalEst / days)}/day (Total: ₹${totalEst})` : `₹${totalEst}`;
+                    const adv = pricing?.advance || pricing?.advanceAmount || Math.round((pricing?.total || pricing?.staffCharges || 1999) * 0.25);
+                    return `₹${adv}`;
                 }
                 if (targetCategory === 'daily' && staffList && staffList.length > 0) {
                     const rates = staffList.map(s => Number(s.ratePerDay || s.rate || s.salary || 0)).filter(r => r > 0).map(r => Math.round(r * 0.75));
@@ -2293,10 +2346,11 @@ const completeJobWithOtp = async (req, res) => {
         staffEntry.status = 'Completed';
         staffEntry.completedAt = new Date();
 
-        // Check if all staff completed
+        // Check if all staff completed or daily/party booking completed
         const allCompleted = job.assignedStaff.every(s => s.status === 'Completed');
-        if (allCompleted) {
+        if (allCompleted || job.jobCategory === 'daily' || job.jobCategory === 'party' || job.bookingType === 'daily' || job.bookingType === 'party') {
             job.status = 'Completed';
+            job.isActive = false;
             job.jobCompletedAt = new Date();
         }
 

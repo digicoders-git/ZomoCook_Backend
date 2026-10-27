@@ -188,7 +188,7 @@ const getCookEarnings = async (req, res) => {
                 displayAmount = `₹${amount.toLocaleString('en-IN')}`;
                 title = `Daily Staff: ${assignedRole} (${days} Day${days > 1 ? 's' : ''})`;
             } else if (isParty) {
-                categoryLabel = 'Chef for Party';
+                categoryLabel = 'Party Jobs';
                 const partyDays = job.partyRequirement?.datesCount || (Array.isArray(job.eventDays) && job.eventDays.length > 0 ? job.eventDays.length : 1);
                 
                 const matchingReq = (job.staffRequirements || []).find(r => 
@@ -207,7 +207,7 @@ const getCookEarnings = async (req, res) => {
 
                 displayAmount = `₹${amount.toLocaleString('en-IN')}`;
                 const eventName = job.event || job.occasion || 'Party Event';
-                title = `Chef for Party: ${eventName} (${partyDays} Day${partyDays > 1 ? 's' : ''})`;
+                title = `Party Job: ${eventName} (${partyDays} Day${partyDays > 1 ? 's' : ''})`;
             } else {
                 categoryLabel = job.jobCategory === 'home' ? 'Domestic Cook' : 'Commercial Chef';
                 // Monthly job: strictly use offeredSalary for earnings calculation
@@ -271,13 +271,13 @@ const getCookEarnings = async (req, res) => {
             seenJobIds.add(jobIdStr);
 
             const j = app.job;
-            const isParty = j.jobCategory === 'party' || j.bookingType === 'party';
-            const isDaily = j.jobCategory === 'daily' || j.bookingType === 'daily' || (j.staffRequirements && j.staffRequirements.length > 0);
+            const isParty = j.jobCategory === 'party' || j.bookingType === 'party' || (j.hiringType && j.hiringType.toLowerCase().includes('party')) || (j.title && j.title.toLowerCase().includes('party')) || (j.partyRequirement && Object.keys(j.partyRequirement).length > 0);
+            const isDaily = !isParty && (j.jobCategory === 'daily' || j.bookingType === 'daily' || (j.staffRequirements && j.staffRequirements.length > 0));
 
             let amount = 0;
             let displayAmount = '';
             let title = j.title || 'Hired Job';
-            let categoryLabel = isParty ? 'Chef for Party' : (isDaily ? 'Daily Basis Staff' : (j.jobCategory === 'home' ? 'Domestic Cook' : 'Commercial Chef'));
+            let categoryLabel = isParty ? 'Party Jobs' : (isDaily ? 'Daily Basis Staff' : (j.jobCategory === 'home' ? 'Domestic Cook' : 'Commercial Chef'));
 
             if (isDaily && j.staffRequirements && j.staffRequirements.length > 0) {
                 const reqItem = j.staffRequirements[0];
@@ -290,7 +290,7 @@ const getCookEarnings = async (req, res) => {
             } else if (isParty) {
                 amount = Number(j.pricing?.staffCharges) || parseSalaryInfo(j.salary || '1999').rawAmount || 1999;
                 displayAmount = `₹${amount.toLocaleString('en-IN')}`;
-                title = `Chef for Party: ${j.event || j.occasion || 'Party Event'}`;
+                title = `Party Job: ${j.event || j.occasion || 'Party Event'}`;
             } else {
                 // Monthly job: strictly use offeredSalary for earnings calculation
                 const rawOffered = app.offeredSalary || app.salary;
@@ -326,6 +326,48 @@ const getCookEarnings = async (req, res) => {
                 rawAmount: amount,
                 status: isDone ? 'Completed' : 'Upcoming'
             });
+        }
+
+        // ── 3. Confirmed Bookings from Booking Model ────────────────────────
+        try {
+            const Booking = require('../models/Booking');
+            const cookBookings = await Booking.find({
+                cook: { $in: candIds },
+                status: { $in: ['confirmed', 'completed', 'paid', 'active'] }
+            }).populate('job').sort({ createdAt: -1 });
+
+            for (const bk of cookBookings) {
+                const bIdStr = bk._id.toString();
+                if (seenJobIds.has(bIdStr) || (bk.job && seenJobIds.has(bk.job._id ? bk.job._id.toString() : bk.job.toString()))) continue;
+                seenJobIds.add(bIdStr);
+
+                const bkJob = bk.job || {};
+                const isParty = bkJob.jobCategory === 'party' || bkJob.bookingType === 'party' || (bkJob.title && bkJob.title.toLowerCase().includes('party')) || (bkJob.partyRequirement && Object.keys(bkJob.partyRequirement).length > 0);
+                const isDaily = !isParty && (bkJob.jobCategory === 'daily' || bkJob.bookingType === 'daily' || (bkJob.staffRequirements && bkJob.staffRequirements.length > 0));
+
+                const amt = Number(bk.totalAmount) || 0;
+                const isDone = bk.status === 'completed';
+                if (isDone || bk.status === 'confirmed') {
+                    totalEarnings += amt;
+                } else {
+                    pendingEarnings += amt;
+                }
+
+                earningsList.push({
+                    id: bIdStr,
+                    jobId: bk.job ? (bk.job._id ? bk.job._id.toString() : bk.job.toString()) : bIdStr,
+                    title: bkJob.title || (isParty ? 'Party Booking' : (isDaily ? 'Daily Booking' : 'Confirmed Booking')),
+                    category: isParty ? 'Party Jobs' : (isDaily ? 'Daily Basis Staff' : 'Confirmed Booking'),
+                    jobCategory: bkJob.jobCategory || (isParty ? 'party' : (isDaily ? 'daily' : 'domestic')),
+                    role: 'Cook/Staff',
+                    date: bk.createdAt,
+                    amount: `₹${amt.toLocaleString('en-IN')}`,
+                    rawAmount: amt,
+                    status: isDone ? 'Completed' : 'Confirmed'
+                });
+            }
+        } catch (bkErr) {
+            console.error('Error fetching cook bookings for earnings:', bkErr);
         }
 
         res.status(200).json({

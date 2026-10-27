@@ -15,6 +15,7 @@ const getWebSettings = async (req, res) => {
             if (!settings.dailyCharges) settings.dailyCharges = {};
             settings.dailyCharges.partyCharges = {
                 perPersonCookingCharge: 65,
+                perDishCookingCharge: 250,
                 addOns: [
                     { key: 'burnerStove', name: 'Commercial Burner / Stove Setup', description: 'High flame burner for bulk party cooking', rate: 350, isActive: true },
                     { key: 'crockery', name: 'Crockery & Cutlery Rental Support', description: 'Serving platters, plates & cutlery arrangements', rate: 500, isActive: false },

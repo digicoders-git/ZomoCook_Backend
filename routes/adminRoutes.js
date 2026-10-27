@@ -7,8 +7,9 @@ const {
     loginAdmin,
     getAdminProfile,
     updateAdminProfile,
-    changeAdminPassword
-    
+    changeAdminPassword,
+    forgotAdminPassword,
+    resetAdminPassword
 } = require('../controllers/adminController');
 const { protect } = require('../middleware/authMiddleware');
 
@@ -24,9 +25,11 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
-// Protected Routes (only authenticated admins can register new admins)
+// Public Routes
 router.post('/register', registerAdmin);
 router.post('/login', loginAdmin);
+router.post('/forgot-password', forgotAdminPassword);
+router.post('/reset-password', resetAdminPassword);
 
 // Protected Routes
 router.get('/profile', protect, getAdminProfile);

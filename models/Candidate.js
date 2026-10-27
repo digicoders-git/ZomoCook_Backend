@@ -88,6 +88,7 @@ const candidateSchema = new mongoose.Schema({
     // Status
     kycStatus: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
     profileStatus: { type: String, enum: ['active', 'inactive'], default: 'active' },
+    isProfileComplete: { type: Boolean, default: false },
     fcmToken: { type: String, default: null },
     rating: { type: Number, default: 5.0 },
     totalReviews: { type: Number, default: 0 },

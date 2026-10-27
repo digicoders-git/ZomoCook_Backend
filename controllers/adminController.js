@@ -172,5 +172,124 @@ module.exports = {
     loginAdmin,
     getAdminProfile,
     updateAdminProfile,
-    changeAdminPassword
+    changeAdminPassword,
+    forgotAdminPassword,
+    resetAdminPassword
+};
+
+/**
+ * @desc    Forgot admin password - Send OTP to registered email or mobile
+ * @route   POST /api/admin/forgot-password
+ * @access  Public
+ */
+const forgotAdminPassword = async (req, res) => {
+    try {
+        const { identifier } = req.body;
+        if (!identifier || !identifier.trim()) {
+            return res.status(400).json({ success: false, message: 'Please provide registered email or mobile number' });
+        }
+
+        const cleanIdentifier = identifier.trim();
+        // Check in Admin collection
+        let account = await Admin.findOne({
+            $or: [
+                { email: cleanIdentifier },
+                { phone: cleanIdentifier }
+            ]
+        });
+
+        // If not found in Admin, check in User collection
+        if (!account) {
+            account = await User.findOne({
+                $or: [
+                    { email: cleanIdentifier },
+                    { phone: cleanIdentifier }
+                ]
+            });
+        }
+
+        if (!account) {
+            return res.status(404).json({ success: false, message: 'No account found with this email or mobile number' });
+        }
+
+        if (!account.phone) {
+            return res.status(400).json({ success: false, message: 'No registered mobile number associated with this account to send OTP' });
+        }
+
+        // Generate 6 digit OTP
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+        const Otp = require('../models/Otp');
+        const smsService = require('../services/smsService');
+
+        // Delete any existing OTPs for this phone
+        await Otp.deleteMany({ phone: account.phone });
+        await Otp.create({ phone: account.phone, otp });
+
+        // Send OTP via SMS
+        await smsService.sendOtpSms(account.phone, otp);
+
+        const maskedPhone = account.phone.length > 4 
+            ? account.phone.replace(/(\d{2})\d+(\d{2})/, '$1******$2') 
+            : account.phone;
+
+        res.json({
+            success: true,
+            message: `OTP sent successfully to registered mobile ending with ${account.phone.slice(-4)}`,
+            phone: account.phone,
+            maskedPhone
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+/**
+ * @desc    Reset admin password using OTP
+ * @route   POST /api/admin/reset-password
+ * @access  Public
+ */
+const resetAdminPassword = async (req, res) => {
+    try {
+        const { phone, otp, newPassword } = req.body;
+
+        if (!phone || !otp || !newPassword) {
+            return res.status(400).json({ success: false, message: 'Phone, OTP, and new password are required' });
+        }
+
+        if (newPassword.length < 6) {
+            return res.status(400).json({ success: false, message: 'New password must be at least 6 characters long' });
+        }
+
+        const Otp = require('../models/Otp');
+        // Find OTP record
+        const otpRecord = await Otp.findOne({ phone: phone.trim(), otp: otp.trim() });
+        if (!otpRecord) {
+            return res.status(400).json({ success: false, message: 'Invalid or expired OTP. Please try again or request a new OTP.' });
+        }
+
+        // Find in Admin collection first
+        let account = await Admin.findOne({ phone: phone.trim() });
+        if (!account) {
+            account = await User.findOne({ phone: phone.trim() });
+        }
+
+        if (!account) {
+            return res.status(404).json({ success: false, message: 'Account not found for this mobile number' });
+        }
+
+        // Setting password and calling save() triggers bcrypt pre('save') middleware
+        account.password = newPassword;
+        await account.save();
+
+        // Clear used OTP
+        await Otp.deleteMany({ phone: phone.trim() });
+
+        res.json({
+            success: true,
+            message: 'Password reset successfully. You can now login with your new password.'
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
 };

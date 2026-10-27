@@ -1,8 +1,17 @@
-const Offer = require('../models/Offer');
+const normalizeApplicableCategory = (val) => {
+  if (!val) return 'All';
+  const s = String(val).trim().toLowerCase();
+  if (s === 'all') return 'All';
+  if (s.includes('party')) return 'Chef for Party';
+  if (s.includes('daily')) return 'Daily Basis Staff';
+  if (s.includes('home')) return 'Home Cook Hiring';
+  if (s.includes('commercial') || s.includes('hotel')) return 'Commercial Hiring';
+  if (s.includes('service')) return 'Service Package';
+  if (s.includes('processing') || s.includes('fee')) return 'Hiring Processing Fee';
+  if (s.includes('subscript')) return 'Subscription';
+  return val;
+};
 
-// @desc    Get all offers
-// @route   GET /api/offers
-// @access  Public
 // @desc    Get all offers
 // @route   GET /api/offers
 // @access  Public
@@ -12,18 +21,21 @@ const getOffers = async (req, res) => {
     let query = {};
     if (activeOnly === 'true') {
       query.isActive = true;
+      query.status = { $in: ['ACTIVE', 'active'] };
     }
     
-    // Filter target platform
-    const targetPlat = platform ? platform : 'App'; // Default to App if platform not sent (for older app versions)
-    if (targetPlat === 'Website') {
-      query.targetPlatform = { $in: ['All', 'Website'] };
-    } else {
-      query.targetPlatform = { $in: ['All', 'App'] };
+    // Filter target platform:
+    // If explicit platform sent (e.g. 'App' or 'Website'), include 'All' + that platform
+    if (platform && platform !== 'All') {
+      query.targetPlatform = { $in: ['All', platform] };
+    } else if (activeOnly === 'true' && !platform) {
+      // Default fallback for client app requests where platform wasn't sent
+      query.targetPlatform = { $in: ['All', 'App', 'Website'] };
     }
 
-    if (applicableOn) {
-      query.applicableOn = { $in: ['All', applicableOn] };
+    if (applicableOn && applicableOn !== 'All') {
+      const normalized = normalizeApplicableCategory(applicableOn);
+      query.applicableOn = { $in: ['All', normalized, applicableOn] };
     }
 
     const offers = await Offer.find(query).sort({ createdAt: -1 });
@@ -39,24 +51,25 @@ const getOffers = async (req, res) => {
 const createOffer = async (req, res) => {
   try {
     const { 
-      code, title, subtitle, offerType, discountValue, targetPlatform, applicableOn, 
+      code, title, subtitle, offerType, discountValue, maxDiscountValue, targetPlatform, applicableOn, 
       minOrderValue, usageLimitTotal, usageLimitPerUser, validFrom, validTo, status, isActive 
     } = req.body;
     
     const newOffer = new Offer({
-      code,
+      code: code ? code.toUpperCase().trim() : '',
       title,
       subtitle,
-      offerType,
-      discountValue,
+      offerType: offerType || 'FLAT',
+      discountValue: Number(discountValue) || 0,
+      maxDiscountValue: Number(maxDiscountValue) || 0,
       targetPlatform: targetPlatform || 'All',
       applicableOn: applicableOn || 'All',
-      minOrderValue,
-      usageLimitTotal,
-      usageLimitPerUser,
+      minOrderValue: Number(minOrderValue) || 0,
+      usageLimitTotal: Number(usageLimitTotal) || 0,
+      usageLimitPerUser: Number(usageLimitPerUser) || 1,
       validFrom,
       validTo,
-      status,
+      status: status || 'ACTIVE',
       isActive: isActive !== undefined ? isActive : true
     });
     await newOffer.save();
@@ -122,7 +135,7 @@ const validateOffer = async (req, res) => {
       }
 
       const reqPlatform = platform || 'App';
-      if (offer.targetPlatform && offer.targetPlatform !== 'All' && offer.targetPlatform !== reqPlatform) {
+      if (offer.targetPlatform && offer.targetPlatform !== 'All' && reqPlatform !== 'All' && offer.targetPlatform.toLowerCase() !== reqPlatform.toLowerCase()) {
         return res.status(400).json({
           success: false,
           valid: false,
@@ -130,12 +143,16 @@ const validateOffer = async (req, res) => {
         });
       }
 
-      if (offer.applicableOn && offer.applicableOn !== 'All' && applicableOn && offer.applicableOn !== applicableOn) {
-        return res.status(400).json({
-          success: false,
-          valid: false,
-          message: `This coupon code is valid only for '${offer.applicableOn}'`
-        });
+      if (offer.applicableOn && offer.applicableOn !== 'All') {
+        const normOfferApp = normalizeApplicableCategory(offer.applicableOn);
+        const normReqApp = normalizeApplicableCategory(applicableOn);
+        if (normReqApp !== 'All' && normOfferApp.toLowerCase() !== normReqApp.toLowerCase()) {
+          return res.status(400).json({
+            success: false,
+            valid: false,
+            message: `This coupon code is valid only for '${offer.applicableOn}'`
+          });
+        }
       }
 
       const now = new Date();
@@ -178,8 +195,10 @@ const validateOffer = async (req, res) => {
           subtitle: offer.subtitle || `${offer.offerType === 'PERCENTAGE' ? `${offer.discountValue}% OFF` : `₹${offer.discountValue} Flat OFF`}`,
           offerType: offer.offerType,
           discountValue: offer.discountValue,
+          maxDiscountValue: offer.maxDiscountValue || 0,
           discountAmount,
-          minOrderValue: offer.minOrderValue,
+          minOrderValue: offer.minOrderValue || 0,
+          salesPersonName: offer.salesPersonName || '',
           finalAmount
         }
       });

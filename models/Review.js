@@ -32,6 +32,15 @@ const reviewSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Job'
     },
+    application: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Application'
+    },
+    reviewType: {
+        type: String,
+        enum: ['trial', 'booking', 'duty'],
+        default: 'trial'
+    },
     bookingId: {
         type: String,
         trim: true,

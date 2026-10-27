@@ -146,6 +146,41 @@ exports.updateUser = async (req, res) => {
 };
 
 /**
+ * @desc    Reset user password / credentials directly from Admin
+ * @route   PUT /api/users/:id/reset-password
+ * @access  Private
+ */
+exports.resetUserPassword = async (req, res) => {
+    try {
+        const { password } = req.body;
+        if (!password || password.length < 6) {
+            return res.status(400).json({ success: false, message: 'Password must be at least 6 characters long' });
+        }
+
+        const bcrypt = require('bcryptjs');
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(password, salt);
+
+        let user = await User.findByIdAndUpdate(req.params.id, { password: hashedPassword }, { new: true });
+        if (!user) {
+            const Admin = require('../models/Admin');
+            user = await Admin.findByIdAndUpdate(req.params.id, { password: hashedPassword }, { new: true });
+        }
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'User not found' });
+        }
+
+        res.status(200).json({
+            success: true,
+            message: `Credentials reset successfully for ${user.name || 'user'}`
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+/**
  * @desc    Delete staff user
  * @route   DELETE /api/users/:id
  * @access  Private
@@ -318,11 +353,15 @@ exports.verifyOtp = async (req, res) => {
             }
         }
 
+        let candidateDoc = null;
+        let isProfileComplete = user.isProfileComplete === true;
+
         // Ensure Customer record exists if the role is Customer (so they appear in CustomerList)
         if (roleDoc.name.toLowerCase() === 'customer') {
             const Customer = require('../models/Customer');
             let customerDoc = await Customer.findOne({
                 $or: [
+                    { createdBy: user._id },
                     { contactPhone: cleanedPhone },
                     { contactPhone: formattedPhone },
                     { phone: cleanedPhone },
@@ -331,7 +370,7 @@ exports.verifyOtp = async (req, res) => {
                 ]
             });
             if (!customerDoc) {
-                await Customer.create({
+                customerDoc = await Customer.create({
                     name: user.name || `User_${(formattedPhone || cleanedPhone).slice(-4)}`,
                     contactName: user.name || `User_${(formattedPhone || cleanedPhone).slice(-4)}`,
                     contactPhone: formattedPhone || cleanedPhone,
@@ -343,18 +382,30 @@ exports.verifyOtp = async (req, res) => {
                 customerDoc.creatorModel = 'User';
                 await customerDoc.save();
             }
+
+            if (!isProfileComplete) {
+                const hasValidName = user.name && user.name.trim() !== '' && !user.name.toLowerCase().includes('enter full name') && !user.name.toLowerCase().startsWith('user_');
+                if (hasValidName || user.address || (customerDoc && customerDoc.contactAddress)) {
+                    isProfileComplete = true;
+                    await User.updateOne({ _id: user._id }, { $set: { isProfileComplete: true } });
+                }
+            }
         } else if (roleDoc.name.toLowerCase() === 'cook' || roleDoc.name.toLowerCase() === 'chef') {
             // Ensure Candidate record exists if role is Cook/Chef
             const Candidate = require('../models/Candidate');
-            let candidateDoc = await Candidate.findOne({
+            const last10 = (formattedPhone || cleanedPhone || user.phone || '').slice(-10);
+            candidateDoc = await Candidate.findOne({
                 $or: [
+                    { createdBy: user._id },
+                    { _id: user._id },
                     { phone: cleanedPhone },
                     { phone: formattedPhone },
-                    { phone: phone }
+                    { phone: phone },
+                    { phone: last10 ? new RegExp(last10 + '$') : user.phone }
                 ]
             });
             if (!candidateDoc) {
-                await Candidate.create({
+                candidateDoc = await Candidate.create({
                     name: user.name && user.name !== 'Enter Full Name' ? user.name : `Cook_${(formattedPhone || cleanedPhone).slice(-4)}`,
                     phone: formattedPhone || cleanedPhone,
                     fcmToken: user.fcmToken || undefined,
@@ -362,12 +413,47 @@ exports.verifyOtp = async (req, res) => {
                     creatorModel: 'User'
                 });
             } else {
+                let candUpdates = {};
                 if (user.fcmToken && candidateDoc.fcmToken !== user.fcmToken) {
-                    await Candidate.updateOne(
-                        { _id: candidateDoc._id },
-                        { $set: { fcmToken: user.fcmToken } }
-                    );
+                    candUpdates.fcmToken = user.fcmToken;
                 }
+                if (!candidateDoc.createdBy) {
+                    candUpdates.createdBy = user._id;
+                    candUpdates.creatorModel = 'User';
+                }
+                if (Object.keys(candUpdates).length > 0) {
+                    await Candidate.updateOne({ _id: candidateDoc._id }, { $set: candUpdates });
+                }
+            }
+
+            // Check if Candidate has previously completed details
+            const candName = (candidateDoc.name || '').trim();
+            const hasCandValidName = candName !== '' && !candName.startsWith('Cook_') && !candName.toLowerCase().includes('enter full name') && !candName.toLowerCase().startsWith('user_');
+            const hasCity = !!(candidateDoc.city && candidateDoc.city.trim() !== '');
+            const hasGender = !!(candidateDoc.gender && candidateDoc.gender.trim() !== '');
+            const hasState = !!(candidateDoc.state && candidateDoc.state.trim() !== '');
+            const hasJobPositions = !!(candidateDoc.jobPreference && Array.isArray(candidateDoc.jobPreference.jobPositions) && candidateDoc.jobPreference.jobPositions.length > 0);
+            const hasSkills = !!(Array.isArray(candidateDoc.skills) && candidateDoc.skills.length > 0);
+
+            if (user.isProfileComplete || candidateDoc.isProfileComplete || hasCity || hasGender || hasState || hasJobPositions || hasSkills || hasCandValidName) {
+                isProfileComplete = true;
+                if (!user.isProfileComplete) {
+                    await User.updateOne({ _id: user._id }, { $set: { isProfileComplete: true } });
+                }
+                if (!candidateDoc.isProfileComplete) {
+                    await Candidate.updateOne({ _id: candidateDoc._id }, { $set: { isProfileComplete: true } });
+                    candidateDoc.isProfileComplete = true;
+                }
+            }
+
+            // Sync user name / photo if candidate has submitted them
+            if (hasCandValidName && (!user.name || user.name === 'Enter Full Name' || user.name.startsWith('Cook_'))) {
+                user.name = candName;
+                await User.updateOne({ _id: user._id }, { $set: { name: candName } });
+            }
+            if (candidateDoc.profileImage && (!user.profilePic || user.profilePic.includes('default-user.png'))) {
+                user.profilePic = candidateDoc.profileImage;
+                await User.updateOne({ _id: user._id }, { $set: { profilePic: candidateDoc.profileImage } });
             }
         }
 
@@ -382,6 +468,8 @@ exports.verifyOtp = async (req, res) => {
             message: isNewUser ? 'User registered successfully' : 'Logged in successfully',
             isNewUser,
             token: generateToken(user._id),
+            isProfileComplete,
+            candidate: candidateDoc,
             user: {
                 _id: user._id,
                 name: user.name,
@@ -390,6 +478,7 @@ exports.verifyOtp = async (req, res) => {
                 profilePic: user.profilePic,
                 role: user.role,
                 status: user.status,
+                isProfileComplete,
                 fcmToken: user.fcmToken
             }
         });
@@ -460,6 +549,7 @@ exports.updateProfile = async (req, res) => {
             user.profilePic = req.file.path;
         }
 
+        user.isProfileComplete = true;
         await user.save();
 
         // If user has 'Cook' role, create or update Candidate profile
@@ -543,6 +633,7 @@ exports.updateProfile = async (req, res) => {
 
             candidateData.createdBy = user._id;
             candidateData.creatorModel = 'User';
+            candidateData.isProfileComplete = true;
 
             if (!candidate) {
                 candidate = await Candidate.create(candidateData);
@@ -586,6 +677,7 @@ exports.updateProfile = async (req, res) => {
         const responseData = {
             success: true,
             message: 'Profile updated successfully',
+            isProfileComplete: true,
             user: {
                 _id: updatedUser._id,
                 name: updatedUser.name,
@@ -597,6 +689,7 @@ exports.updateProfile = async (req, res) => {
                 address: updatedUser.address,
                 outletName: updatedUser.outletName,
                 status: updatedUser.status,
+                isProfileComplete: true,
                 fcmToken: updatedUser.fcmToken
             }
         };

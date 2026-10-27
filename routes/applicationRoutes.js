@@ -17,7 +17,8 @@ const {
     completeTrial,
     cancelTrial,
     cookAcceptOffer,
-    cookRejectOffer
+    cookRejectOffer,
+    getOfferLetter
 } = require('../controllers/applicationController');
 const { protect } = require('../middleware/authMiddleware');
 
@@ -63,5 +64,8 @@ router.post('/:id/cook-reject-offer', protect, cookRejectOffer);
 
 // Reject application
 router.post('/:id/reject', protect, rejectApplication);
+
+// Dynamic Offer letter view/download
+router.get('/:id/offer-letter', getOfferLetter);
 
 module.exports = router;

@@ -2,6 +2,7 @@ const Review = require('../models/Review');
 const Candidate = require('../models/Candidate');
 const Job = require('../models/Job');
 const User = require('../models/User');
+const Application = require('../models/Application');
 
 /**
  * @desc    Submit a review / rating for a cook
@@ -13,11 +14,13 @@ exports.submitReview = async (req, res) => {
         const {
             jobId,
             candidateId,
+            applicationId,
             cookName,
             role,
             rating,
             tags = [],
-            comment = ''
+            comment = '',
+            reviewType = 'trial'
         } = req.body;
 
         const numRating = Number(rating);
@@ -124,6 +127,8 @@ exports.submitReview = async (req, res) => {
             existingReview.comment = comment;
             existingReview.role = role || existingReview.role;
             if (customerName) existingReview.customerName = customerName;
+            if (applicationId) existingReview.application = applicationId;
+            if (reviewType) existingReview.reviewType = reviewType;
             savedReview = await existingReview.save();
         } else {
             savedReview = await Review.create({
@@ -134,6 +139,8 @@ exports.submitReview = async (req, res) => {
                 customerName,
                 customerPhone,
                 job: resolvedJob?._id,
+                application: applicationId || null,
+                reviewType: reviewType || 'trial',
                 bookingId: bookingIdStr,
                 role: role || 'Staff',
                 rating: numRating,
@@ -141,6 +148,30 @@ exports.submitReview = async (req, res) => {
                 comment,
                 status: 'approved'
             });
+        }
+
+        // Update Application with review if applicationId provided or job/candidate match
+        if (applicationId) {
+            await Application.findByIdAndUpdate(applicationId, {
+                $set: {
+                    review: savedReview._id,
+                    rating: numRating,
+                    reviewComment: comment,
+                    reviewTags: tags
+                }
+            });
+        } else if (resolvedJob && candidate) {
+            await Application.updateMany(
+                { job: resolvedJob._id, candidate: candidate._id },
+                {
+                    $set: {
+                        review: savedReview._id,
+                        rating: numRating,
+                        reviewComment: comment,
+                        reviewTags: tags
+                    }
+                }
+            );
         }
 
         // Update Job assignedStaff entry with rating

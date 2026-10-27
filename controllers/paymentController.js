@@ -58,7 +58,9 @@ const createOrder = async (req, res) => {
                 return_url: `${process.env.BASE_URL || 'https://api.zomocook.in'}/api/payments/verify?order_id={order_id}`,
             },
             order_note: type === 'daily_job_advance' ? 'Daily job 25% advance' :
+                type === 'party_job_advance' ? 'Chef for Party 25% advance' :
                 type === 'daily_job_remaining' ? 'Daily job 75% remaining' :
+                type === 'party_job_remaining' ? 'Chef for Party remaining' :
                 type === 'subscription' ? 'Subscription purchase' :
                 type === 'subscription_due' ? 'Subscription Remaining Due Payment' :
                 type === 'service_package' ? `${packageType || ''} Service Package` :
@@ -290,7 +292,7 @@ const verifyPayment = async (req, res) => {
         }
 
         // Handle subscription activation
-        if (type === 'subscription' && planId) {
+        if ((type === 'subscription' || type === 'service_package') && planId) {
             const Plan = require('../models/Plan');
             const User = require('../models/User');
             const SubscriptionHistory = require('../models/SubscriptionHistory');
@@ -419,8 +421,8 @@ const verifyPayment = async (req, res) => {
             }
         }
 
-        // Handle job post fee - activate the job
-        if ((type === 'job_post_fee' || type === 'daily_job_advance') && jobId) {
+        // Handle job post fee and advance payments - activate the job
+        if ((type === 'job_post_fee' || type === 'daily_job_advance' || type === 'party_job_advance') && jobId) {
             const Job = require('../models/Job');
             const updateData = {
                 paymentStatus: 'paid',
@@ -428,7 +430,7 @@ const verifyPayment = async (req, res) => {
                 status: 'New',
                 createdAt: new Date()
             };
-            if (type === 'daily_job_advance') {
+            if (type === 'daily_job_advance' || type === 'party_job_advance') {
                 const txn = await Transaction.findOne({
                     $or: [{ orderId: targetOrderId }, { razorpayOrderId: targetOrderId }]
                 });
@@ -444,6 +446,17 @@ const verifyPayment = async (req, res) => {
                     updateData.advanceAmount = Math.round((price > 0 ? price : 299) * 0.25);
                 }
             }
+
+            const couponCodeUsed = req.body.couponCode || req.body.coupon;
+            if (couponCodeUsed) {
+                updateData.appliedCoupon = String(couponCodeUsed).toUpperCase().trim();
+                const Offer = require('../models/Offer');
+                Offer.findOneAndUpdate(
+                    { code: String(couponCodeUsed).toUpperCase().trim() },
+                    { $inc: { usedCount: 1 } }
+                ).catch(err => console.error('Error incrementing offer usedCount:', err));
+            }
+
             const updatedJob = await Job.findByIdAndUpdate(jobId, updateData, { new: true });
             
             // Dispatch push notification to all Cooks when job is activated after payment
@@ -462,7 +475,9 @@ const verifyPayment = async (req, res) => {
                 }).catch(err => console.error('Error sending push notification after payment verification:', err));
             }
 
-            message = type === 'daily_job_advance' ? 'Advance paid and Plan activated. Daily job is now live.' : 'Job post fee paid. Job is now live.';
+            message = (type === 'daily_job_advance' || type === 'party_job_advance') 
+                ? 'Advance paid successfully. Job booking is now live.' 
+                : 'Job post fee paid. Job is now live.';
         } else if ((type === 'daily_job_remaining' || type === 'party_job_remaining' || type === 'job_remaining') && jobId) {
             const Job = require('../models/Job');
             const jobDoc = await Job.findById(jobId);

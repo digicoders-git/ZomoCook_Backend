@@ -90,7 +90,21 @@ const applicationSchema = new mongoose.Schema({
     appliedRole: {
         type: String,
         default: ''
-    }
+    },
+    review: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Review'
+    },
+    rating: {
+        type: Number,
+        min: 1,
+        max: 5
+    },
+    reviewComment: {
+        type: String,
+        default: ''
+    },
+    reviewTags: [String]
 }, { timestamps: true });
 
 // Unique index to prevent duplicate applications for same role

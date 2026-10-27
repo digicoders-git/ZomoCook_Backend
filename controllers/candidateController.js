@@ -563,7 +563,10 @@ const updateCandidateMe = async (req, res) => {
             }
         });
 
+        updateData.isProfileComplete = true;
         const updatedCandidate = await Candidate.findByIdAndUpdate(candidate._id, updateData, { new: true });
+        const User = require('../models/User');
+        await User.findByIdAndUpdate(req.admin._id, { isProfileComplete: true });
         res.status(200).json({ success: true, message: 'Candidate updated successfully', candidate: updatedCandidate });
     } catch (error) {
         res.status(400).json({ success: false, message: error.message });

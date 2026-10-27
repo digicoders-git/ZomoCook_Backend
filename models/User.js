@@ -53,6 +53,10 @@ const userSchema = new mongoose.Schema({
         enum: ['Active', 'Inactive', 'Cancelled', 'Expired', 'active', 'inactive'],
         default: 'Active'
     },
+    isProfileComplete: {
+        type: Boolean,
+        default: false
+    },
     fcmToken: { type: String, default: null },
     activePlan: {
         type: mongoose.Schema.Types.ObjectId,
