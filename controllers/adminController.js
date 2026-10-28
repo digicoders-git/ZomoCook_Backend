@@ -167,16 +167,6 @@ const changeAdminPassword = async (req, res) => {
     }
 };
 
-module.exports = {
-    registerAdmin,
-    loginAdmin,
-    getAdminProfile,
-    updateAdminProfile,
-    changeAdminPassword,
-    forgotAdminPassword,
-    resetAdminPassword
-};
-
 /**
  * @desc    Forgot admin password - Send OTP to registered email or mobile
  * @route   POST /api/admin/forgot-password
@@ -292,4 +282,14 @@ const resetAdminPassword = async (req, res) => {
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
+};
+
+module.exports = {
+    registerAdmin,
+    loginAdmin,
+    getAdminProfile,
+    updateAdminProfile,
+    changeAdminPassword,
+    forgotAdminPassword,
+    resetAdminPassword
 };
