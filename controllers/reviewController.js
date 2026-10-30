@@ -360,3 +360,176 @@ exports.getJobReviews = async (req, res) => {
         res.status(500).json({ success: false, message: error.message, reviews: [] });
     }
 };
+
+/**
+ * @desc    Get all reviews for admin panel (search, filter, pagination, stats)
+ * @route   GET /api/reviews
+ * @access  Private (Admin)
+ */
+exports.getAllReviews = async (req, res) => {
+    try {
+        const { search, rating, reviewType, status, page = 1, limit = 20 } = req.query;
+        let query = {};
+
+        if (status && status !== 'all' && status !== 'All') {
+            query.status = status.toLowerCase();
+        }
+
+        if (rating && rating !== 'all' && rating !== 'All') {
+            const numR = Number(rating);
+            if (!isNaN(numR)) query.rating = numR;
+        }
+
+        if (reviewType && reviewType !== 'all' && reviewType !== 'All') {
+            query.reviewType = reviewType.toLowerCase();
+        }
+
+        if (search && search.trim()) {
+            const sRegex = new RegExp(search.trim(), 'i');
+            query.$or = [
+                { cookName: sRegex },
+                { customerName: sRegex },
+                { customerPhone: sRegex },
+                { bookingId: sRegex },
+                { role: sRegex },
+                { comment: sRegex },
+                { tags: sRegex }
+            ];
+        }
+
+        const pageNum = parseInt(page, 10) || 1;
+        const limitNum = parseInt(limit, 10) || 20;
+        const skip = (pageNum - 1) * limitNum;
+
+        const [reviews, totalCount, allReviewsForStats] = await Promise.all([
+            Review.find(query)
+                .populate('cook', 'name phone profileImage city')
+                .populate('customer', 'name phone email')
+                .populate('job', 'title jobCode jobCategory city')
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limitNum),
+            Review.countDocuments(query),
+            Review.find({}) // For overall stats
+        ]);
+
+        const totalReviews = allReviewsForStats.length;
+        const totalRatingSum = allReviewsForStats.reduce((sum, r) => sum + (r.rating || 5), 0);
+        const avgRating = totalReviews > 0 ? parseFloat((totalRatingSum / totalReviews).toFixed(1)) : 5.0;
+
+        const breakdown = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+        let approvedCount = 0;
+        let pendingCount = 0;
+        let rejectedCount = 0;
+
+        allReviewsForStats.forEach(r => {
+            const star = Math.round(r.rating || 5);
+            if (breakdown[star] !== undefined) breakdown[star]++;
+            if (r.status === 'approved') approvedCount++;
+            else if (r.status === 'rejected') rejectedCount++;
+            else pendingCount++;
+        });
+
+        res.status(200).json({
+            success: true,
+            count: reviews.length,
+            totalCount,
+            totalPages: Math.ceil(totalCount / limitNum),
+            currentPage: pageNum,
+            stats: {
+                totalReviews,
+                avgRating,
+                breakdown,
+                approvedCount,
+                pendingCount,
+                rejectedCount
+            },
+            reviews
+        });
+    } catch (error) {
+        console.error('Error fetching all reviews:', error);
+        res.status(500).json({ success: false, message: error.message, reviews: [] });
+    }
+};
+
+/**
+ * @desc    Update review status (approve, reject, pending)
+ * @route   PATCH /api/reviews/:id/status
+ * @access  Private (Admin)
+ */
+exports.updateReviewStatus = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { status } = req.body;
+
+        if (!['approved', 'pending', 'rejected'].includes(status)) {
+            return res.status(400).json({ success: false, message: 'Invalid status' });
+        }
+
+        const review = await Review.findByIdAndUpdate(id, { status }, { new: true });
+        if (!review) {
+            return res.status(404).json({ success: false, message: 'Review not found' });
+        }
+
+        // If candidate linked, recalculate approved ratings
+        if (review.cook) {
+            const approvedReviews = await Review.find({ cook: review.cook, status: 'approved' });
+            const total = approvedReviews.length;
+            const sum = approvedReviews.reduce((acc, r) => acc + (r.rating || 5), 0);
+            const avg = total > 0 ? parseFloat((sum / total).toFixed(1)) : 5.0;
+
+            const breakdown = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
+            approvedReviews.forEach(r => {
+                const star = Math.round(r.rating || 5);
+                if (breakdown[star] !== undefined) breakdown[star]++;
+            });
+
+            await Candidate.findByIdAndUpdate(review.cook, {
+                $set: { rating: avg, totalReviews: total, ratingBreakdown: breakdown }
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            message: `Review status updated to ${status}`,
+            review
+        });
+    } catch (error) {
+        console.error('Error updating review status:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+/**
+ * @desc    Delete a review
+ * @route   DELETE /api/reviews/:id
+ * @access  Private (Admin)
+ */
+exports.deleteReview = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const review = await Review.findByIdAndDelete(id);
+        if (!review) {
+            return res.status(404).json({ success: false, message: 'Review not found' });
+        }
+
+        if (review.cook) {
+            const approvedReviews = await Review.find({ cook: review.cook, status: 'approved' });
+            const total = approvedReviews.length;
+            const sum = approvedReviews.reduce((acc, r) => acc + (r.rating || 5), 0);
+            const avg = total > 0 ? parseFloat((sum / total).toFixed(1)) : 5.0;
+
+            await Candidate.findByIdAndUpdate(review.cook, {
+                $set: { rating: avg, totalReviews: total }
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Review deleted successfully'
+        });
+    } catch (error) {
+        console.error('Error deleting review:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};

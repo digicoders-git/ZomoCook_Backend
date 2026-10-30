@@ -3,9 +3,17 @@ const router = express.Router();
 const {
     submitReview,
     getCookReviews,
-    getJobReviews
+    getJobReviews,
+    getAllReviews,
+    updateReviewStatus,
+    deleteReview
 } = require('../controllers/reviewController');
 const { protect } = require('../middleware/authMiddleware');
+
+// Get all reviews (Admin) or submit review
+router.route('/')
+    .get(protect, getAllReviews)
+    .post(protect, submitReview);
 
 // Public or auth-protected getCookReviews
 router.get('/cook/:cookId', (req, res, next) => {
@@ -18,7 +26,8 @@ router.get('/cook/:cookId', (req, res, next) => {
 // Reviews for a specific job
 router.get('/job/:jobId', protect, getJobReviews);
 
-// Submit review
-router.post('/', protect, submitReview);
+// Update status / Delete review
+router.patch('/:id/status', protect, updateReviewStatus);
+router.delete('/:id', protect, deleteReview);
 
 module.exports = router;

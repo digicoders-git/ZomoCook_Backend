@@ -398,11 +398,12 @@ const getApplications = async (req, res) => {
             const Job = require('../models/Job');
             const Customer = require('../models/Customer');
             
-            const last10 = req.admin.phone ? req.admin.phone.slice(-10) : '';
+            const phoneClean = req.admin.phone ? req.admin.phone.toString().replace(/\D/g, '') : '';
+            const last10 = phoneClean.length >= 10 ? phoneClean.slice(-10) : phoneClean;
             const customerDocs = await Customer.find({
                 $or: [
                     { createdBy: userId },
-                    { contactPhone: new RegExp(last10 + '$') }
+                    ...(last10 ? [{ contactPhone: new RegExp(last10 + '$') }] : [])
                 ]
             });
             const customerIds = customerDocs.map(c => c._id);
@@ -410,23 +411,34 @@ const getApplications = async (req, res) => {
             const myJobs = await Job.find({ 
                 $or: [
                     { createdBy: userId },
-                    { customer: { $in: customerIds } }
+                    { customer: { $in: [userId, ...customerIds] } },
+                    ...(last10 ? [
+                        { ownerPhone: new RegExp(last10 + '$') },
+                        { contactPhone: new RegExp(last10 + '$') }
+                    ] : []),
+                    ...(req.admin.email ? [{ ownerEmail: req.admin.email }, { email: req.admin.email }] : [])
                 ]
             });
             const jobIds = myJobs.map(j => j._id);
             query.$or = [
                 { customer: userId },
-                { job: { $in: jobIds } }
+                { customer: { $in: customerIds } },
+                ...(jobIds.length > 0 ? [{ job: { $in: jobIds } }] : [])
             ];
         }
 
         if (status) query.status = status;
         if (jobId) query.job = jobId;
         if (candidateId) query.candidate = candidateId;
+        const targetRoleParam = req.query.appliedRole || req.query.role;
+        if (targetRoleParam && targetRoleParam !== 'All' && targetRoleParam !== 'All Roles') {
+            const cleanTarget = targetRoleParam.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            query.appliedRole = new RegExp(cleanTarget, 'i');
+        }
 
         const applications = await Application.find(query)
             .populate('candidate')
-            .populate('job', 'title jobCategory jobType city state salaryRange outletName joiningType jobPosition')
+            .populate('job', 'title jobCategory jobType city state salaryRange outletName joiningType jobPosition staffRequirements partyRequirement commercialStaffList')
             .populate('customer', 'name email phone outletName')
             .populate('servicePackagePaymentId')
             .sort({ appliedDate: -1 });

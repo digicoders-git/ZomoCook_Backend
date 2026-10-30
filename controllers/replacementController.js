@@ -191,6 +191,149 @@ exports.getMyReplacements = async (req, res) => {
     }
 };
 
+// @desc    Get active/hired staff for replacement request
+// @route   GET /api/replacements/active-staff
+// @access  Private (User/Customer)
+exports.getActiveStaffForReplacement = async (req, res) => {
+    try {
+        const userId = req.admin._id;
+        const Customer = require('../models/Customer');
+        const Job = require('../models/Job');
+        const Application = require('../models/Application');
+        const Subscription = require('../models/Subscription');
+        const Booking = require('../models/Booking');
+
+        const phoneClean = req.admin.phone ? req.admin.phone.toString().replace(/\D/g, '') : '';
+        const last10 = phoneClean.length >= 10 ? phoneClean.slice(-10) : phoneClean;
+
+        const customerDocs = await Customer.find({
+            $or: [
+                { createdBy: userId },
+                ...(last10 ? [{ contactPhone: new RegExp(last10 + '$') }] : [])
+            ]
+        });
+        const customerIds = customerDocs.map(c => c._id);
+
+        const staffMap = new Map();
+
+        // 1. Find all relevant jobs posted by or associated with this customer
+        const myJobs = await Job.find({ 
+            $or: [
+                { createdBy: userId },
+                { customer: { $in: [userId, ...customerIds] } },
+                ...(last10 ? [
+                    { ownerPhone: new RegExp(last10 + '$') },
+                    { contactPhone: new RegExp(last10 + '$') }
+                ] : []),
+                ...(req.admin.email ? [{ ownerEmail: req.admin.email }, { email: req.admin.email }] : [])
+            ]
+        });
+        const jobIds = myJobs.map(j => j._id);
+
+        // 2. From Applications (Hired / Joined / Offer Accepted / Selected / Completed)
+        const appTargetQuery = [
+            {
+                $or: [
+                    { customer: userId },
+                    { customer: { $in: customerIds } },
+                    ...(jobIds.length > 0 ? [{ job: { $in: jobIds } }] : [])
+                ]
+            },
+            {
+                $or: [
+                    { status: { $regex: /hired|offer accepted|joined|selected|completed|confirmed/i } },
+                    { offerStatus: 'accepted' }
+                ]
+            }
+        ];
+
+        const hiredApps = await Application.find({ $and: appTargetQuery })
+            .populate('candidate')
+            .populate('job', 'title jobPosition jobCategory');
+
+        for (const app of hiredApps) {
+            const cand = app.candidate;
+            const appData = app.applicationData || {};
+            const name = (cand?.name || appData.candidateName || appData.name || '')?.toString().trim();
+            if (name && !['cook', 'staff', 'unknown'].includes(name.toLowerCase()) && !staffMap.has(name.toLowerCase())) {
+                staffMap.set(name.toLowerCase(), {
+                    name: name,
+                    role: app.appliedRole || app.job?.jobPosition || app.job?.title || cand?.role || 'Cook / Chef',
+                    jobId: app.job?._id || app.job,
+                    applicationId: app._id
+                });
+            }
+        }
+
+        // 3. From Bookings
+        const bookingTarget = [
+            { customer: userId },
+            { customer: { $in: customerIds } },
+            ...(jobIds.length > 0 ? [{ job: { $in: jobIds } }] : [])
+        ];
+        const myBookings = await Booking.find({ $or: bookingTarget })
+            .populate('cook')
+            .populate('job', 'title jobPosition jobCategory');
+
+        for (const b of myBookings) {
+            const cook = b.cook;
+            const cookName = (cook?.name || b.staffName || b.cookName)?.toString().trim();
+            if (cookName && !['cook', 'staff', 'unknown'].includes(cookName.toLowerCase()) && !staffMap.has(cookName.toLowerCase())) {
+                staffMap.set(cookName.toLowerCase(), {
+                    name: cookName,
+                    role: b.job?.jobPosition || b.job?.title || 'Cook / Chef',
+                    jobId: b.job?._id || b.job,
+                    bookingId: b._id
+                });
+            }
+        }
+
+        // 4. From Job.assignedStaff
+        for (const job of myJobs) {
+            if (Array.isArray(job.assignedStaff)) {
+                for (const staff of job.assignedStaff) {
+                    const name = (staff.name || staff.staffName || (staff.candidate && staff.candidate.name))?.toString().trim();
+                    if (name && !['cook', 'staff', 'unknown'].includes(name.toLowerCase()) && !staffMap.has(name.toLowerCase())) {
+                        staffMap.set(name.toLowerCase(), {
+                            name: name,
+                            role: staff.role || staff.category || job.title || 'Staff',
+                            jobId: job._id
+                        });
+                    }
+                }
+            }
+        }
+
+        // 5. From Subscriptions
+        const subs = await Subscription.find({
+            $or: [
+                { user: userId },
+                { customer: { $in: [userId, ...customerIds] } }
+            ]
+        });
+        for (const s of subs) {
+            const name = s.staffName?.toString().trim();
+            if (name && !['cook', 'staff', 'unknown'].includes(name.toLowerCase()) && !staffMap.has(name.toLowerCase())) {
+                staffMap.set(name.toLowerCase(), {
+                    name: name,
+                    role: s.staffRole || s.packageName || 'Staff',
+                    subscriptionId: s._id
+                });
+            }
+        }
+
+        const staffList = Array.from(staffMap.values());
+        res.status(200).json({
+            success: true,
+            count: staffList.length,
+            staff: staffList
+        });
+    } catch (error) {
+        console.error('Error getting active staff for replacement:', error);
+        res.status(500).json({ success: false, message: 'Server Error', error: error.message });
+    }
+};
+
 // @desc    Update a replacement status or assign to
 // @route   PUT /api/replacements/:id
 // @access  Private (Admin)

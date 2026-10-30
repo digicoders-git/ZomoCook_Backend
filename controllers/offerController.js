@@ -25,12 +25,13 @@ const getOffers = async (req, res) => {
     }
     
     // Filter target platform:
-    // If explicit platform sent (e.g. 'App' or 'Website'), include 'All' + that platform
+    // If explicit platform sent (e.g. 'App' or 'Website'), include 'All' + matching platforms
     if (platform && platform !== 'All') {
-      query.targetPlatform = { $in: ['All', platform] };
+      const pRegex = new RegExp(platform, 'i');
+      query.targetPlatform = { $in: ['All', 'all', platform, 'App', 'Customer App', 'mobile', pRegex] };
     } else if (activeOnly === 'true' && !platform) {
       // Default fallback for client app requests where platform wasn't sent
-      query.targetPlatform = { $in: ['All', 'App', 'Website'] };
+      query.targetPlatform = { $in: ['All', 'all', 'App', 'Customer App', 'Website'] };
     }
 
     if (applicableOn && applicableOn !== 'All') {

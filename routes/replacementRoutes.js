@@ -9,13 +9,17 @@ const {
     assignCandidate,
     resolveReplacement,
     postReplacementJob,
-    getMyReplacements
+    getMyReplacements,
+    getActiveStaffForReplacement
 } = require('../controllers/replacementController');
 const { protect, admin } = require('../middleware/authMiddleware');
 
 router.route('/')
     .post(protect, createReplacement)
     .get(protect, getReplacements); // Assuming protect allows admins too
+
+router.route('/active-staff')
+    .get(protect, getActiveStaffForReplacement);
 
 router.route('/my-replacements')
     .get(protect, getMyReplacements);

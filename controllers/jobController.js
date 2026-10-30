@@ -2346,12 +2346,16 @@ const completeJobWithOtp = async (req, res) => {
         staffEntry.status = 'Completed';
         staffEntry.completedAt = new Date();
 
-        // Check if all staff completed or daily/party booking completed
+        // Check if all staff completed: Only mark entire job Completed when ALL assigned staff have completed
         const allCompleted = job.assignedStaff.every(s => s.status === 'Completed');
-        if (allCompleted || job.jobCategory === 'daily' || job.jobCategory === 'party' || job.bookingType === 'daily' || job.bookingType === 'party') {
+        if (allCompleted) {
             job.status = 'Completed';
             job.isActive = false;
             job.jobCompletedAt = new Date();
+        } else {
+            // Keep job active and in progress so remaining staff can complete and customer sees their OTP
+            job.status = 'Started';
+            job.isActive = true;
         }
 
         // If cook indicated payment received during completion
