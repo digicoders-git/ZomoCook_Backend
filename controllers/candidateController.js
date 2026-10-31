@@ -286,7 +286,32 @@ const getCandidate = async (req, res) => {
             }
         }
         if (!candidate) return res.status(404).json({ success: false, message: 'Candidate not found' });
-        res.status(200).json({ success: true, candidate });
+        
+        // Dynamically compute rating from approved reviews
+        let candObj = candidate.toObject ? candidate.toObject() : { ...candidate };
+        try {
+            const Review = require('../models/Review');
+            const approvedReviews = await Review.find({
+                status: 'approved',
+                $or: [
+                    { cook: candidate._id },
+                    { cookUser: candidate.createdBy },
+                    { cookName: new RegExp(`^${(candidate.name || '').trim()}$`, 'i') }
+                ]
+            });
+            if (approvedReviews && approvedReviews.length > 0) {
+                const sum = approvedReviews.reduce((acc, r) => acc + (r.rating || 5), 0);
+                candObj.rating = parseFloat((sum / approvedReviews.length).toFixed(1));
+                candObj.totalReviews = approvedReviews.length;
+            } else if (!candObj.rating || candObj.rating === 0) {
+                candObj.rating = 5.0;
+                candObj.totalReviews = 0;
+            }
+        } catch (revErr) {
+            console.error('Error computing dynamic candidate rating:', revErr);
+        }
+
+        res.status(200).json({ success: true, candidate: candObj });
     } catch (error) { res.status(500).json({ success: false, message: error.message }); }
 };
 
@@ -494,7 +519,32 @@ const getCandidateMe = async (req, res) => {
                 creatorModel: 'User'
             });
         }
-        res.status(200).json({ success: true, candidate });
+
+        // Dynamically attach rating from approved reviews
+        let candObj = candidate.toObject ? candidate.toObject() : { ...candidate };
+        try {
+            const Review = require('../models/Review');
+            const approvedReviews = await Review.find({
+                status: 'approved',
+                $or: [
+                    { cook: candidate._id },
+                    { cookUser: candidate.createdBy },
+                    { cookName: new RegExp(`^${(candidate.name || '').trim()}$`, 'i') }
+                ]
+            });
+            if (approvedReviews && approvedReviews.length > 0) {
+                const sum = approvedReviews.reduce((acc, r) => acc + (r.rating || 5), 0);
+                candObj.rating = parseFloat((sum / approvedReviews.length).toFixed(1));
+                candObj.totalReviews = approvedReviews.length;
+            } else if (!candObj.rating || candObj.rating === 0) {
+                candObj.rating = 5.0;
+                candObj.totalReviews = 0;
+            }
+        } catch (revErr) {
+            console.error('Error attaching candidate review rating in getCandidateMe:', revErr);
+        }
+
+        res.status(200).json({ success: true, candidate: candObj });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }

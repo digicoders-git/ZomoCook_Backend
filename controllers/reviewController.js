@@ -368,26 +368,127 @@ exports.getJobReviews = async (req, res) => {
  */
 exports.getAllReviews = async (req, res) => {
     try {
-        const { search, rating, reviewType, status, page = 1, limit = 20 } = req.query;
+        const {
+            search,
+            rating,
+            reviewType,
+            serviceCategory,
+            category,
+            dateRange,
+            status,
+            page = 1,
+            limit = 10
+        } = req.query;
+
         let query = {};
 
         if (status && status !== 'all' && status !== 'All') {
             query.status = status.toLowerCase();
         }
 
-        if (rating && rating !== 'all' && rating !== 'All') {
-            const numR = Number(rating);
-            if (!isNaN(numR)) query.rating = numR;
+        // Rating filter
+        if (rating && rating !== 'all' && rating !== 'All' && rating !== 'All Ratings') {
+            const rStr = rating.toString().toLowerCase();
+            if (rStr.includes('5')) {
+                query.rating = { $gte: 4.8 };
+            } else if (rStr.includes('4')) {
+                query.rating = rStr.includes('+') || rStr.includes('above') ? { $gte: 3.8 } : { $gte: 3.8, $lt: 4.8 };
+            } else if (rStr.includes('3')) {
+                query.rating = rStr.includes('+') || rStr.includes('above') ? { $gte: 2.8 } : { $gte: 2.8, $lt: 3.8 };
+            } else if (rStr.includes('2')) {
+                query.rating = rStr.includes('+') || rStr.includes('above') ? { $gte: 1.8 } : { $gte: 1.8, $lt: 2.8 };
+            } else if (rStr.includes('1')) {
+                query.rating = { $lt: 2.0 };
+            } else {
+                const numR = Number(rating);
+                if (!isNaN(numR)) query.rating = numR;
+            }
         }
 
-        if (reviewType && reviewType !== 'all' && reviewType !== 'All') {
-            query.reviewType = reviewType.toLowerCase();
+        // Date Range filter
+        if (dateRange && dateRange !== 'all' && dateRange !== 'All' && dateRange !== 'All Time') {
+            const now = new Date();
+            const dr = dateRange.toString().toLowerCase().trim();
+            if (dr.includes('today')) {
+                const start = new Date();
+                start.setHours(0, 0, 0, 0);
+                query.createdAt = { $gte: start };
+            } else if (dr.includes('yesterday')) {
+                const start = new Date();
+                start.setDate(start.getDate() - 1);
+                start.setHours(0, 0, 0, 0);
+                const end = new Date();
+                end.setDate(end.getDate() - 1);
+                end.setHours(23, 59, 59, 999);
+                query.createdAt = { $gte: start, $lte: end };
+            } else if (dr.includes('7')) {
+                const start = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+                query.createdAt = { $gte: start };
+            } else if (dr.includes('15')) {
+                const start = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000);
+                query.createdAt = { $gte: start };
+            } else if (dr.includes('30')) {
+                const start = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+                query.createdAt = { $gte: start };
+            }
         }
 
+        // Service Category filter (Domestic, Commercial, Chef for Party, Daily Basis)
+        const targetCategory = serviceCategory || category || reviewType;
+        if (targetCategory && targetCategory !== 'all' && targetCategory !== 'All' && targetCategory !== 'All Categories') {
+            const catStr = targetCategory.toString().trim();
+            const catRegex = new RegExp(catStr, 'i');
+            
+            // Find jobs matching category
+            const matchingJobs = await Job.find({
+                $or: [
+                    { jobCategory: catRegex },
+                    { category: catRegex },
+                    { title: catRegex },
+                    { bookingType: catRegex }
+                ]
+            }).select('_id');
+            const jobIds = matchingJobs.map(j => j._id);
+
+            const catFilters = [
+                { job: { $in: jobIds } },
+                { role: catRegex }
+            ];
+
+            const lowCat = catStr.toLowerCase();
+            if (lowCat.includes('daily')) {
+                catFilters.push({ reviewType: 'booking' });
+            } else if (lowCat.includes('party')) {
+                catFilters.push({ reviewType: 'trial' });
+            }
+
+            query.$and = query.$and || [];
+            query.$and.push({ $or: catFilters });
+        }
+
+        // Search Filter (Cook Name, Cook ID, Mobile, Customer Name, Booking ID, Comment)
         if (search && search.trim()) {
-            const sRegex = new RegExp(search.trim(), 'i');
-            query.$or = [
+            const s = search.trim();
+            const sRegex = new RegExp(s, 'i');
+
+            // Also check candidates by name or phone
+            const matchingCandidates = await Candidate.find({
+                $or: [
+                    { name: sRegex },
+                    { phone: sRegex },
+                    { phone: new RegExp(s.replace(/[^0-9]/g, ''), 'i') }
+                ]
+            }).select('_id');
+            const candIds = matchingCandidates.map(c => c._id);
+
+            const cleanId = s.replace(/[^0-9a-fA-F]/g, '');
+            if (cleanId.length === 24) {
+                candIds.push(cleanId);
+            }
+
+            const searchOr = [
                 { cookName: sRegex },
+                { cook: { $in: candIds } },
                 { customerName: sRegex },
                 { customerPhone: sRegex },
                 { bookingId: sRegex },
@@ -395,17 +496,20 @@ exports.getAllReviews = async (req, res) => {
                 { comment: sRegex },
                 { tags: sRegex }
             ];
+
+            query.$and = query.$and || [];
+            query.$and.push({ $or: searchOr });
         }
 
         const pageNum = parseInt(page, 10) || 1;
-        const limitNum = parseInt(limit, 10) || 20;
+        const limitNum = parseInt(limit, 10) || 10;
         const skip = (pageNum - 1) * limitNum;
 
         const [reviews, totalCount, allReviewsForStats] = await Promise.all([
             Review.find(query)
-                .populate('cook', 'name phone profileImage city')
+                .populate('cook', 'name phone profileImage city state address age gender')
                 .populate('customer', 'name phone email')
-                .populate('job', 'title jobCode jobCategory city')
+                .populate('job', 'title jobCode jobCategory category bookingType type city')
                 .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limitNum),
