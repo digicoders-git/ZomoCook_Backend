@@ -85,6 +85,34 @@ const initialMenuCatalog = [
   { name: "Fresh Lime Soda", cuisine: "Beverages", category: "Drinks", foodType: "veg", cookingCharge: 80, image: "https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=200", isActive: true }
 ];
 
+// Helper to normalize image URL and vegetarian status for all clients (Web, Mobile App, Admin)
+const formatMenuItem = (item) => {
+  if (!item) return item;
+  const obj = item.toObject ? item.toObject() : { ...item };
+  const serverBase = 'https://api.zomocook.in';
+  if (obj.image && typeof obj.image === 'string') {
+    let clean = obj.image.replace(/\\/g, '/').trim();
+    if (clean.startsWith('http://') || clean.startsWith('https://')) {
+      if (clean.includes('onrender.com') || clean.includes('localhost')) {
+        clean = clean.replace(/^https?:\/\/[^\/]+/, serverBase);
+      }
+      obj.image = clean;
+    } else {
+      const uploadsIdx = clean.indexOf('uploads/');
+      if (uploadsIdx !== -1) {
+        clean = clean.substring(uploadsIdx);
+      } else {
+        clean = `uploads/${clean.replace(/^\/+/, '')}`;
+      }
+      obj.image = `${serverBase}/${clean}`;
+    }
+  }
+  const isNonVeg = obj.foodType === 'non-veg' || obj.isNonVeg === true;
+  obj.isNonVeg = isNonVeg;
+  obj.foodType = isNonVeg ? 'non-veg' : 'veg';
+  return obj;
+};
+
 // @desc    Get all menu items (Admin)
 // @route   GET /api/menu-items
 // @access  Public / Admin
@@ -103,7 +131,7 @@ exports.getMenuItems = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: items
+      data: items.map(formatMenuItem)
     });
   } catch (error) {
     res.status(500).json({
@@ -129,7 +157,7 @@ exports.getActiveMenuItems = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: items
+      data: items.map(formatMenuItem)
     });
   } catch (error) {
     res.status(500).json({
@@ -173,7 +201,7 @@ exports.createMenuItem = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      data: item,
+      data: formatMenuItem(item),
       message: 'Menu item created successfully'
     });
   } catch (error) {
@@ -254,7 +282,7 @@ exports.updateMenuItem = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: item,
+      data: formatMenuItem(item),
       message: 'Menu item updated successfully'
     });
   } catch (error) {
