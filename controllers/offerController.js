@@ -1,3 +1,5 @@
+const Offer = require('../models/Offer');
+
 const normalizeApplicableCategory = (val) => {
   if (!val) return 'All';
   const s = String(val).trim().toLowerCase();

@@ -160,11 +160,24 @@ const checkAndCloseJobIfHiringComplete = async (jobId, forceClose = false) => {
         const assignedStaffCount = Array.isArray(job.assignedStaff) ? job.assignedStaff.length : 0;
         const totalFilled = Math.max(hiredCount, assignedStaffCount);
 
+        const isDailyOrParty = job.jobCategory === 'daily' || job.jobCategory === 'party' || 
+            job.bookingType === 'daily' || job.bookingType === 'party' || 
+            (job.staffRequirements && job.staffRequirements.length > 0) ||
+            String(job.title || '').toLowerCase().includes('daily') ||
+            String(job.title || '').toLowerCase().includes('party');
+
         if (totalFilled >= totalNeeded) {
             job.isActive = false;
-            job.status = 'Completed';
+            if (isDailyOrParty) {
+                // For Daily Basis and Party bookings, only mark Completed when all staff finish duty with End OTP
+                if (!['Started', 'In Progress', 'Completed'].includes(job.status)) {
+                    job.status = 'Confirmed';
+                }
+            } else {
+                job.status = 'Completed';
+            }
             await job.save();
-            console.log(`[Job Auto-Closed] Job ${job._id} marked as Completed & Inactive. Filled: ${totalFilled}/${totalNeeded}`);
+            console.log(`[Job Auto-Closed] Job ${job._id} marked as ${job.status} & Inactive. Filled: ${totalFilled}/${totalNeeded}`);
         }
     } catch (err) {
         console.error('Error in checkAndCloseJobIfHiringComplete:', err);
@@ -260,12 +273,22 @@ const applyJob = async (req, res) => {
         const assignedStaffCount = Array.isArray(job.assignedStaff) ? job.assignedStaff.length : 0;
         const totalFilled = Math.max(hiredCount, assignedStaffCount);
 
+        const isDailyOrPartyJob = job.jobCategory === 'daily' || job.jobCategory === 'party' || 
+            job.bookingType === 'daily' || job.bookingType === 'party' || 
+            (job.staffRequirements && job.staffRequirements.length > 0) ||
+            String(job.title || '').toLowerCase().includes('daily') ||
+            String(job.title || '').toLowerCase().includes('party');
+
         if (totalFilled >= totalNeeded) {
-            if (job.isActive || job.status !== 'Completed') {
-                job.isActive = false;
+            job.isActive = false;
+            if (isDailyOrPartyJob) {
+                if (!['Started', 'In Progress', 'Completed'].includes(job.status)) {
+                    job.status = 'Confirmed';
+                }
+            } else {
                 job.status = 'Completed';
-                await job.save();
             }
+            await job.save();
             return res.status(400).json({
                 success: false,
                 message: 'This job is no longer available. Candidate hiring is completed.'

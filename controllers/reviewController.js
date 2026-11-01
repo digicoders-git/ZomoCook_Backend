@@ -295,6 +295,26 @@ exports.getCookReviews = async (req, res) => {
             });
         }
 
+        if (!candidate && cookId && cookId !== 'self') {
+            if (cookId.match(/^[0-9a-fA-F]{24}$/)) {
+                const app = await Application.findById(cookId);
+                if (app && app.candidate) {
+                    candidate = await Candidate.findById(app.candidate);
+                }
+            }
+        }
+
+        const phoneParam = req.query.phone || (cookId && /^\d{10}$/.test(cookId.replace(/\D/g, '')) ? cookId : null);
+        if (!candidate && phoneParam) {
+            const last10 = phoneParam.replace(/\D/g, '').slice(-10);
+            candidate = await Candidate.findOne({ phone: new RegExp(last10 + '$') });
+        }
+
+        const nameParam = req.query.name;
+        if (!candidate && nameParam) {
+            candidate = await Candidate.findOne({ name: new RegExp(`^${nameParam.trim()}$`, 'i') });
+        }
+
         const matchQuery = { status: 'approved' };
         if (candidate) {
             matchQuery.$or = [

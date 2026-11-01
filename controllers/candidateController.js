@@ -285,6 +285,13 @@ const getCandidate = async (req, res) => {
                 }
             }
         }
+        if (!candidate && mongoose.Types.ObjectId.isValid(req.params.id)) {
+            const Application = require('../models/Application');
+            const app = await Application.findById(req.params.id);
+            if (app && app.candidate) {
+                candidate = await Candidate.findById(app.candidate).populate('applications.job');
+            }
+        }
         if (!candidate) return res.status(404).json({ success: false, message: 'Candidate not found' });
         
         // Dynamically compute rating from approved reviews

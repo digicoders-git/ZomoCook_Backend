@@ -2319,24 +2319,35 @@ const completeJobWithOtp = async (req, res) => {
             });
         } catch (_) {}
 
-        // Find the started staff entry
+        // Find the staff entry by candidate and endOtp
         let staffEntry = job.assignedStaff.find(s => {
             const candMatch = possibleCandIds.length > 0
                 ? possibleCandIds.includes(s.candidate?.toString())
                 : true;
-            return candMatch && s.endOtp?.toString().trim() === enteredOtp && s.status === 'Started';
+            const otpMatch = s.endOtp?.toString().trim() === enteredOtp;
+            const notDone = s.status !== 'Completed' && s.status !== 'Cancelled';
+            return candMatch && otpMatch && notDone;
         });
 
-        // Fallback: match by endOtp among started staff
+        // Fallback 1: match by endOtp among uncompleted staff
         if (!staffEntry) {
             staffEntry = job.assignedStaff.find(s => 
-                s.endOtp?.toString().trim() === enteredOtp && s.status === 'Started'
+                s.endOtp?.toString().trim() === enteredOtp && s.status !== 'Completed' && s.status !== 'Cancelled'
+            );
+        }
+
+        // Fallback 2: match by candidate among uncompleted staff
+        if (!staffEntry && possibleCandIds.length > 0) {
+            staffEntry = job.assignedStaff.find(s =>
+                possibleCandIds.includes(s.candidate?.toString()) &&
+                (s.endOtp?.toString().trim() === enteredOtp || job.endOtp?.toString().trim() === enteredOtp) &&
+                s.status !== 'Completed'
             );
         }
 
         // Job-level fallback
         if (!staffEntry && job.endOtp && job.endOtp.toString().trim() === enteredOtp) {
-            staffEntry = job.assignedStaff.find(s => s.status === 'Started') || job.assignedStaff[0];
+            staffEntry = job.assignedStaff.find(s => s.status !== 'Completed') || job.assignedStaff[0];
         }
 
         if (!staffEntry) {
@@ -2347,7 +2358,7 @@ const completeJobWithOtp = async (req, res) => {
         staffEntry.completedAt = new Date();
 
         // Check if all staff completed: Only mark entire job Completed when ALL assigned staff have completed
-        const allCompleted = job.assignedStaff.every(s => s.status === 'Completed');
+        const allCompleted = job.assignedStaff.length > 0 && job.assignedStaff.every(s => s.status === 'Completed' || s.status === 'Cancelled');
         if (allCompleted) {
             job.status = 'Completed';
             job.isActive = false;
