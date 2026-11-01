@@ -6,11 +6,10 @@ const normalizeApplicableCategory = (val) => {
   if (s === 'all') return 'All';
   if (s.includes('party')) return 'Chef for Party';
   if (s.includes('daily')) return 'Daily Basis Staff';
-  if (s.includes('home')) return 'Home Cook Hiring';
+  if (s.includes('home') || s.includes('domestic')) return 'Home Cook Hiring';
   if (s.includes('commercial') || s.includes('hotel')) return 'Commercial Hiring';
-  if (s.includes('service')) return 'Service Package';
+  if (s.includes('service') || s.includes('package') || s.includes('subscript')) return 'Service Package';
   if (s.includes('processing') || s.includes('fee')) return 'Hiring Processing Fee';
-  if (s.includes('subscript')) return 'Subscription';
   return val;
 };
 
@@ -24,6 +23,11 @@ const getOffers = async (req, res) => {
     if (activeOnly === 'true') {
       query.isActive = true;
       query.status = { $in: ['ACTIVE', 'active'] };
+      const now = new Date();
+      query.$and = [
+        { $or: [{ validFrom: { $exists: false } }, { validFrom: null }, { validFrom: { $lte: now } }] },
+        { $or: [{ validTo: { $exists: false } }, { validTo: null }, { validTo: { $gte: new Date(new Date().setHours(0, 0, 0, 0)) } }] }
+      ];
     }
     
     // Filter target platform:
@@ -38,7 +42,11 @@ const getOffers = async (req, res) => {
 
     if (applicableOn && applicableOn !== 'All') {
       const normalized = normalizeApplicableCategory(applicableOn);
-      query.applicableOn = { $in: ['All', normalized, applicableOn] };
+      if (normalized === 'Service Package' || normalized === 'Subscription') {
+        query.applicableOn = { $in: ['All', 'Service Package', 'Subscription', applicableOn] };
+      } else {
+        query.applicableOn = { $in: ['All', normalized, applicableOn] };
+      }
     }
 
     const offers = await Offer.find(query).sort({ createdAt: -1 });
@@ -129,11 +137,13 @@ const validateOffer = async (req, res) => {
     const numericAmount = Math.max(0, Number(orderAmount) || 0);
     const cleanCode = code.toUpperCase().trim();
 
-    // 1. Search in DB
-    const offer = await Offer.findOne({ code: cleanCode });
+    // 1. Search in DB (case-insensitive)
+    const offer = await Offer.findOne({ 
+      code: { $regex: new RegExp(`^${cleanCode}$`, 'i') } 
+    });
 
     if (offer) {
-      if (!offer.isActive || offer.status !== 'ACTIVE') {
+      if (!offer.isActive || String(offer.status).toUpperCase() !== 'ACTIVE') {
         return res.status(400).json({ success: false, valid: false, message: 'This coupon is inactive or disabled' });
       }
 
@@ -149,7 +159,12 @@ const validateOffer = async (req, res) => {
       if (offer.applicableOn && offer.applicableOn !== 'All') {
         const normOfferApp = normalizeApplicableCategory(offer.applicableOn);
         const normReqApp = normalizeApplicableCategory(applicableOn);
-        if (normReqApp !== 'All' && normOfferApp.toLowerCase() !== normReqApp.toLowerCase()) {
+
+        const isPackageMatch = 
+          (normOfferApp === 'Service Package' || normOfferApp === 'Subscription') &&
+          (normReqApp === 'Service Package' || normReqApp === 'Subscription');
+
+        if (normReqApp !== 'All' && normOfferApp.toLowerCase() !== normReqApp.toLowerCase() && !isPackageMatch) {
           return res.status(400).json({
             success: false,
             valid: false,
@@ -162,8 +177,14 @@ const validateOffer = async (req, res) => {
       if (offer.validFrom && now < new Date(offer.validFrom)) {
         return res.status(400).json({ success: false, valid: false, message: 'This coupon offer has not started yet' });
       }
-      if (offer.validTo && now > new Date(offer.validTo)) {
-        return res.status(400).json({ success: false, valid: false, message: 'This coupon code has expired' });
+      if (offer.validTo) {
+        const validToDate = new Date(offer.validTo);
+        if (validToDate.getHours() === 0 && validToDate.getMinutes() === 0) {
+          validToDate.setHours(23, 59, 59, 999);
+        }
+        if (now > validToDate) {
+          return res.status(400).json({ success: false, valid: false, message: 'This coupon code has expired' });
+        }
       }
       if (offer.usageLimitTotal > 0 && (offer.usedCount || 0) >= offer.usageLimitTotal) {
         return res.status(400).json({ success: false, valid: false, message: 'This coupon usage limit has been reached' });
@@ -172,7 +193,7 @@ const validateOffer = async (req, res) => {
         return res.status(400).json({
           success: false,
           valid: false,
-          message: `Minimum order value of ₹${offer.minOrderValue} required for coupon '${cleanCode}'`
+          message: `Minimum order value of ₹${offer.minOrderValue} required for coupon '${offer.code}'`
         });
       }
 
@@ -195,7 +216,7 @@ const validateOffer = async (req, res) => {
         offer: {
           code: offer.code,
           title: offer.title || `${offer.code} Offer`,
-          subtitle: offer.subtitle || `${offer.offerType === 'PERCENTAGE' ? `${offer.discountValue}% OFF` : `₹${offer.discountValue} Flat OFF`}`,
+          subtitle: offer.subtitle || (offer.offerType === 'PERCENTAGE' ? `${offer.discountValue}% OFF` : `Flat ₹${offer.discountValue} OFF`),
           offerType: offer.offerType,
           discountValue: offer.discountValue,
           maxDiscountValue: offer.maxDiscountValue || 0,
@@ -204,74 +225,6 @@ const validateOffer = async (req, res) => {
           salesPersonName: offer.salesPersonName || '',
           finalAmount
         }
-      });
-    }
-
-    // 2. Fallback check for standard preset coupons
-    if (cleanCode === 'FIRST100') {
-      if (numericAmount < 999) {
-        return res.status(400).json({ success: false, valid: false, message: 'Minimum booking of ₹999 required for FIRST100' });
-      }
-      return res.status(200).json({
-        success: true,
-        valid: true,
-        message: '🎉 Coupon FIRST100 applied! You saved ₹100',
-        offer: { code: 'FIRST100', title: 'First Booking Offer', subtitle: 'Flat ₹100 OFF', offerType: 'FLAT', discountValue: 100, discountAmount: 100, minOrderValue: 999, finalAmount: numericAmount - 100 }
-      });
-    }
-
-    if (cleanCode === 'SAVE250') {
-      if (numericAmount < 1999) {
-        return res.status(400).json({ success: false, valid: false, message: 'Minimum booking of ₹1999 required for SAVE250' });
-      }
-      return res.status(200).json({
-        success: true,
-        valid: true,
-        message: '🎉 Coupon SAVE250 applied! You saved ₹250',
-        offer: { code: 'SAVE250', title: 'Mega Saver Offer', subtitle: 'Flat ₹250 OFF', offerType: 'FLAT', discountValue: 250, discountAmount: 250, minOrderValue: 1999, finalAmount: numericAmount - 250 }
-      });
-    }
-
-    if (cleanCode === 'ZOMO2000') {
-      const disc = Math.min(2000, numericAmount);
-      return res.status(200).json({
-        success: true,
-        valid: true,
-        message: '🎉 Coupon ZOMO2000 applied! You saved ₹2,000',
-        offer: {
-          code: 'ZOMO2000',
-          title: 'Special Leads Manager Offer',
-          subtitle: '₹2,000 off on Premium Package',
-          offerType: 'FLAT',
-          discountValue: 2000,
-          discountAmount: disc,
-          minOrderValue: 0,
-          salesPersonName: 'Leads Manager',
-          finalAmount: numericAmount - disc
-        }
-      });
-    }
-
-    if (cleanCode === 'SAVE500') {
-      if (numericAmount < 4999) {
-        return res.status(400).json({ success: false, valid: false, message: 'Minimum booking of ₹4999 required for SAVE500' });
-      }
-      return res.status(200).json({
-        success: true,
-        valid: true,
-        message: '🎉 Coupon SAVE500 applied! You saved ₹500',
-        offer: { code: 'SAVE500', title: 'Premium Saver Offer', subtitle: 'Flat ₹500 OFF', offerType: 'FLAT', discountValue: 500, discountAmount: 500, minOrderValue: 4999, finalAmount: numericAmount - 500 }
-      });
-    }
-
-    if (cleanCode === 'ZOMO10') {
-      let discount = Math.round(numericAmount * 0.10);
-      if (discount > 1000) discount = 1000;
-      return res.status(200).json({
-        success: true,
-        valid: true,
-        message: `🎉 Coupon ZOMO10 applied! You saved ₹${discount}`,
-        offer: { code: 'ZOMO10', title: '10% Discount Offer', subtitle: '10% OFF (Up to ₹1000)', offerType: 'PERCENTAGE', discountValue: 10, discountAmount: discount, minOrderValue: 0, finalAmount: numericAmount - discount }
       });
     }
 
