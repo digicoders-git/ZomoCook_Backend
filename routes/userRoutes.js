@@ -27,7 +27,11 @@ router.get('/profile', getProfile);
 router.put('/profile', upload.fields([
     { name: 'profilePic', maxCount: 1 },
     { name: 'idProof', maxCount: 1 },
-    { name: 'addressProof', maxCount: 1 }
+    { name: 'addressProof', maxCount: 1 },
+    { name: 'academicCertificate', maxCount: 1 },
+    { name: 'experienceCertificate', maxCount: 1 },
+    { name: 'policeVerification', maxCount: 1 },
+    { name: 'gallery', maxCount: 10 }
 ]), updateProfile);
 
 router.route('/')

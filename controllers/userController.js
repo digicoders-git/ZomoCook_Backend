@@ -539,6 +539,7 @@ exports.updateProfile = async (req, res) => {
         if (outletName) user.outletName = outletName;
         if (about !== undefined) user.about = about;
         if (skills) user.skills = Array.isArray(skills) ? skills : JSON.parse(skills);
+        if (req.body.foodPreference) user.foodPreference = req.body.foodPreference;
 
         // Handle file uploads (profilePic, idProof, addressProof)
         if (req.files) {
@@ -576,6 +577,8 @@ exports.updateProfile = async (req, res) => {
                 }
             }
             if (req.body.gender) candidateData.gender = req.body.gender;
+            if (req.body.foodPreference) candidateData.foodPreference = req.body.foodPreference;
+            if (req.body.highestEducation) candidateData.highestEducation = req.body.highestEducation;
             if (req.body.languages) candidateData.languages = parseJsonField(req.body.languages);
             if (req.body.maritalStatus) candidateData.maritalStatus = req.body.maritalStatus;
             if (req.body.state) candidateData.state = req.body.state;
@@ -583,7 +586,7 @@ exports.updateProfile = async (req, res) => {
             if (req.body.address) candidateData.address = req.body.address;
             if (user.profilePic) candidateData.profileImage = user.profilePic;
 
-            // Handle documents upload (Aadhar Front & Back)
+            // Handle documents upload (Aadhar Front & Back, Academic Certificate, Experience Certificate, Police Verification)
             const docs = candidate && candidate.documents ? { ...candidate.documents } : {};
             docs.idProofType = 'Aadhar';
             if (req.files) {
@@ -593,8 +596,31 @@ exports.updateProfile = async (req, res) => {
                 if (req.files.addressProof) {
                     docs.addressProof = req.files.addressProof[0].path;
                 }
+                if (req.files.academicCertificate) {
+                    docs.academicCertificate = req.files.academicCertificate[0].path;
+                }
+                if (req.files.experienceCertificate) {
+                    docs.experienceCertificate = req.files.experienceCertificate[0].path;
+                }
+                if (req.files.policeVerification) {
+                    docs.policeVerification = req.files.policeVerification[0].path;
+                }
             }
             candidateData.documents = docs;
+
+            // Handle photoGallery
+            let gallery = candidate && Array.isArray(candidate.photoGallery) ? [...candidate.photoGallery] : [];
+            if (req.body.photoGallery) {
+                const parsedGallery = parseJsonField(req.body.photoGallery);
+                if (Array.isArray(parsedGallery)) {
+                    gallery = parsedGallery;
+                }
+            }
+            if (req.files && req.files.gallery) {
+                const newImgs = req.files.gallery.map(f => f.path);
+                gallery.push(...newImgs);
+            }
+            candidateData.photoGallery = gallery;
 
             // Handle complex fields if passed as JSON strings or arrays directly
             const complexFields = ['cookingSkills', 'workExperience', 'education', 'careerHighlights', 'socialMedia', 'skills'];
@@ -602,12 +628,27 @@ exports.updateProfile = async (req, res) => {
                 if (req.body[field]) {
                     if (typeof req.body[field] === 'string') {
                         try {
-                            candidateData[field] = JSON.parse(req.body[field]);
+                            const parsed = JSON.parse(req.body[field]);
+                            if (field === 'workExperience' && Array.isArray(parsed)) {
+                                candidateData.workExperience = {
+                                    ...(candidate?.workExperience || {}),
+                                    experiences: parsed
+                                };
+                            } else {
+                                candidateData[field] = parsed;
+                            }
                         } catch (e) {
                             console.log(`Field ${field} is not valid JSON`);
                         }
                     } else {
-                        candidateData[field] = req.body[field];
+                        if (field === 'workExperience' && Array.isArray(req.body[field])) {
+                            candidateData.workExperience = {
+                                ...(candidate?.workExperience || {}),
+                                experiences: req.body[field]
+                            };
+                        } else {
+                            candidateData[field] = req.body[field];
+                        }
                     }
                 }
             });

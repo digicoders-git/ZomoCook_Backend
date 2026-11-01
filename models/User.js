@@ -82,7 +82,8 @@ const userSchema = new mongoose.Schema({
         default: 0
     },
     skills: [{ type: String }],
-    about: { type: String, trim: true }
+    about: { type: String, trim: true },
+    foodPreference: { type: String, default: 'Both' }
 }, {
     timestamps: true
 });

@@ -10,6 +10,8 @@ const candidateSchema = new mongoose.Schema({
     age: { type: Number },
     gender: { type: String, enum: ['male', 'female', 'other'] },
     maritalStatus: { type: String, enum: ['single', 'married'] },
+    foodPreference: { type: String, default: 'Both' },
+    highestEducation: { type: String, default: '' },
     state: { type: String, trim: true },
     city: { type: String, trim: true },
     address: { type: String, trim: true },
@@ -123,15 +125,19 @@ const candidateSchema = new mongoose.Schema({
             experienceType: String,
             reasonForLeaving: String
         },
-        experiences: [(
+        experiences: [
             {
+                restaurantName: String,
+                company: String,
                 position: String,
+                years: String,
+                duration: String,
                 from: String,
                 to: String,
                 jobProfile: String,
                 shortDetail: String
             }
-        )]
+        ]
     },
     education: [
         {
