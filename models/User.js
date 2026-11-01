@@ -57,6 +57,10 @@ const userSchema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
+    profileScore: {
+        type: Number,
+        default: 0
+    },
     fcmToken: { type: String, default: null },
     activePlan: {
         type: mongoose.Schema.Types.ObjectId,

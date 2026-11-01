@@ -540,6 +540,10 @@ exports.updateProfile = async (req, res) => {
         if (about !== undefined) user.about = about;
         if (skills) user.skills = Array.isArray(skills) ? skills : JSON.parse(skills);
         if (req.body.foodPreference) user.foodPreference = req.body.foodPreference;
+        if (req.body.profileScore !== undefined) {
+            const ps = parseInt(req.body.profileScore, 10);
+            if (!isNaN(ps)) user.profileScore = ps;
+        }
 
         // Handle file uploads (profilePic, idProof, addressProof)
         if (req.files) {
@@ -675,6 +679,10 @@ exports.updateProfile = async (req, res) => {
             candidateData.createdBy = user._id;
             candidateData.creatorModel = 'User';
             candidateData.isProfileComplete = true;
+            if (req.body.profileScore !== undefined) {
+                const ps = parseInt(req.body.profileScore, 10);
+                if (!isNaN(ps)) candidateData.profileScore = ps;
+            }
 
             if (!candidate) {
                 candidate = await Candidate.create(candidateData);
