@@ -5,7 +5,17 @@ const transactionSchema = new mongoose.Schema({
     customer: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer' },
     type: {
         type: String,
-        enum: ['job_post_fee', 'daily_job_advance', 'daily_job_remaining', 'subscription'],
+        enum: [
+            'job_post_fee',
+            'daily_job_advance',
+            'daily_job_remaining',
+            'party_job_advance',
+            'party_job_remaining',
+            'job_remaining',
+            'subscription',
+            'subscription_due',
+            'service_package'
+        ],
         required: true
     },
     amount: { type: Number, required: true },
