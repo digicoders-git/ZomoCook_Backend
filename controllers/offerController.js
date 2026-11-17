@@ -41,12 +41,25 @@ const getOffers = async (req, res) => {
     }
 
     if (applicableOn && applicableOn !== 'All') {
+      const s = String(applicableOn).trim().toLowerCase();
+      let matchedCategories = ['All', applicableOn];
       const normalized = normalizeApplicableCategory(applicableOn);
-      if (normalized === 'Service Package' || normalized === 'Subscription') {
-        query.applicableOn = { $in: ['All', 'Service Package', 'Subscription', applicableOn] };
-      } else {
-        query.applicableOn = { $in: ['All', normalized, applicableOn] };
+      if (normalized) matchedCategories.push(normalized);
+
+      if (s.includes('daily')) {
+        matchedCategories.push('Daily Staff', 'Daily Basis Staff', 'Daily Basis');
+      } else if (s.includes('party')) {
+        matchedCategories.push('Chef for Party', 'Party Chef');
+      } else if (s.includes('service') || s.includes('package') || s.includes('subscript')) {
+        matchedCategories.push('Service Package', 'Subscription');
+      } else if (s.includes('home') || s.includes('domestic')) {
+        matchedCategories.push('Home Cook Hiring', 'Domestic Cook');
+      } else if (s.includes('commercial') || s.includes('hotel')) {
+        matchedCategories.push('Commercial Hiring', 'Commercial Cook');
+      } else if (s.includes('processing') || s.includes('fee')) {
+        matchedCategories.push('Hiring Processing Fee');
       }
+      query.applicableOn = { $in: [...new Set(matchedCategories)] };
     }
 
     const offers = await Offer.find(query).sort({ createdAt: -1 });
@@ -95,9 +108,16 @@ const createOffer = async (req, res) => {
 // @access  Private/Admin
 const updateOffer = async (req, res) => {
   try {
+    const updateData = { ...req.body };
+    if (updateData.code) {
+      updateData.code = updateData.code.toUpperCase().trim();
+    }
+    if (updateData.applicableOn) {
+      updateData.applicableOn = updateData.applicableOn.trim();
+    }
     const updatedOffer = await Offer.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      updateData,
       { new: true, runValidators: true }
     );
     if (!updatedOffer) {
@@ -164,7 +184,15 @@ const validateOffer = async (req, res) => {
           (normOfferApp === 'Service Package' || normOfferApp === 'Subscription') &&
           (normReqApp === 'Service Package' || normReqApp === 'Subscription');
 
-        if (normReqApp !== 'All' && normOfferApp.toLowerCase() !== normReqApp.toLowerCase() && !isPackageMatch) {
+        const isDailyMatch = 
+          normOfferApp.toLowerCase().includes('daily') && 
+          normReqApp.toLowerCase().includes('daily');
+
+        const isPartyMatch = 
+          normOfferApp.toLowerCase().includes('party') && 
+          normReqApp.toLowerCase().includes('party');
+
+        if (normReqApp !== 'All' && normOfferApp.toLowerCase() !== normReqApp.toLowerCase() && !isPackageMatch && !isDailyMatch && !isPartyMatch) {
           return res.status(400).json({
             success: false,
             valid: false,

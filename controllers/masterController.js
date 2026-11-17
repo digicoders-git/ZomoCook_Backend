@@ -259,7 +259,7 @@ exports.getMasters = async (req, res) => {
                 await Master.insertMany(defaultOfferTypes.map(o => ({ name: o, category: 'offer-types', status: 'active' })));
                 masters = await Master.find(query).populate('parentId', 'name').sort({ createdAt: -1 });
             } else if (category === 'applicable-types') {
-                const defaultApplicables = ['All', 'Service Package', 'Hiring Processing Fee', 'Chef for Party', 'Daily Staff'];
+                const defaultApplicables = ['All', 'Service Package', 'Hiring Processing Fee', 'Chef for Party', 'Daily Staff', 'Daily Basis Staff'];
                 await Master.insertMany(defaultApplicables.map(a => ({ name: a, category: 'applicable-types', status: 'active' })));
                 masters = await Master.find(query).populate('parentId', 'name').sort({ createdAt: -1 });
             } else if (category === 'kyc-statuses') {
