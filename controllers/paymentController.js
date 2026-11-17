@@ -445,6 +445,18 @@ const verifyPayment = async (req, res) => {
                     }
                     updateData.advanceAmount = Math.round((price > 0 ? price : 299) * 0.25);
                 }
+
+                // Ensure job.salaryRange reflects the remaining 75% cook payout
+                const existingJob = await Job.findById(jobId);
+                if (existingJob) {
+                    const advAmt = updateData.advanceAmount || existingJob.advanceAmount || 0;
+                    const totalAmt = (existingJob.pricing && (existingJob.pricing.total || existingJob.pricing.totalAmount)) || existingJob.totalAmount || (advAmt > 0 ? Math.round(advAmt * 4) : 0);
+                    const remainingAmt = (existingJob.pricing && (existingJob.pricing.duePay || existingJob.pricing.dueAmount)) || (totalAmt > advAmt ? (totalAmt - advAmt) : Math.round(advAmt * 3));
+                    if (remainingAmt > 0 && (existingJob.jobCategory === 'party' || existingJob.bookingType === 'party' || existingJob.jobCategory === 'daily' || existingJob.bookingType === 'daily')) {
+                        updateData.salaryRange = `₹${remainingAmt}`;
+                        updateData.salary = `₹${remainingAmt}`;
+                    }
+                }
             }
 
             const couponCodeUsed = req.body.couponCode || req.body.coupon;
@@ -462,12 +474,12 @@ const verifyPayment = async (req, res) => {
             // Dispatch push notification to all Cooks when job is activated after payment
             if (updatedJob) {
                 const notificationController = require('./notificationController');
-                const salaryText = updatedJob.salaryRange ? `Salary ${updatedJob.salaryRange}` : 'Good Salary';
-                const cityText = updatedJob.city ? `in ${updatedJob.city}` : '';
+                const { formatJobNotification } = require('./jobController');
+                const notifData = formatJobNotification(updatedJob);
                 notificationController.sendNotificationToRole({
                     roleName: 'Cook',
-                    title: 'New Matching Job',
-                    message: `New Chef Requirement ${cityText}. ${salaryText}. Apply now.`,
+                    title: notifData.title,
+                    message: notifData.message,
                     type: 'job_available',
                     relatedId: updatedJob._id,
                     relatedModel: 'Job',

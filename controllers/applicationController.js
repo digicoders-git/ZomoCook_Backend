@@ -102,17 +102,24 @@ const sanitizeApplicationForCandidate = (app) => {
         const cat = (a.job.jobCategory || a.job.bookingType || a.job.jobType || a.job.title || '').toLowerCase();
         const isPartyOrDaily = cat.includes('party') || cat.includes('daily') || Boolean(a.job.partyRequirement);
         if (isPartyOrDaily) {
+            let total = (a.job.pricing && (a.job.pricing.total || a.job.pricing.totalAmount)) || a.job.totalAmount;
             let advance = a.job.advanceAmount;
             if (!advance && a.job.pricing) {
                 advance = a.job.pricing.advance || a.job.pricing.advanceAmount || a.job.pricing.advancePayable;
             }
-            if (!advance) {
-                const total = (a.job.pricing && (a.job.pricing.total || a.job.pricing.totalAmount)) || a.job.totalAmount;
-                if (total) advance = Math.round(total * 0.25);
+            let remaining = (a.job.pricing && (a.job.pricing.duePay || a.job.pricing.dueAmount));
+            if (!remaining) {
+                if (total && advance) {
+                    remaining = total - advance;
+                } else if (total) {
+                    remaining = Math.round(total * 0.75);
+                } else if (advance) {
+                    remaining = Math.round(advance * 3);
+                }
             }
-            if (advance > 0) {
-                a.job.salaryRange = `₹${advance}`;
-                a.job.salary = `₹${advance}`;
+            if (remaining > 0) {
+                a.job.salaryRange = `₹${remaining}`;
+                a.job.salary = `₹${remaining}`;
             }
         }
     }

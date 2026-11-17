@@ -11,6 +11,26 @@ const normalizeCategory = (cat) => {
     return clean;
 };
 
+const getRemaining75Percent = (job) => {
+    if (!job) return null;
+    const pricing = job.pricing;
+    if (pricing && (pricing.duePay > 0 || pricing.dueAmount > 0)) {
+        return Math.round(pricing.duePay || pricing.dueAmount);
+    }
+    const total = (pricing && (pricing.total || pricing.totalAmount)) || job.totalAmount;
+    const advance = (pricing && (pricing.advance || pricing.advanceAmount || pricing.advancePayable)) || job.advanceAmount;
+    if (total > 0 && advance > 0) {
+        return Math.round(total - advance);
+    }
+    if (total > 0) {
+        return Math.round(total * 0.75);
+    }
+    if (advance > 0) {
+        return Math.round(advance * 3);
+    }
+    return null;
+};
+
 const formatJobNotification = (job) => {
     const cityText = job.city ? `in ${job.city}` : '';
     const isDaily = (job.jobCategory === 'daily' || job.bookingType === 'daily' || (job.title && job.title.toLowerCase().includes('daily')));
@@ -19,16 +39,25 @@ const formatJobNotification = (job) => {
     let title = 'New Chef Job Alert!';
     let message = '';
 
-    if (isDaily && job.staffRequirements && job.staffRequirements.length > 0) {
+    if (isDaily) {
         title = 'New Daily Job Alert!';
-        const rolesWithRates = job.staffRequirements.map(s => {
-            const r = s.role || 'Staff';
-            const rawRate = Number(s.ratePerDay || s.rate || 0);
-            const rate = rawRate > 0 ? Math.round(rawRate * 0.75) : (s.ratePerDay || s.rate || '');
-            return rate ? `${r} (₹${rate}/Day)` : r;
-        });
-        const summary = rolesWithRates.slice(0, 2).join(', ') + (rolesWithRates.length > 2 ? ` & ${rolesWithRates.length - 2} more` : '');
-        message = `Daily Basis ${cityText}: ${summary}. Tap to view & apply!`;
+        const remaining75 = getRemaining75Percent(job);
+        const payoutText = remaining75 && remaining75 > 0 ? `₹${remaining75}` : (job.salaryRange || job.salary || '');
+
+        if (job.staffRequirements && job.staffRequirements.length > 0) {
+            const rolesWithRates = job.staffRequirements.map(s => {
+                const r = s.role || 'Staff';
+                const rawRate = Number(s.ratePerDay || s.rate || 0);
+                const rate = rawRate > 0 ? Math.round(rawRate * 0.75) : (s.ratePerDay || s.rate || '');
+                return rate ? `${r} (₹${rate}/Day)` : r;
+            });
+            const summary = rolesWithRates.slice(0, 2).join(', ') + (rolesWithRates.length > 2 ? ` & ${rolesWithRates.length - 2} more` : '');
+            const totalText = payoutText ? ` (Payout: ${payoutText})` : '';
+            message = `Daily Basis ${cityText}: ${summary}${totalText}. Tap to view & apply!`;
+        } else {
+            const sal = payoutText || 'Best in Industry';
+            message = `Daily Basis Cook ${cityText} • Charges: ${sal}. Tap to view & apply!`;
+        }
     } else if (job.commercialStaffList && job.commercialStaffList.length > 0) {
         title = 'New Restaurant / Hotel Job!';
         const rolesWithSal = job.commercialStaffList.map(s => {
@@ -40,7 +69,17 @@ const formatJobNotification = (job) => {
         message = `Hotel/Restaurant ${cityText}: ${summary}. Apply now!`;
     } else if (isEvent) {
         title = 'New Party Event Job!';
-        const sal = job.salary ? `₹${job.salary}/Day` : (job.salaryRange || '₹2,550/Day');
+        const remaining75 = getRemaining75Percent(job);
+        let sal = '';
+        if (remaining75 && remaining75 > 0) {
+            sal = `₹${remaining75}`;
+        } else if (job.salary) {
+            sal = typeof job.salary === 'string' && job.salary.startsWith('₹') ? job.salary : `₹${job.salary}`;
+        } else if (job.salaryRange) {
+            sal = typeof job.salaryRange === 'string' && job.salaryRange.startsWith('₹') ? job.salaryRange : `₹${job.salaryRange}`;
+        } else {
+            sal = '₹1,875';
+        }
         message = `Party Chef ${cityText} • Charges: ${sal}. Tap to view & apply!`;
     } else {
         const role = job.jobPosition || job.title || 'Chef / Home Cook';
@@ -229,6 +268,20 @@ const createJob = async (req, res) => {
                 }
             } catch (geoErr) {
                 console.error('[Geocoding Fallback] Error:', geoErr.message);
+            }
+        }
+
+        // For Party & Daily jobs, ensure salaryRange and salary reflect remaining 75% cook payout
+        const isPartyJob = jobData.jobCategory === 'party' || jobData.bookingType === 'party' || (jobData.title && jobData.title.toLowerCase().includes('party'));
+        const isDailyJob = jobData.jobCategory === 'daily' || jobData.bookingType === 'daily' || (jobData.title && jobData.title.toLowerCase().includes('daily'));
+        if (isPartyJob || isDailyJob) {
+            const rawPricing = typeof jobData.pricing === 'object' ? jobData.pricing : {};
+            const total = Number(rawPricing.total || rawPricing.totalAmount || jobData.totalAmount || 0);
+            const adv = Number(rawPricing.advance || rawPricing.advancePayable || rawPricing.advanceAmount || jobData.advanceAmount || 0);
+            const remaining = Number(rawPricing.duePay || rawPricing.dueAmount || 0) || (total > 0 && adv > 0 ? (total - adv) : (adv > 0 ? Math.round(adv * 3) : (total > 0 ? Math.round(total * 0.75) : 0)));
+            if (remaining > 0 && (!jobData.salaryRange || isPartyJob)) {
+                jobData.salaryRange = `₹${remaining}`;
+                jobData.salary = `₹${remaining}`;
             }
         }
 
@@ -1830,17 +1883,23 @@ const createCommercialWebJob = async (req, res) => {
                     : `Hiring ${item.count || 1} ${item.category || 'Staff'}. Salary ₹${item.salary || 'Negotiable'}. Food: ${item.food || 'Available'}, Accommodation: ${item.accommodation || 'Not Required'}. Plan: ${selectedPlan?.name || 'Basic'}. Location: ${address || 'On Request'}.${message ? ` Notes: ${message}` : ''}`);
 
             const salaryRangeValue = (() => {
+                const total = pricing?.total || pricing?.totalAmount || 0;
+                const adv = pricing?.advance || pricing?.advanceAmount || (total > 0 ? Math.round(total * 0.25) : 0);
+                const remaining = pricing?.duePay || (total > 0 ? (total - adv) : (adv > 0 ? Math.round(adv * 3) : Math.round((pricing?.staffCharges || 1999) * 0.75)));
+
                 if (isParty) {
-                    const adv = pricing?.advance || pricing?.advanceAmount || Math.round((pricing?.total || pricing?.staffCharges || 1999) * 0.25);
-                    return `₹${adv}`;
+                    return `₹${remaining}`;
                 }
-                if (targetCategory === 'daily' && staffList && staffList.length > 0) {
-                    const rates = staffList.map(s => Number(s.ratePerDay || s.rate || s.salary || 0)).filter(r => r > 0).map(r => Math.round(r * 0.75));
-                    if (rates.length > 0) {
-                        const minR = Math.min(...rates);
-                        const maxR = Math.max(...rates);
-                        return minR === maxR ? `₹${minR}/day` : `₹${minR} - ₹${maxR}/day`;
+                if (targetCategory === 'daily') {
+                    if (staffList && staffList.length > 0) {
+                        const rates = staffList.map(s => Number(s.ratePerDay || s.rate || s.salary || 0)).filter(r => r > 0).map(r => Math.round(r * 0.75));
+                        if (rates.length > 0) {
+                            const minR = Math.min(...rates);
+                            const maxR = Math.max(...rates);
+                            return minR === maxR ? `₹${minR}/day` : `₹${minR} - ₹${maxR}/day`;
+                        }
                     }
+                    if (remaining > 0) return `₹${remaining}`;
                 }
                 return item.salary ? `₹${item.salary}${targetCategory === 'daily' ? '' : '/month'}` : (targetCategory === 'daily' ? 'Fixed Charges / Day' : '₹20000 - ₹35000');
             })();
@@ -2567,6 +2626,8 @@ const completeRemainingPayment = async (req, res) => {
 
 module.exports = {
     ...oldExports,
+    formatJobNotification,
+    getRemaining75Percent,
     applyForJob,
     resendJobNotification,
     completePayment,
