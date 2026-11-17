@@ -127,9 +127,26 @@ const getCustomers = async (req, res) => {
         const customers = await Customer.find(query).sort({ createdAt: -1 });
 
         // Populate active package / subscription for each customer
+        const User = require('../models/User');
         const customerIds = customers.map(c => c._id);
-        const creatorIds = customers.map(c => c.createdBy).filter(Boolean);
-        const allRelatedIds = [...new Set([...customerIds, ...creatorIds])];
+        const phones = customers.map(c => c.contactPhone).filter(Boolean);
+
+        // Find linked User accounts that match customer phones
+        const linkedUsers = phones.length > 0
+            ? await User.find({ phone: { $in: phones } }).select('_id phone')
+            : [];
+        const phoneToUserId = {};
+        linkedUsers.forEach(u => {
+            phoneToUserId[u.phone] = u._id.toString();
+        });
+
+        // Only include createdBy if creatorModel === 'User' (i.e. created by a client user, NOT an admin)
+        const userCreatorIds = customers
+            .filter(c => c.creatorModel === 'User' && c.createdBy)
+            .map(c => c.createdBy);
+
+        const linkedUserIds = linkedUsers.map(u => u._id);
+        const allRelatedIds = [...new Set([...customerIds, ...linkedUserIds, ...userCreatorIds])];
 
         const now = new Date();
         const [activeSubs, allJobs, allTransactions] = await Promise.all([
@@ -144,13 +161,13 @@ const getCustomers = async (req, res) => {
             Job.find({
                 $or: [
                     { customer: { $in: allRelatedIds } },
-                    { createdBy: { $in: allRelatedIds } }
+                    { createdBy: { $in: userCreatorIds } }
                 ]
             }).sort({ createdAt: -1 }),
             Transaction.find({
                 $or: [
                     { customer: { $in: allRelatedIds } },
-                    { user: { $in: allRelatedIds } }
+                    { user: { $in: [...linkedUserIds, ...userCreatorIds] } }
                 ],
                 status: 'success'
             }).sort({ createdAt: -1 })
@@ -166,7 +183,9 @@ const getCustomers = async (req, res) => {
 
         const customersWithPackages = customers.map(cust => {
             const custObj = cust.toObject();
-            const relIds = [cust._id.toString(), cust.createdBy ? cust.createdBy.toString() : null].filter(Boolean);
+            const linkedId = cust.contactPhone ? phoneToUserId[cust.contactPhone] : null;
+            const userCreatorId = (cust.creatorModel === 'User' && cust.createdBy) ? cust.createdBy.toString() : null;
+            const relIds = [cust._id.toString(), linkedId, userCreatorId].filter(Boolean);
 
             const matchingSub = activeSubs.find(sub => 
                 (sub.customer && relIds.includes(sub.customer.toString())) ||
@@ -201,7 +220,7 @@ const getCustomers = async (req, res) => {
             // Customer Jobs & Apps
             const custJobs = allJobs.filter(j => 
                 (j.customer && relIds.includes(j.customer.toString())) ||
-                (j.createdBy && relIds.includes(j.createdBy.toString()))
+                (userCreatorId && j.createdBy && j.createdBy.toString() === userCreatorId)
             );
             const custJobIds = custJobs.map(j => j._id.toString());
             const custApps = allApps.filter(a => 
@@ -210,6 +229,7 @@ const getCustomers = async (req, res) => {
             );
             const custTxns = allTransactions.filter(t =>
                 (t.customer && relIds.includes(t.customer.toString())) ||
+                (t.relatedJob && custJobIds.includes(t.relatedJob.toString())) ||
                 (t.user && relIds.includes(t.user.toString()))
             );
 
@@ -446,51 +466,70 @@ const getCustomerDashboard = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Customer not found' });
         }
 
-        // 2. Get Jobs Posted by this Customer (looking by customerId or user createdBy ID)
-        const jobs = await Job.find({ 
-            $or: [
-                { customer: customerId }, 
-                { customer: customer.createdBy }, 
-                { createdBy: customer.createdBy }
-            ] 
-        }).sort({ createdAt: -1 });
+        const User = require('../models/User');
+        const Plan = require('../models/Plan');
 
-        // 3. Get Applications (Assigned Candidates)
-        // Note: Application model has customer field, or we can find by job ids
+        // 1b. Find linked User account (e.g. mobile app user account matching phone or email)
+        let linkedUser = null;
+        if (customer.contactPhone) {
+            const rawPhone = customer.contactPhone.replace(/\D/g, '');
+            const last10 = rawPhone.slice(-10);
+            linkedUser = await User.findOne({
+                $or: [
+                    { phone: customer.contactPhone },
+                    ...(last10 ? [{ phone: new RegExp(last10 + '$') }] : [])
+                ]
+            });
+        }
+        if (!linkedUser && customer.email) {
+            linkedUser = await User.findOne({ email: customer.email.trim().toLowerCase() });
+        }
+        if (!linkedUser && customer.creatorModel === 'User' && customer.createdBy) {
+            linkedUser = await User.findById(customer.createdBy).catch(() => null);
+        }
+
+        // 2. Get Jobs Posted strictly by this specific Customer
+        const jobFilter = [{ customer: customerId }];
+        if (linkedUser) {
+            jobFilter.push({ customer: linkedUser._id });
+            jobFilter.push({ createdBy: linkedUser._id, creatorModel: 'User' });
+        }
+        const jobs = await Job.find({ $or: jobFilter }).sort({ createdAt: -1 });
         const jobIds = jobs.map(job => job._id);
-        const applications = await Application.find({ 
-            job: { $in: jobIds },
-            status: { $in: ['Hired', 'Profile Reviewed', 'Package Selected', 'Package Paid', 'Demo Scheduled', 'Demo In Progress', 'Demo Completed'] } 
-        }).populate('candidate', 'name phone email profilePic').populate('job', 'title');
 
-        // 4. Get Transactions
+        // 3. Get Applications (Assigned Candidates) for this customer's jobs
+        const applications = jobIds.length > 0 
+            ? await Application.find({ 
+                job: { $in: jobIds },
+                status: { $in: ['Hired', 'Profile Reviewed', 'Package Selected', 'Package Paid', 'Demo Scheduled', 'Demo In Progress', 'Demo Completed'] } 
+            }).populate('candidate', 'name phone email profilePic').populate('job', 'title')
+            : [];
+
+        // 4. Get Transactions strictly for this Customer or their specific jobs
+        const txnFilter = [{ customer: customerId }];
+        if (jobIds.length > 0) {
+            txnFilter.push({ relatedJob: { $in: jobIds } });
+        }
+        if (linkedUser) {
+            txnFilter.push({ user: linkedUser._id });
+        }
+
         const transactions = await Transaction.find({ 
-            $or: [
-                { customer: customerId }, 
-                { customer: customer.createdBy },
-                { user: customer.createdBy }
-            ],
+            $or: txnFilter,
             status: 'success'
         }).sort({ createdAt: -1 });
 
-        const totalSpent = transactions.reduce((sum, txn) => sum + txn.amount, 0);
+        const totalSpent = transactions.reduce((sum, txn) => sum + (txn.amount || 0), 0);
 
-        // 5. Get Active Subscription/Package
-        const Plan = require('../models/Plan');
-        const User = require('../models/User');
-
-        const relatedUserIds = [customerId];
-        if (customer.createdBy) relatedUserIds.push(customer.createdBy);
-        if (customer.contactPhone) {
-            const linkedUser = await User.findOne({ phone: customer.contactPhone });
-            if (linkedUser) relatedUserIds.push(linkedUser._id);
+        // 5. Get Active Subscription/Package for this customer
+        const subFilter = [{ customer: customerId }];
+        if (linkedUser) {
+            subFilter.push({ customer: linkedUser._id });
+            subFilter.push({ user: linkedUser._id });
         }
 
         const activeSubscriptions = await SubscriptionHistory.find({
-            $or: [
-                { customer: { $in: relatedUserIds } }, 
-                { user: { $in: relatedUserIds } }
-            ]
+            $or: subFilter
         }).populate('plan').populate('activatedBy', 'name email').sort({ createdAt: -1 });
 
         // Get Custom Packages created for this specific customer
@@ -499,11 +538,13 @@ const getCustomerDashboard = async (req, res) => {
             targetCustomer: customerId
         }).populate('assignedBy', 'name email').sort({ createdAt: -1 });
 
-        // 6. Get Bookings
-        const bookings = await Booking.find({ job: { $in: jobIds } })
-            .populate('cook', 'name profilePic')
-            .populate('job', 'title')
-            .sort({ createdAt: -1 });
+        // 6. Get Bookings strictly for this customer's jobs
+        const bookings = jobIds.length > 0
+            ? await Booking.find({ job: { $in: jobIds } })
+                .populate('cook', 'name profilePic')
+                .populate('job', 'title')
+                .sort({ createdAt: -1 })
+            : [];
 
         // 7. Assemble Recent Activity Timeline
         let recentActivity = [];
