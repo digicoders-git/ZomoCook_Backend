@@ -47,15 +47,35 @@ const registerAdmin = async (req, res) => {
  */
 const loginAdmin = async (req, res) => {
     try {
-        const { email, password } = req.body;
-        
+        const identifier = (req.body.email || req.body.phone || req.body.username || '').trim();
+        const { password } = req.body;
+
+        if (!identifier || !password) {
+            return res.status(400).json({ success: false, message: 'Please provide email or mobile number and password' });
+        }
+
+        const escaped = identifier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const orConditions = [
+            { email: new RegExp(`^${escaped}$`, 'i') }
+        ];
+
+        const cleanDigits = identifier.replace(/\D/g, '');
+        if (cleanDigits.length >= 10) {
+            const last10 = cleanDigits.slice(-10);
+            orConditions.push({ phone: new RegExp(last10 + '$') });
+        } else if (cleanDigits.length > 0) {
+            orConditions.push({ phone: cleanDigits });
+        }
+
+        const query = { $or: orConditions };
+
         // 1. Check in Admin collection
-        let account = await Admin.findOne({ email }).select('+password').populate('role');
+        let account = await Admin.findOne(query).select('+password').populate('role');
         let type = 'admin';
 
         // 2. If not found in Admin, check in User collection
         if (!account) {
-            account = await User.findOne({ email }).select('+password').populate('role');
+            account = await User.findOne(query).select('+password').populate('role');
             type = 'user';
         }
 
@@ -78,7 +98,7 @@ const loginAdmin = async (req, res) => {
                 token: generateToken(account._id),
             });
         } else {
-            res.status(401).json({ success: false, message: 'Invalid email or password' });
+            res.status(401).json({ success: false, message: 'Invalid email/phone or password' });
         }
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });

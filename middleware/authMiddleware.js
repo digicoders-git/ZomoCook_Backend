@@ -44,11 +44,18 @@ const protect = async (req, res, next) => {
 };
 
 const admin = (req, res, next) => {
-    if (req.admin && req.admin.type === 'admin') {
-        next();
-    } else {
-        return res.status(403).json({ success: false, message: 'Admin access required' });
+    if (req.admin) {
+        if (req.admin.type === 'admin') {
+            return next();
+        }
+        if (req.admin.role) {
+            const roleName = (req.admin.role.name || '').trim().toLowerCase();
+            if (!['user', 'customer', 'cook'].includes(roleName)) {
+                return next();
+            }
+        }
     }
+    return res.status(403).json({ success: false, message: 'Admin access required' });
 };
 
 module.exports = { protect, admin };
