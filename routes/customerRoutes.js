@@ -10,7 +10,8 @@ const {
     deleteCustomer,
     toggleCustomerStatus,
     getCustomerDashboard,
-    addCustomerNote
+    addCustomerNote,
+    forceLogoutCustomer
 } = require('../controllers/customerController');
 const { protect } = require('../middleware/authMiddleware');
 
@@ -42,5 +43,6 @@ router.get('/:id/dashboard', getCustomerDashboard);
 router.post('/:id/notes', addCustomerNote);
 
 router.patch('/:id/status', toggleCustomerStatus);
+router.post('/:id/logout', forceLogoutCustomer);
 
 module.exports = router;

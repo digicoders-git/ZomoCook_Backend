@@ -62,6 +62,7 @@ const userSchema = new mongoose.Schema({
         default: 0
     },
     fcmToken: { type: String, default: null },
+    forceLogoutAt: { type: Date, default: null },
     activePlan: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Plan'

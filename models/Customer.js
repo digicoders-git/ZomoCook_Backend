@@ -47,6 +47,10 @@ const customerSchema = new mongoose.Schema({
         enum: ['active', 'inactive'],
         default: 'active'
     },
+    forceLogoutAt: {
+        type: Date,
+        default: null
+    },
     createdBy: {
         type: mongoose.Schema.Types.ObjectId,
         refPath: 'creatorModel'

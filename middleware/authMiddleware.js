@@ -31,6 +31,19 @@ const protect = async (req, res, next) => {
                 return res.status(401).json({ success: false, message: 'Your account has been deactivated. Access denied.' });
             }
 
+            // Check if user session was force-logged out by admin
+            if (account.forceLogoutAt && decoded.iat) {
+                const tokenIssuedAtMs = decoded.iat * 1000;
+                const forceLogoutAtMs = new Date(account.forceLogoutAt).getTime();
+                if (tokenIssuedAtMs < (forceLogoutAtMs - 1000)) {
+                    return res.status(401).json({ 
+                        success: false, 
+                        isForceLoggedOut: true,
+                        message: 'Your session has been logged out by admin. Please log in again.' 
+                    });
+                }
+            }
+
             req.admin = account; // Keep it as req.admin for backward compatibility or change to req.user
             req.admin.type = accountType;
             req.user = account;

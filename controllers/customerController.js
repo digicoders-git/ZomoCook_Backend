@@ -610,6 +610,52 @@ const addCustomerNote = async (req, res) => {
     }
 };
 
+/**
+ * @desc    Force logout customer / invalidate active app sessions
+ * @route   POST /api/customers/:id/logout
+ * @access  Private (Admin)
+ */
+const forceLogoutCustomer = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const now = new Date();
+
+        const customer = await Customer.findById(id);
+        if (!customer) {
+            return res.status(404).json({ success: false, message: 'Customer not found' });
+        }
+
+        customer.forceLogoutAt = now;
+        await customer.save();
+
+        // Also invalidate corresponding User record(s) if any
+        const User = require('../models/User');
+        const phone = customer.contactPhone || customer.phone;
+        const orConditions = [];
+        if (customer.createdBy) orConditions.push({ _id: customer.createdBy });
+        if (phone) {
+            const cleanDigits = phone.toString().replace(/\D/g, '');
+            if (cleanDigits.length >= 10) {
+                orConditions.push({ phone: new RegExp(cleanDigits.slice(-10) + '$') });
+            } else {
+                orConditions.push({ phone: phone });
+            }
+        }
+
+        if (orConditions.length > 0) {
+            await User.updateMany({ $or: orConditions }, { $set: { forceLogoutAt: now, fcmToken: null } });
+        }
+
+        res.status(200).json({
+            success: true,
+            message: `${customer.name || 'Customer'} has been logged out from all devices.`,
+            forceLogoutAt: now
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
 module.exports = {
     createCustomer,
     getCustomers,
@@ -618,5 +664,6 @@ module.exports = {
     deleteCustomer,
     toggleCustomerStatus,
     getCustomerDashboard,
-    addCustomerNote
+    addCustomerNote,
+    forceLogoutCustomer
 };

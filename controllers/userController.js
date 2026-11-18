@@ -832,4 +832,38 @@ exports.getProfile = async (req, res) => {
     }
 };
 
+/**
+ * @desc    Force logout user / invalidate active sessions
+ * @route   POST /api/admin/users/:id/logout or /api/users/:id/logout
+ * @access  Private (Admin)
+ */
+exports.forceLogoutUser = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const now = new Date();
+
+        let user = await User.findById(id);
+        if (!user) {
+            const Admin = require('../models/Admin');
+            user = await Admin.findById(id);
+        }
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'User not found' });
+        }
+
+        user.forceLogoutAt = now;
+        user.fcmToken = null;
+        await user.save();
+
+        res.status(200).json({
+            success: true,
+            message: `${user.name || 'User'} has been logged out from all devices successfully.`,
+            forceLogoutAt: now
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
 

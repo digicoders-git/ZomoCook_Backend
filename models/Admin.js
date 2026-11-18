@@ -42,7 +42,8 @@ const adminSchema = new mongoose.Schema({
         enum: ['Active', 'Inactive', 'Cancelled', 'Expired', 'active', 'inactive'],
         default: 'Active'
     },
-    fcmToken: { type: String, default: null }
+    fcmToken: { type: String, default: null },
+    forceLogoutAt: { type: Date, default: null }
 }, {
     timestamps: true
 });
