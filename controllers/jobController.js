@@ -231,6 +231,39 @@ const createJob = async (req, res) => {
             try { jobData.pricing = JSON.parse(jobData.pricing); } catch(e) {}
         }
 
+        // Standardize Party Requirement & Event Days
+        if (jobData.partyRequirement && typeof jobData.partyRequirement === 'object') {
+            const pr = jobData.partyRequirement;
+            if (pr.eventDates && (!pr.dates || !pr.dates.length)) {
+                pr.dates = pr.eventDates;
+            }
+            if (!jobData.eventDays || !Array.isArray(jobData.eventDays) || jobData.eventDays.length === 0) {
+                jobData.eventDays = pr.dates || pr.eventDates;
+            }
+            if (!jobData.menuDetails || jobData.menuDetails.trim() === '') {
+                const dishSet = new Set();
+                const dList = pr.dates || pr.eventDates || jobData.eventDays;
+                if (Array.isArray(dList)) {
+                    dList.forEach(d => {
+                        if (Array.isArray(d.meals)) {
+                            d.meals.forEach(m => {
+                                const mDishes = m.selectedMenu || m.dishes || [];
+                                if (Array.isArray(mDishes)) {
+                                    mDishes.forEach(dish => {
+                                        const name = typeof dish === 'string' ? dish : (dish?.name || '');
+                                        if (name) dishSet.add(name);
+                                    });
+                                }
+                            });
+                        }
+                    });
+                }
+                if (dishSet.size > 0) {
+                    jobData.menuDetails = Array.from(dishSet).join(', ');
+                }
+            }
+        }
+
         // Auto-fill title and descriptions if not provided
         const roleName = jobData.jobPosition || (Array.isArray(jobData.staffRequirements) && jobData.staffRequirements[0]?.role) || jobData.event || 'Cook';
         if (!jobData.title || jobData.title.trim() === '') {
@@ -283,17 +316,30 @@ const createJob = async (req, res) => {
         }
 
         // For Party & Daily jobs, ensure salaryRange and salary reflect remaining 75% cook payout
-        const isPartyJob = jobData.jobCategory === 'party' || jobData.bookingType === 'party' || (jobData.title && jobData.title.toLowerCase().includes('party'));
-        const isDailyJob = jobData.jobCategory === 'daily' || jobData.bookingType === 'daily' || (jobData.title && jobData.title.toLowerCase().includes('daily'));
+        const isPartyJob = jobData.jobCategory === 'party' || jobData.bookingType === 'party' || (jobData.title && jobData.title.toLowerCase().includes('party')) || Boolean(jobData.partyRequirement);
+        const isDailyJob = !isPartyJob && (jobData.jobCategory === 'daily' || jobData.bookingType === 'daily' || (jobData.title && jobData.title.toLowerCase().includes('daily')));
         if (isPartyJob || isDailyJob) {
             const rawPricing = typeof jobData.pricing === 'object' ? jobData.pricing : {};
             const total = Number(rawPricing.total || rawPricing.totalAmount || jobData.totalAmount || 0);
             const adv = Number(rawPricing.advance || rawPricing.advancePayable || rawPricing.advanceAmount || jobData.advanceAmount || 0);
-            const remaining = Number(rawPricing.duePay || rawPricing.dueAmount || 0) || (total > 0 && adv > 0 ? (total - adv) : (adv > 0 ? Math.round(adv * 3) : (total > 0 ? Math.round(total * 0.75) : 0)));
-            if (remaining > 0 && (!jobData.salaryRange || isPartyJob)) {
+            let remaining = Number(rawPricing.duePay || rawPricing.dueAmount || 0);
+            if (!remaining) {
+                remaining = (total > 0 && adv > 0) ? (total - adv) : (adv > 0 ? Math.round(adv * 3) : (total > 0 ? Math.round(total * 0.75) : 0));
+            }
+            if (remaining > 0) {
                 jobData.salaryRange = `₹${remaining}`;
                 jobData.salary = `₹${remaining}`;
             }
+            if (typeof jobData.pricing === 'object') {
+                jobData.pricing.total = total || (adv > 0 ? Math.round(adv * 4) : remaining);
+                jobData.pricing.totalAmount = jobData.pricing.total;
+                jobData.pricing.advance = adv || (total > 0 ? Math.round(total * 0.25) : 0);
+                jobData.pricing.advancePayable = jobData.pricing.advance;
+                jobData.pricing.duePay = remaining;
+                jobData.pricing.dueAmount = remaining;
+            }
+            jobData.totalAmount = Number(jobData.pricing?.total || total);
+            jobData.advanceAmount = Number(jobData.pricing?.advance || adv);
         }
 
         const job = await Job.create(jobData);
