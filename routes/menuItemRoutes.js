@@ -35,6 +35,24 @@ const upload = multer({
   fileFilter
 });
 
+const { protect } = require('../middleware/authMiddleware');
+const { hasPermission } = require('../middleware/permissionHelper');
+
+const checkMenuPerm = (action) => (req, res, next) => {
+  const isSuperAdmin = (req.admin?.email?.toLowerCase() === 'zomocookadmin@gmail.com') ||
+    (req.admin?.role?.name?.toLowerCase() === 'super admin') ||
+    (req.admin?.type === 'admin' && !req.admin?.role);
+  if (isSuperAdmin) return next();
+
+  if (hasPermission(req.admin, `party_menu:${action}`) || hasPermission(req.admin, 'party_menu:manage')) {
+    return next();
+  }
+  return res.status(403).json({
+    success: false,
+    message: `Access denied: You do not have permission to ${action} party menu items.`
+  });
+};
+
 const {
   getMenuItems,
   getActiveMenuItems,
@@ -47,20 +65,20 @@ const {
 
 router.route('/')
   .get(getMenuItems)
-  .post(upload.single('image'), createMenuItem);
+  .post(protect, checkMenuPerm('add'), upload.single('image'), createMenuItem);
 
 router.route('/active')
   .get(getActiveMenuItems);
 
 router.route('/seed')
-  .post(seedMenuItems);
+  .post(protect, checkMenuPerm('add'), seedMenuItems);
 
 router.route('/upload')
-  .post(upload.single('image'), uploadMenuItemImage);
+  .post(protect, checkMenuPerm('add'), upload.single('image'), uploadMenuItemImage);
 
 router.route('/:id')
-  .put(upload.single('image'), updateMenuItem)
-  .delete(deleteMenuItem);
+  .put(protect, checkMenuPerm('edit'), upload.single('image'), updateMenuItem)
+  .delete(protect, checkMenuPerm('delete'), deleteMenuItem);
 
 module.exports = router;
 

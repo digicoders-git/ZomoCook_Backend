@@ -38,6 +38,18 @@ const createCustomer = async (req, res) => {
 
         const creatorModel = (req.admin && req.admin.type === 'user') ? 'User' : 'Admin';
 
+        // Super Admin check
+        const roleName = (req.admin?.role?.name || '').toLowerCase();
+        const isSuperAdmin = (req.admin?.email?.toLowerCase() === 'zomocookadmin@gmail.com') ||
+            roleName === 'super admin' ||
+            (req.admin?.type === 'admin' && !req.admin?.role);
+
+        let finalLeadManager = leadManager || '';
+        if (!isSuperAdmin) {
+            // Non-super-admins (Lead Managers) can NEVER assign to another lead manager; automatically assigned to themselves
+            finalLeadManager = req.admin?.name || req.admin?._id?.toString() || '';
+        }
+
         const customer = await Customer.create({
             name,
             propertyCategory,
@@ -48,7 +60,7 @@ const createCustomer = async (req, res) => {
             contactAddress,
             customerStatus: customerStatus || 'running',
             accountStatus: accountStatus || 'active',
-            leadManager: leadManager || '',
+            leadManager: finalLeadManager,
             profilePic: req.file ? req.file.path : undefined,
             createdBy: req.admin ? req.admin._id : undefined,
             creatorModel,

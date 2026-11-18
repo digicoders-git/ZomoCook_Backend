@@ -191,6 +191,17 @@ const createJob = async (req, res) => {
             ? req.body.customer
             : req.admin._id;
 
+        const userRoleName = (req.admin?.role?.name || '').toLowerCase();
+        const isSuperAdmin = (req.admin?.email?.toLowerCase() === 'zomocookadmin@gmail.com') ||
+            userRoleName === 'super admin' ||
+            (req.admin?.type === 'admin' && !req.admin?.role);
+
+        let finalLeadManager = req.body.leadManager || assignedManagerId || '';
+        if (!isSuperAdmin) {
+            // Non-super-admins (Lead Managers) can NEVER assign to another lead manager; automatically assigned to themselves
+            finalLeadManager = req.admin?.name || req.admin?._id?.toString() || '';
+        }
+
         const jobData = {
             ...req.body,
             customer: customerId,
@@ -201,7 +212,7 @@ const createJob = async (req, res) => {
             image: req.file ? req.file.path : undefined,
             createdBy: req.admin._id,
             creatorModel: req.admin.constructor.modelName || 'User',
-            leadManager: assignedManagerId || ''
+            leadManager: finalLeadManager
         };
 
         if (typeof jobData.staffRequirements === 'string') {
@@ -712,9 +723,9 @@ const updateJob = async (req, res) => {
         }
 
         // Only Super Admin can assign or change Lead Manager
-        const roleName = (req.admin?.role?.name || '').toLowerCase();
+        const userRoleName = (req.admin?.role?.name || '').toLowerCase();
         const isSuperAdmin = (req.admin?.email?.toLowerCase() === 'zomocookadmin@gmail.com') ||
-            roleName === 'super admin' ||
+            userRoleName === 'super admin' ||
             (req.admin?.type === 'admin' && !req.admin?.role);
 
         if (!isSuperAdmin && req.body.leadManager !== undefined) {

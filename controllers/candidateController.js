@@ -47,6 +47,15 @@ const createCandidate = async (req, res) => {
         candidateData.createdBy = req.admin._id;
         candidateData.creatorModel = req.admin.constructor.modelName;
 
+        const roleName = (req.admin?.role?.name || '').toLowerCase();
+        const isSuperAdmin = (req.admin?.email?.toLowerCase() === 'zomocookadmin@gmail.com') ||
+            roleName === 'super admin' ||
+            (req.admin?.type === 'admin' && !req.admin?.role);
+
+        if (!isSuperAdmin) {
+            candidateData.leadManager = req.admin?.name || req.admin?._id?.toString() || '';
+        }
+
         // Parse nested fields
         const complexFields = ['languages', 'jobPreference', 'cookingSkills', 'workExperience', 'education', 'careerHighlights', 'socialMedia', 'skills'];
         complexFields.forEach(field => {
