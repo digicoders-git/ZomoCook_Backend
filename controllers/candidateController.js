@@ -80,6 +80,16 @@ const updateCandidate = async (req, res) => {
         if (!candidate) return res.status(404).json({ success: false, message: 'Candidate not found' });
 
         const updateData = { ...req.body };
+
+        // Only Super Admin can assign or change Lead Manager
+        const roleName = (req.admin?.role?.name || '').toLowerCase();
+        const isSuperAdmin = (req.admin?.email?.toLowerCase() === 'zomocookadmin@gmail.com') ||
+            roleName === 'super admin' ||
+            (req.admin?.type === 'admin' && !req.admin?.role);
+
+        if (!isSuperAdmin) {
+            delete updateData.leadManager;
+        }
         
         // Handle New Files
         const docs = candidate.documents ? { ...candidate.documents } : {};

@@ -336,6 +336,16 @@ const updateCustomer = async (req, res) => {
             }
         });
 
+        // Only Super Admin can assign or change Lead Manager
+        const roleName = (req.admin?.role?.name || '').toLowerCase();
+        const isSuperAdmin = (req.admin?.email?.toLowerCase() === 'zomocookadmin@gmail.com') ||
+            roleName === 'super admin' ||
+            (req.admin?.type === 'admin' && !req.admin?.role);
+
+        if (!isSuperAdmin) {
+            delete updateData.leadManager;
+        }
+
         // Email validation & duplicate check
         let unsetEmail = false;
         if (updateData.email !== undefined) {

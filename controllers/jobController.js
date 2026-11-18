@@ -711,6 +711,16 @@ const updateJob = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Job not found' });
         }
 
+        // Only Super Admin can assign or change Lead Manager
+        const roleName = (req.admin?.role?.name || '').toLowerCase();
+        const isSuperAdmin = (req.admin?.email?.toLowerCase() === 'zomocookadmin@gmail.com') ||
+            roleName === 'super admin' ||
+            (req.admin?.type === 'admin' && !req.admin?.role);
+
+        if (!isSuperAdmin && req.body.leadManager !== undefined) {
+            delete req.body.leadManager;
+        }
+
         // Handle image update
         if (req.file) {
             req.body.image = req.file.path;

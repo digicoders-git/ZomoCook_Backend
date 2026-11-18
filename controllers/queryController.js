@@ -77,6 +77,15 @@ exports.deleteQuery = async (req, res) => {
  */
 exports.updateQuery = async (req, res) => {
     try {
+        const roleName = (req.admin?.role?.name || '').toLowerCase();
+        const isSuperAdmin = (req.admin?.email?.toLowerCase() === 'zomocookadmin@gmail.com') ||
+            roleName === 'super admin' ||
+            (req.admin?.type === 'admin' && !req.admin?.role);
+
+        if (!isSuperAdmin && req.body.assignedTo !== undefined) {
+            delete req.body.assignedTo;
+        }
+
         const query = await Query.findByIdAndUpdate(
             req.params.id,
             req.body,
