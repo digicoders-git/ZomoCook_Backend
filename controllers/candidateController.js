@@ -633,7 +633,20 @@ const updateCandidateMe = async (req, res) => {
 
 const generateResumeHtml = async (req, res) => {
     try {
-        const candidate = await Candidate.findById(req.params.id);
+        const mongoose = require('mongoose');
+        let candidate = null;
+        if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+            candidate = await Candidate.findById(req.params.id);
+            if (!candidate) {
+                candidate = await Candidate.findOne({ createdBy: req.params.id });
+            }
+        }
+        if (!candidate) {
+            const last10 = req.params.id.toString().slice(-10);
+            if (last10.length === 10 && /^\d+$/.test(last10)) {
+                candidate = await Candidate.findOne({ phone: new RegExp(last10 + '$') });
+            }
+        }
         if (!candidate) {
             return res.status(404).send('<h1>Candidate Not Found</h1>');
         }
@@ -644,54 +657,122 @@ const generateResumeHtml = async (req, res) => {
             logoBase64 = `data:image/png;base64,${fs.readFileSync(logoPath).toString('base64')}`;
         }
 
-        const expVal = candidate.jobPreference?.experience?.value || '0';
+        const rawExp = candidate.jobPreference?.experience?.value ?? candidate.experience ?? '0';
+        const parsedExp = parseInt(rawExp, 10);
+        const expVal = isNaN(parsedExp) ? rawExp : parsedExp;
         const expUnit = candidate.jobPreference?.experience?.unit || 'years';
         const expText = `${expVal}+ ${expUnit.charAt(0).toUpperCase() + expUnit.slice(1)}`;
-        const titleText = candidate.jobPreference?.jobPositions?.[0] || 'Executive Chef';
+        const titleText = candidate.jobPreference?.jobPositions?.[0] || candidate.jobPreference?.jobCategory?.[0] || 'Executive Chef';
 
-        const profileImageSrc = candidate.profileImage
-            ? (candidate.profileImage.startsWith('http')
-                ? candidate.profileImage
-                : '/' + candidate.profileImage.replace(/\\/g, '/'))
-            : '';
+        let profileImageSrc = '';
+        if (candidate.profileImage) {
+            if (candidate.profileImage.startsWith('data:image')) {
+                profileImageSrc = candidate.profileImage;
+            } else if (candidate.profileImage.startsWith('http')) {
+                profileImageSrc = candidate.profileImage;
+            } else {
+                const cleanRel = candidate.profileImage.replace(/^[/\\]+/, '').replace(/^uploads[/\\]+/, '');
+                const diskPath = path.join(__dirname, '../uploads', cleanRel);
+                if (fs.existsSync(diskPath)) {
+                    const ext = path.extname(diskPath).toLowerCase().replace('.', '') || 'jpeg';
+                    const mime = ext === 'jpg' ? 'jpeg' : (ext === 'png' ? 'png' : (ext === 'webp' ? 'webp' : 'jpeg'));
+                    profileImageSrc = `data:image/${mime};base64,${fs.readFileSync(diskPath).toString('base64')}`;
+                } else {
+                    profileImageSrc = '/' + candidate.profileImage.replace(/\\/g, '/').replace(/^\/+/, '');
+                }
+            }
+        }
 
-        const skillsList = candidate.skills || [];
+        const calculateAge = (dob) => {
+            if (!dob) return null;
+            const diff = Date.now() - new Date(dob).getTime();
+            const age = new Date(diff).getUTCFullYear() - 1970;
+            return Math.abs(age);
+        };
+        const computedAge = candidate.age || calculateAge(candidate.dob) || 'N/A';
+
+        const skillsList = candidate.skills?.length > 0 ? candidate.skills : ['Table Service', 'Customer Handling', 'Food & Beverage Service', 'POS Basic', 'Hygiene & Cleanliness'];
         const personalDetails = {
-            age: candidate.age || 'N/A',
+            age: computedAge !== 'N/A' ? `${computedAge} Years` : 'N/A',
             gender: candidate.gender ? (candidate.gender.charAt(0).toUpperCase() + candidate.gender.slice(1)) : 'N/A',
             maritalStatus: candidate.maritalStatus ? (candidate.maritalStatus.charAt(0).toUpperCase() + candidate.maritalStatus.slice(1)) : 'Single',
-            languages: candidate.languages?.length ? candidate.languages.join(', ') : 'English, Hindi'
+            languages: candidate.languages?.length ? candidate.languages.join(', ') : 'Hindi, English'
         };
 
         const experiences = candidate.workExperience?.experiences || [];
         const lastCompany = candidate.workExperience?.lastCompany || {};
 
         let experienceHtml = '';
-        if (experiences.length > 0) {
-            experienceHtml = experiences.map(exp => `
-                <div class="mb-4">
-                    <h4 class="font-bold text-gray-800 text-sm">${exp.position || 'Chef'}</h4>
-                    <p class="text-xs text-blue-600 font-semibold">${exp.from || ''} - ${exp.to || 'Present'}</p>
-                    <p class="text-xs text-gray-600 mt-1">${exp.shortDetail || exp.jobProfile || ''}</p>
-                </div>
-            `).join('');
-        } else if (lastCompany.name) {
-            experienceHtml = `
-                <div class="mb-4">
-                    <h4 class="font-bold text-gray-800 text-sm">${lastCompany.role || 'Chef'}</h4>
-                    <p class="text-xs text-blue-600 font-semibold">${lastCompany.duration || 'N/A'}</p>
-                    <p class="text-xs text-gray-600 mt-1">Worked at ${lastCompany.name} (${lastCompany.workplaceType || 'Hotel'})</p>
-                </div>
-            `;
-        } else {
-            experienceHtml = `
-                <div class="mb-4">
-                    <h4 class="font-bold text-gray-800 text-sm">Professional Cook / Chef</h4>
-                    <p class="text-xs text-blue-600 font-semibold">Self-Employed / Freelancer</p>
-                    <p class="text-xs text-gray-600 mt-1">Experienced in preparing delicious home & commercial meals according to client tastes and requirements.</p>
+        if (lastCompany.name) {
+            let dur = (lastCompany.duration || '').toString().trim();
+            if (dur && !isNaN(parseInt(dur, 10)) && !dur.toLowerCase().includes('year') && !dur.toLowerCase().includes('month')) {
+                dur = `${parseInt(dur, 10)} ${parseInt(dur, 10) === 1 ? 'Year' : 'Years'}`;
+            }
+            experienceHtml += `
+                <div class="mb-3.5">
+                    <div class="flex justify-between items-baseline mb-0.5">
+                        <h4 class="font-extrabold text-slate-800 text-xs uppercase tracking-wide">${lastCompany.name}</h4>
+                        <span class="text-[10px] font-bold text-[#0056D2]">${dur || 'Recent'}</span>
+                    </div>
+                    <p class="text-[11px] font-bold text-[#0056D2]">${lastCompany.role || 'Chef'}</p>
+                    <ul class="list-disc pl-4 text-[10px] text-slate-600 space-y-0.5 mt-1 font-normal">
+                        <li>Delivered high-quality food preparation and maintained kitchen hygiene standards.</li>
+                        <li>Coordinated with team members and ensured excellent service standards.</li>
+                    </ul>
                 </div>
             `;
         }
+
+        if (experiences.length > 0) {
+            experienceHtml += experiences.map(exp => `
+                <div class="mb-3.5">
+                    <div class="flex justify-between items-baseline mb-0.5">
+                        <h4 class="font-extrabold text-slate-800 text-xs uppercase tracking-wide">${exp.jobProfile || exp.position || 'Chef'}</h4>
+                        <span class="text-[10px] font-bold text-[#0056D2]">${exp.from || ''}${exp.to ? ` - ${exp.to}` : ''}</span>
+                    </div>
+                    ${exp.position && exp.position !== exp.jobProfile ? `<p class="text-[11px] font-bold text-[#0056D2]">${exp.position}</p>` : ''}
+                    ${exp.shortDetail ? `<p class="text-[10px] text-slate-600 mt-1">${exp.shortDetail}</p>` : ''}
+                </div>
+            `).join('');
+        }
+
+        if (!experienceHtml) {
+            experienceHtml = `
+                <div class="mb-3.5">
+                    <h4 class="font-bold text-slate-800 text-xs">Professional Cook / Chef</h4>
+                    <p class="text-[10px] text-[#0056D2] font-semibold">Self-Employed / Freelancer</p>
+                    <p class="text-[10px] text-slate-600 mt-1">Experienced in preparing delicious home & commercial meals according to client tastes and requirements.</p>
+                </div>
+            `;
+        }
+
+        const education = candidate.education || [];
+        let educationHtml = '';
+        if (education.length > 0) {
+            educationHtml = `
+                <div class="mt-4">
+                    <h3 class="text-[10px] font-extrabold tracking-widest text-[#0056D2] uppercase border-b border-[#0056D2]/30 pb-1 mb-2">Education</h3>
+                    <div class="space-y-2">
+                        ${education.map(edu => `
+                            <div>
+                                <div class="flex justify-between items-baseline">
+                                    <h5 class="text-[11px] font-bold text-slate-800">${edu.title || 'Degree / Diploma'}</h5>
+                                    <span class="text-[10px] font-bold text-[#0056D2]">${edu.from || ''}${edu.to ? ` - ${edu.to}` : ''}</span>
+                                </div>
+                                ${edu.shortDetail ? `<p class="text-[10px] text-slate-600">${edu.shortDetail}</p>` : ''}
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        const expSalaryNum = parseInt(candidate.jobPreference?.expectedSalary, 10);
+        const curSalaryNum = parseInt(candidate.jobPreference?.currentSalary, 10);
+        const expSalaryText = !isNaN(expSalaryNum) && expSalaryNum > 0 ? `₹${expSalaryNum} - ₹${expSalaryNum + 5000} / Month` : 'Not Disclosed';
+        const curSalaryText = !isNaN(curSalaryNum) && curSalaryNum > 0 ? `₹${curSalaryNum} - ₹${curSalaryNum + 5000} / Month` : 'Not Disclosed';
+
+        const isPreviewOnly = req.query.preview === 'true';
 
         const html = `
 <!DOCTYPE html>
@@ -699,9 +780,9 @@ const generateResumeHtml = async (req, res) => {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${candidate.name} - Resume</title>
+    <title>${candidate.name} - Resume | ZomoCook</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <style>
         body {
@@ -709,6 +790,7 @@ const generateResumeHtml = async (req, res) => {
             background-color: #f1f5f9;
             margin: 0;
             padding: 0;
+            -webkit-font-smoothing: antialiased;
         }
         @media print {
             body {
@@ -723,14 +805,18 @@ const generateResumeHtml = async (req, res) => {
 <body class="flex flex-col items-center justify-start min-h-screen py-4 sm:py-8">
 
     <!-- Status Toast / Loader -->
-    <div id="status-container" class="w-full max-w-[794px] mb-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex justify-between items-center px-6">
+    <div id="status-container" class="no-print w-full max-w-[794px] mb-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex justify-between items-center px-6">
         <div class="flex items-center gap-3">
-            <div id="status-spinner" class="animate-spin rounded-full h-5 w-5 border-2 border-[#0056D2] border-t-transparent"></div>
-            <span id="status-text" class="text-slate-700 text-sm font-bold">Generating and downloading your resume PDF...</span>
+            <div id="status-spinner" class="animate-spin rounded-full h-5 w-5 border-2 border-[#0056D2] border-t-transparent ${isPreviewOnly ? 'hidden' : ''}"></div>
+            <span id="status-text" class="text-slate-700 text-sm font-bold">
+                ${isPreviewOnly ? 'Official ZomoCook Verified Resume' : 'Generating and downloading official resume PDF...'}
+            </span>
         </div>
-        <button onclick="downloadPDF()" class="bg-[#0056D2] hover:bg-blue-700 text-white font-bold text-xs py-1.5 px-4 rounded-lg shadow-sm transition-all">
-            Download Again
-        </button>
+        <div class="flex items-center gap-2">
+            <button onclick="downloadPDF()" class="bg-[#0056D2] hover:bg-blue-700 text-white font-bold text-xs py-2 px-4 rounded-lg shadow-sm transition-all flex items-center gap-1.5">
+                <span>⬇️</span> Download PDF
+            </button>
+        </div>
     </div>
 
     <!-- Resume A4 Frame -->
@@ -740,44 +826,46 @@ const generateResumeHtml = async (req, res) => {
         <div class="flex-grow grid grid-cols-12 h-[1012px]">
             
             <!-- Left Column (White) -->
-            <div class="col-span-7 p-6 flex flex-col justify-between h-full" style="box-sizing: border-box;">
+            <div class="col-span-7 p-7 pr-6 flex flex-col justify-between h-full" style="box-sizing: border-box;">
                 <div>
                     <!-- Name & Subtitle -->
-                    <h1 class="text-3xl font-extrabold text-[#0056D2] leading-tight tracking-tight uppercase">${candidate.name}</h1>
-                    <p class="text-sm font-bold text-slate-700 mt-1">${titleText} - ${expText} Experience</p>
+                    <h1 class="text-3xl font-black text-[#0056D2] leading-tight tracking-tight uppercase">${candidate.name}</h1>
+                    <p class="text-xs font-extrabold text-[#0056D2] mt-1 tracking-wide uppercase">${titleText} - ${expText} Experience</p>
                     
                     <!-- Summary Section -->
-                    <div class="mt-6">
+                    <div class="mt-5">
                         <h3 class="text-[10px] font-extrabold tracking-widest text-[#0056D2] uppercase border-b border-[#0056D2]/30 pb-1 mb-2">Summary</h3>
                         <p class="text-[11px] text-slate-600 leading-relaxed font-normal">
-                            ${candidate.about || 'Dedicated and experienced culinary professional with a passion for preparing high-quality meals. Proven track record of cleanliness, flavor consistency, and excellent service standards. Committed to delivering food excellence and ensuring complete client satisfaction.'}
+                            ${candidate.about || `Experienced and dedicated hospitality professional with ${expVal}+ ${expUnit.toLowerCase()} of expertise in food service operations, team coordination, guest handling, and maintaining high standards of hygiene and service. Seeking a challenging role to contribute to operational excellence and customer satisfaction.`}
                         </p>
                     </div>
 
                     <!-- Work Experience -->
-                    <div class="mt-6">
+                    <div class="mt-5">
                         <h3 class="text-[10px] font-extrabold tracking-widest text-[#0056D2] uppercase border-b border-[#0056D2]/30 pb-1 mb-2">Work Experience</h3>
-                        <div class="flex flex-col gap-1.5">
+                        <div class="flex flex-col gap-1">
                             ${experienceHtml}
                         </div>
                     </div>
+
+                    ${educationHtml}
                 </div>
 
                 <!-- Additional Details -->
-                <div class="mt-4 mb-2">
+                <div class="mt-4 mb-1 pt-2 border-t border-slate-100">
                     <h3 class="text-[10px] font-extrabold tracking-widest text-[#0056D2] uppercase border-b border-[#0056D2]/30 pb-1 mb-2">Additional Details</h3>
-                    <div class="grid grid-cols-2 gap-y-3 gap-x-2">
+                    <div class="grid grid-cols-2 gap-y-2.5 gap-x-2">
                         <div>
                             <span class="block text-[8px] text-slate-500 font-bold uppercase tracking-wider">Total Experience</span>
                             <span class="text-[11px] font-extrabold text-slate-800">${expText}</span>
                         </div>
                         <div>
                             <span class="block text-[8px] text-slate-500 font-bold uppercase tracking-wider">Expected Salary</span>
-                            <span class="text-[11px] font-extrabold text-slate-800">₹${candidate.jobPreference?.expectedSalary || 'N/A'}</span>
+                            <span class="text-[11px] font-extrabold text-slate-800">${expSalaryText}</span>
                         </div>
                         <div>
                             <span class="block text-[8px] text-slate-500 font-bold uppercase tracking-wider">Current Salary</span>
-                            <span class="text-[11px] font-extrabold text-slate-800">₹${candidate.jobPreference?.currentSalary || 'N/A'}</span>
+                            <span class="text-[11px] font-extrabold text-slate-800">${curSalaryText}</span>
                         </div>
                         <div>
                             <span class="block text-[8px] text-slate-500 font-bold uppercase tracking-wider">Ready to Relocate</span>
@@ -788,14 +876,14 @@ const generateResumeHtml = async (req, res) => {
             </div>
 
             <!-- Right Column (Blue) -->
-            <div class="col-span-5 bg-[#0056D2] p-6 text-white flex flex-col justify-between h-full" style="box-sizing: border-box;">
+            <div class="col-span-5 bg-gradient-to-b from-[#004aad] to-[#0062e6] p-7 text-white flex flex-col justify-between h-full" style="box-sizing: border-box;">
                 <div>
                     <!-- Profile Picture Block -->
                     <div class="flex justify-center mb-6">
-                        <div class="w-24 h-24 rounded-full border-2 border-white bg-white overflow-hidden flex items-center justify-center">
+                        <div class="w-28 h-28 rounded-full border-4 border-white/30 bg-white overflow-hidden flex items-center justify-center shadow-lg">
                             ${profileImageSrc 
-                                ? `<img src="${profileImageSrc}" class="w-full h-full object-cover" alt="Profile Image" />`
-                                : `<svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-slate-300" viewBox="0 0 20 20" fill="currentColor">
+                                ? `<img src="${profileImageSrc}" class="w-full h-full object-cover" alt="${candidate.name}" />`
+                                : `<svg xmlns="http://www.w3.org/2000/svg" class="h-14 w-14 text-slate-300" viewBox="0 0 20 20" fill="currentColor">
                                     <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd" />
                                    </svg>`
                             }
@@ -803,41 +891,36 @@ const generateResumeHtml = async (req, res) => {
                     </div>
 
                     <!-- Contact Details -->
-                    <div class="flex flex-col gap-2 mb-6">
-                        <div class="flex items-center gap-2">
-                            <span class="text-xs">📍</span>
-                            <span class="text-[11px] font-semibold">${candidate.city || 'Lucknow'}, ${candidate.state || 'Uttar Pradesh'}</span>
+                    <div class="flex flex-col gap-2.5 mb-6">
+                        <div class="flex items-center gap-2.5">
+                            <span class="w-5 h-5 rounded-full bg-white flex items-center justify-center text-[10px] text-[#004aad] shadow-sm flex-shrink-0">📍</span>
+                            <span class="text-[11px] font-semibold">${[candidate.city, candidate.state].filter(Boolean).join(', ') || candidate.address || 'Lucknow, Uttar Pradesh'}</span>
                         </div>
-                        <div class="flex items-center gap-2">
-                            <span class="text-xs">📞</span>
+                        <div class="flex items-center gap-2.5">
+                            <span class="w-5 h-5 rounded-full bg-white flex items-center justify-center text-[10px] text-[#004aad] shadow-sm flex-shrink-0">📞</span>
                             <span class="text-[11px] font-semibold">${candidate.phone}</span>
                         </div>
-                        <div class="flex items-center gap-2">
-                            <span class="text-xs">✉️</span>
-                            <span class="text-[11px] font-semibold">${candidate.email || 'N/A'}</span>
+                        <div class="flex items-center gap-2.5">
+                            <span class="w-5 h-5 rounded-full bg-white flex items-center justify-center text-[10px] text-[#004aad] shadow-sm flex-shrink-0">✉️</span>
+                            <span class="text-[11px] font-semibold break-all">${candidate.email || 'N/A'}</span>
                         </div>
                     </div>
 
                     <!-- Core Qualifications -->
-                    <div class="mb-6">
+                    <div class="mb-5">
                         <h3 class="text-[10px] font-extrabold tracking-widest uppercase border-b border-white/20 pb-1 mb-2">Core Qualifications</h3>
                         <ul class="list-disc pl-4 text-[11px] space-y-1 font-light">
-                            ${skillsList.slice(0, 5).map(skill => `<li>${skill}</li>`).join('') || `
-                                <li>Table Service</li>
-                                <li>Customer Handling</li>
-                                <li>Food & Beverage Service</li>
-                                <li>Hygiene & Cleanliness</li>
-                            `}
+                            ${skillsList.slice(0, 6).map(skill => `<li>${skill}</li>`).join('')}
                         </ul>
                     </div>
 
                     <!-- Personal Details -->
-                    <div class="mb-6">
+                    <div class="mb-5">
                         <h3 class="text-[10px] font-extrabold tracking-widest uppercase border-b border-white/20 pb-1 mb-2">Personal Details</h3>
                         <div class="space-y-1 text-[11px]">
                             <div class="flex justify-between border-b border-white/10 pb-0.5">
                                 <span class="opacity-80">Age</span>
-                                <span class="font-bold">${personalDetails.age} Years</span>
+                                <span class="font-bold">${personalDetails.age}</span>
                             </div>
                             <div class="flex justify-between border-b border-white/10 pb-0.5">
                                 <span class="opacity-80">Gender</span>
@@ -858,7 +941,7 @@ const generateResumeHtml = async (req, res) => {
                     <div>
                         <h3 class="text-[10px] font-extrabold tracking-widest uppercase border-b border-white/20 pb-1 mb-2">Certifications</h3>
                         <ul class="list-disc pl-4 text-[11px] space-y-1 font-light">
-                            <li>Verified Profile - ZomoCook</li>
+                            <li>Verified Profile – ZomoCook</li>
                             <li>Aadhaar & Mobile Verified</li>
                         </ul>
                     </div>
@@ -869,39 +952,39 @@ const generateResumeHtml = async (req, res) => {
 
         <!-- Footer Verification Checklist Row -->
         <div class="bg-slate-50 border-t border-b border-slate-200 py-2.5 px-6 flex justify-between items-center h-[50px] w-full" style="box-sizing: border-box;">
-            <div class="flex items-center gap-1 text-[10px] text-slate-800 font-bold">
-                <span class="text-green-600 font-extrabold">✓</span> Aadhaar Verified
+            <div class="flex items-center gap-1.5 text-[10px] text-slate-800 font-bold">
+                <span class="text-green-600 font-black text-xs">✓</span> Aadhaar Verified
             </div>
-            <div class="flex items-center gap-1 text-[10px] text-slate-800 font-bold">
-                <span class="text-green-600 font-extrabold">✓</span> Mobile Verified
+            <div class="flex items-center gap-1.5 text-[10px] text-slate-800 font-bold">
+                <span class="text-green-600 font-black text-xs">✓</span> Mobile Verified
             </div>
-            <div class="flex items-center gap-1 text-[10px] text-slate-800 font-bold">
-                <span class="text-green-600 font-extrabold">✓</span> Address Verified
+            <div class="flex items-center gap-1.5 text-[10px] text-slate-800 font-bold">
+                <span class="text-green-600 font-black text-xs">✓</span> Address Verified
             </div>
-            <div class="flex items-center gap-1 text-[10px] text-slate-800 font-bold">
-                <span class="text-green-600 font-extrabold">✓</span> Experience Verified
+            <div class="flex items-center gap-1.5 text-[10px] text-slate-800 font-bold">
+                <span class="text-green-600 font-black text-xs">✓</span> Experience Verified
             </div>
-            <div class="text-[9px] font-extrabold text-[#0056D2] border border-[#0056D2] py-0.5 px-2.5 rounded-full">
+            <div class="text-[9px] font-extrabold text-[#0056D2] border border-[#0056D2] py-0.5 px-2.5 rounded-full bg-blue-50/50">
                 Profile Reviewed by ZomoCook
             </div>
         </div>
 
         <!-- Bottom Dark Corporate Bar -->
-        <div class="bg-[#002D62] text-white p-3 flex justify-between items-center px-6 h-[60px] w-full" style="box-sizing: border-box;">
-            <div class="flex items-center gap-2.5">
-                <div class="w-7 h-7 bg-white rounded-lg flex items-center justify-center p-0.5 shadow-sm overflow-hidden flex-shrink-0">
+        <div class="bg-gradient-to-r from-[#004aad] to-[#0062e6] text-white p-3 flex justify-between items-center px-6 h-[60px] w-full" style="box-sizing: border-box;">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 bg-white rounded-lg flex items-center justify-center p-1 shadow-sm overflow-hidden flex-shrink-0">
                     ${logoBase64 
                         ? `<img src="${logoBase64}" class="w-full h-full object-contain" alt="ZomoCook Logo" />`
                         : `<div class="w-full h-full bg-[#ED1C24] text-white flex items-center justify-center font-black text-xs rounded">Z</div>`
                     }
                 </div>
-                <div class="text-[8px] leading-tight">
+                <div class="text-[9px] leading-tight">
                     <p class="font-extrabold text-white">This profile has been verified by ZomoCook Recruitment Team.</p>
                     <p class="opacity-80">We ensure trusted, skilled & professional staff for your business.</p>
                 </div>
             </div>
-            <div class="text-[9px] font-bold tracking-wider opacity-90">
-                www.zomocook.com
+            <div class="text-[10px] font-bold tracking-wider opacity-90 flex items-center gap-1">
+                <span>🌐</span> www.zomocook.com
             </div>
         </div>
 
@@ -910,36 +993,41 @@ const generateResumeHtml = async (req, res) => {
     <!-- auto download script -->
     <script>
         function downloadPDF() {
-            const container = document.getElementById('status-container');
             const spinner = document.getElementById('status-spinner');
             const statusText = document.getElementById('status-text');
             
-            spinner.style.display = 'block';
-            statusText.innerText = 'Generating and downloading your resume PDF...';
+            if (spinner) spinner.style.display = 'block';
+            if (statusText) statusText.innerText = 'Generating and downloading official resume PDF...';
             
             const element = document.getElementById('resume-content');
             const opt = {
                 margin:       0,
-                filename:     '${candidate.name.replace(/\s+/g, "_")}_Resume.pdf',
-                image:        { type: 'jpeg', quality: 1.0 },
+                filename:     'Resume_${candidate.name.replace(/[^a-zA-Z0-9_-]/g, "_")}.pdf',
+                image:        { type: 'jpeg', quality: 0.98 },
                 html2canvas:  { scale: 2.5, useCORS: true, logging: false },
                 jsPDF:        { unit: 'px', format: [794, 1122], orientation: 'portrait' }
             };
             
             html2pdf().set(opt).from(element).save().then(() => {
-                spinner.style.display = 'none';
-                statusText.innerText = 'Resume PDF downloaded successfully! You can close this tab.';
+                if (spinner) spinner.style.display = 'none';
+                if (statusText) statusText.innerText = '✅ Resume PDF downloaded successfully!';
+                if (window.opener) {
+                    setTimeout(() => {
+                        window.close();
+                    }, 1400);
+                }
             }).catch(err => {
-                spinner.style.display = 'none';
-                statusText.innerText = 'Failed to generate PDF. Click Download Again.';
+                if (spinner) spinner.style.display = 'none';
+                if (statusText) statusText.innerText = 'Failed to generate PDF. Click Download PDF to retry.';
                 console.error(err);
             });
         }
         
+        ${isPreviewOnly ? '' : `
         window.onload = function() {
-            // Wait brief moment for fonts/images to settle
-            setTimeout(downloadPDF, 800);
+            setTimeout(downloadPDF, 600);
         };
+        `}
     </script>
 
 </body>
@@ -949,7 +1037,8 @@ const generateResumeHtml = async (req, res) => {
         res.setHeader('Content-Type', 'text/html');
         return res.send(html);
     } catch (error) {
-        res.status(500).send('<h1>Server Error</h1>');
+        console.error('Error generating resume HTML:', error);
+        res.status(500).send('<h1>Server Error: ' + error.message + '</h1>');
     }
 };
 
