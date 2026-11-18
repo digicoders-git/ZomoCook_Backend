@@ -206,13 +206,22 @@ const getCandidates = async (req, res) => {
         // Role-based data isolation
         const roleName = (req.admin.role?.name || '').toLowerCase();
         const isSuperAdmin = (req.admin.constructor.modelName === 'Admin' && roleName !== 'lead manager') || 
-            roleName === 'super admin';
+            roleName === 'super admin' ||
+            (req.admin.type === 'admin' && !req.admin.role);
         const isClient = req.admin.role && ['user', 'customer'].includes(roleName);
+        const canViewAllCandidates = req.admin.permissions?.includes('candidates:view') || 
+            req.admin.permissions?.includes('candidates:manage') ||
+            req.admin.permissions?.includes('cook_approvals:view') ||
+            (req.admin.role?.permissions && (
+                req.admin.role.permissions.includes('candidates:view') || 
+                req.admin.role.permissions.includes('candidates:manage') ||
+                req.admin.role.permissions.includes('cook_approvals:view')
+            ));
 
         if (isClient) {
             query.profileStatus = 'active';
         } else if (!isSuperAdmin) {
-            // Staff User / Lead Manager — show only assigned candidates
+            // Staff User / Lead Manager — show assigned or unassigned candidates so staff can review and allocate
             const escapedName = req.admin.name ? req.admin.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';
             const escapedEmail = req.admin.email ? req.admin.email.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';
             
@@ -227,12 +236,24 @@ const getCandidates = async (req, res) => {
             const assignedApps = await Application.find({ job: { $in: assignedJobIds } }).select('candidate');
             const candidateIdsFromJobs = assignedApps.map(a => a.candidate?.toString()).filter(Boolean);
 
-            query.$or = [
-                { leadManager: req.admin._id.toString() },
-                { leadManager: new RegExp(`^\\s*${escapedName}\\s*$`, 'i') },
-                { leadManager: new RegExp(`^\\s*${escapedEmail}\\s*$`, 'i') },
-                ...(candidateIdsFromJobs.length > 0 ? [{ _id: { $in: candidateIdsFromJobs } }] : [])
-            ];
+            if (canViewAllCandidates) {
+                query.$or = [
+                    { leadManager: req.admin._id.toString() },
+                    { leadManager: new RegExp(`^\\s*${escapedName}\\s*$`, 'i') },
+                    { leadManager: new RegExp(`^\\s*${escapedEmail}\\s*$`, 'i') },
+                    { leadManager: '' },
+                    { leadManager: null },
+                    { leadManager: { $exists: false } },
+                    ...(candidateIdsFromJobs.length > 0 ? [{ _id: { $in: candidateIdsFromJobs } }] : [])
+                ];
+            } else {
+                query.$or = [
+                    { leadManager: req.admin._id.toString() },
+                    { leadManager: new RegExp(`^\\s*${escapedName}\\s*$`, 'i') },
+                    { leadManager: new RegExp(`^\\s*${escapedEmail}\\s*$`, 'i') },
+                    ...(candidateIdsFromJobs.length > 0 ? [{ _id: { $in: candidateIdsFromJobs } }] : [])
+                ];
+            }
         }
 
         if (leadManager) query.leadManager = leadManager;
@@ -443,10 +464,14 @@ const getApplications = async (req, res) => {
             }).select('_id');
             const assignedCandidateIds = assignedCandidates.map(c => c._id);
 
-            query.$or = [
-                { job: { $in: assignedJobIds } },
-                { candidate: { $in: assignedCandidateIds } }
-            ];
+            if (!jobId) {
+                query.$or = [
+                    { job: { $in: assignedJobIds } },
+                    { candidate: { $in: assignedCandidateIds } }
+                ];
+            } else {
+                query.job = jobId;
+            }
         }
 
         if (status) query.status = status;

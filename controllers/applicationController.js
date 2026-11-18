@@ -422,7 +422,14 @@ const getApplications = async (req, res) => {
 
         let query = {};
 
-        const isCustomer = req.admin.constructor.modelName === 'User';
+        const userRoleName = (req.admin?.role?.name || '').trim().toLowerCase();
+        const isSuperAdmin = (req.admin?.email?.toLowerCase() === 'zomocookadmin@gmail.com') ||
+            userRoleName === 'super admin' ||
+            (req.admin?.type === 'admin' && !req.admin?.role);
+        
+        // ONLY regular mobile app users (without staff roles) are customers
+        const isCustomer = req.admin.constructor.modelName === 'User' && 
+            (!req.admin.role || userRoleName === 'user' || userRoleName === 'customer');
         
         if (isCustomer) {
             const Job = require('../models/Job');
@@ -455,6 +462,23 @@ const getApplications = async (req, res) => {
                 { customer: { $in: customerIds } },
                 ...(jobIds.length > 0 ? [{ job: { $in: jobIds } }] : [])
             ];
+        } else if (!isSuperAdmin) {
+            // Staff User (Lead Manager, Telecaller, etc.)
+            // If jobId is NOT passed, filter to applications for jobs assigned to this Lead Manager
+            if (!jobId) {
+                const Job = require('../models/Job');
+                const escapedName = req.admin.name ? req.admin.name.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';
+                const escapedEmail = req.admin.email ? req.admin.email.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&').trim() : '';
+                const assignedJobs = await Job.find({
+                    $or: [
+                        { leadManager: req.admin._id.toString() },
+                        { leadManager: new RegExp(`^\\s*${escapedName}\\s*$`, 'i') },
+                        { leadManager: new RegExp(`^\\s*${escapedEmail}\\s*$`, 'i') }
+                    ]
+                }).select('_id');
+                const assignedJobIds = assignedJobs.map(j => j._id);
+                query.job = { $in: assignedJobIds };
+            }
         }
 
         if (status) query.status = status;
@@ -1371,7 +1395,11 @@ const getApplicationById = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Application not found' });
         }
 
-        if (req.admin && req.admin.constructor.modelName === 'User') {
+        const roleName = (req.admin?.role?.name || '').trim().toLowerCase();
+        const isCustomer = req.admin && req.admin.constructor.modelName === 'User' &&
+            (!req.admin.role || roleName === 'user' || roleName === 'customer');
+
+        if (isCustomer) {
             const wasAlreadyViewed = application.isViewedByClient;
             application.isViewedByClient = true;
             await application.save();
