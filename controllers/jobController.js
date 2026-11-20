@@ -318,6 +318,23 @@ const createJob = async (req, res) => {
         // For Party & Daily jobs, ensure salaryRange and salary reflect remaining 75% cook payout
         const isPartyJob = jobData.jobCategory === 'party' || jobData.bookingType === 'party' || (jobData.title && jobData.title.toLowerCase().includes('party')) || Boolean(jobData.partyRequirement);
         const isDailyJob = !isPartyJob && (jobData.jobCategory === 'daily' || jobData.bookingType === 'daily' || (jobData.title && jobData.title.toLowerCase().includes('daily')));
+        if (isDailyJob || (Array.isArray(jobData.staffRequirements) && jobData.staffRequirements.length > 0)) {
+            if (!jobData.startDate && Array.isArray(jobData.staffRequirements) && jobData.staffRequirements.length > 0) {
+                const s0 = jobData.staffRequirements[0];
+                if (s0.startDate) jobData.startDate = s0.startDate;
+                if (s0.endDate && !jobData.endDate) jobData.endDate = s0.endDate;
+                if (!jobData.timing) jobData.timing = s0.timing || (s0.startTime && s0.endTime ? `${s0.startTime} – ${s0.endTime}` : '');
+            }
+            if (jobData.startDate && (!jobData.dateOfEvent || jobData.dateOfEvent === 'null' || jobData.dateOfEvent === '')) {
+                try { jobData.dateOfEvent = new Date(jobData.startDate); } catch(e) {}
+            }
+            if (!jobData.workingHours && jobData.timing) {
+                jobData.workingHours = jobData.timing;
+            }
+            if (!jobData.shiftTime && jobData.timing) {
+                jobData.shiftTime = jobData.timing;
+            }
+        }
         if (isPartyJob || isDailyJob) {
             const rawPricing = typeof jobData.pricing === 'object' ? jobData.pricing : {};
             const total = Number(rawPricing.total || rawPricing.totalAmount || jobData.totalAmount || 0);

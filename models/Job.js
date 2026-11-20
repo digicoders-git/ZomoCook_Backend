@@ -105,13 +105,16 @@ const jobSchema = new mongoose.Schema({
     type: [{
       role: String,
       genderPref: String,
+      genderPreference: String,
       count: Number,
       ratePerDay: Number,
       days: Number,
       startDate: String,
       endDate: String,
       startTime: String,
-      endTime: String
+      endTime: String,
+      timing: String,
+      workingHours: String
     }],
     set: function(val) {
       if (typeof val === 'string') {
@@ -157,6 +160,11 @@ const jobSchema = new mongoose.Schema({
   startDate: String,
   endDate: String,
   dailyHiringPurpose: String,
+  timing: String,
+  workingHours: String,
+  shiftTime: String,
+  timeSlot: String,
+  noOfDays: Number,
   venueAddress: String,
   eventDays: {
     type: mongoose.Schema.Types.Mixed,
