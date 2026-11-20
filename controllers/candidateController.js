@@ -257,18 +257,37 @@ const getCandidates = async (req, res) => {
         }
 
         if (leadManager) query.leadManager = leadManager;
-        if (city) query.city = new RegExp(city, 'i');
-        if (gender) query.gender = gender;
-        if (kycStatus) query.kycStatus = kycStatus;
-        if (profileStatus) query.profileStatus = profileStatus;
-        if (search) {
+        if (city && city.trim()) {
+            const escapedCity = city.trim().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+            const cityRegex = new RegExp(escapedCity, 'i');
             query.$and = query.$and || [];
             query.$and.push({
                 $or: [
-                    { name: new RegExp(search, 'i') },
-                    { phone: new RegExp(search, 'i') },
-                    { email: new RegExp(search, 'i') },
-                    { city: new RegExp(search, 'i') }
+                    { city: cityRegex },
+                    { 'jobPreference.preferredCities': cityRegex },
+                    { address: cityRegex }
+                ]
+            });
+        }
+        if (gender) query.gender = gender;
+        if (kycStatus) query.kycStatus = kycStatus;
+        if (profileStatus) query.profileStatus = profileStatus;
+        if (search && search.trim()) {
+            const escapedSearch = search.trim().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+            const searchRegex = new RegExp(escapedSearch, 'i');
+            query.$and = query.$and || [];
+            query.$and.push({
+                $or: [
+                    { name: searchRegex },
+                    { phone: searchRegex },
+                    { altPhone: searchRegex },
+                    { email: searchRegex },
+                    { city: searchRegex },
+                    { state: searchRegex },
+                    { address: searchRegex },
+                    { 'jobPreference.preferredCities': searchRegex },
+                    { 'jobPreference.workLocations': searchRegex },
+                    { 'jobPreference.jobPositions': searchRegex }
                 ]
             });
         }
