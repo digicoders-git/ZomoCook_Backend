@@ -1477,28 +1477,10 @@ const resendJobNotification = async (req, res) => {
         }
 
         const notificationController = require('./notificationController');
+        const target = req.body?.target || req.query?.target || 'all';
 
-        // If the job is pending payment, send payment reminder to the customer/employer
-        if (job.paymentStatus === 'pending' || job.status === 'hold') {
-            await notificationController.sendNotificationToUser({
-                userId: job.createdBy,
-                userModel: 'User',
-                title: 'Plan Activation Required',
-                message: `Please complete the payment for your job post "${job.title}" to activate it and start receiving applications.`,
-                type: 'job_status',
-                relatedId: job._id,
-                relatedModel: 'Job',
-                actionUrl: '/jobs'
-            });
-
-            return res.status(200).json({
-                success: true,
-                message: "Payment reminder notification sent successfully to the customer"
-            });
-        }
-
+        // Always broadcast job alert to Cooks
         const notifData = formatJobNotification(job);
-        
         await notificationController.sendNotificationToRole({
             roleName: 'Cook',
             title: notifData.title,
@@ -1509,11 +1491,33 @@ const resendJobNotification = async (req, res) => {
             actionUrl: `/jobs/view/${job._id}`
         });
 
+        // If target is customer or if payment is pending, also notify customer if available
+        let customerNotified = false;
+        if (target === 'customer' || target === 'all' || job.paymentStatus === 'pending' || job.status === 'hold') {
+            const customerId = job.customer || (job.creatorModel !== 'Admin' ? job.createdBy : null);
+            if (customerId) {
+                await notificationController.sendNotificationToUser({
+                    userId: customerId,
+                    userModel: job.customer ? 'Customer' : 'User',
+                    title: 'Booking Payment Reminder',
+                    message: `Please complete the payment for your booking "${job.title}" to confirm your staff allocation.`,
+                    type: 'job_status',
+                    relatedId: job._id,
+                    relatedModel: 'Job',
+                    actionUrl: '/jobs'
+                }).catch(err => console.error('Error sending customer notification in resend:', err.message));
+                customerNotified = true;
+            }
+        }
+
         res.status(200).json({
             success: true,
-            message: "Notification resent successfully to all cooks"
+            message: customerNotified 
+                ? "Notification sent to cooks and payment reminder sent to customer" 
+                : "Notification resent successfully to all cooks"
         });
     } catch (error) {
+        console.error('resendJobNotification error:', error);
         res.status(500).json({ success: false, message: error.message });
     }
 };
