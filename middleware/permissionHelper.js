@@ -27,10 +27,10 @@ const legacyAliases = {
     'quick_bookings:manage': ['quick_bookings'],
 
     'party_menu:view': ['Party Menu Items', 'Party Menu Catalog', 'Add Menu Item', 'Menu Item List', 'party_menu'],
-    'party_menu:add': ['Add Menu Item', 'party_menu'],
-    'party_menu:edit': ['party_menu'],
-    'party_menu:delete': ['party_menu'],
-    'party_menu:manage': ['party_menu'],
+    'party_menu:add': ['Add Menu Item', 'party_menu', 'Party Menu Items', 'Party Menu Catalog'],
+    'party_menu:edit': ['party_menu', 'Party Menu Items', 'Party Menu Catalog'],
+    'party_menu:delete': ['party_menu', 'Party Menu Items', 'Party Menu Catalog'],
+    'party_menu:manage': ['party_menu', 'Party Menu Items', 'Party Menu Catalog'],
 
     'replacements:view': ['Replacements', 'Replacement Requests', 'Replacement History', 'Staff Assignments', 'replacements', 'job_management'],
     'replacements:manage': ['replacements', 'job_management'],

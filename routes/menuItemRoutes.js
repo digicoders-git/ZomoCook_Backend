@@ -44,7 +44,13 @@ const checkMenuPerm = (action) => (req, res, next) => {
     (req.admin?.type === 'admin' && !req.admin?.role);
   if (isSuperAdmin) return next();
 
-  if (hasPermission(req.admin, `party_menu:${action}`) || hasPermission(req.admin, 'party_menu:manage')) {
+  if (
+    hasPermission(req.admin, `party_menu:${action}`) ||
+    hasPermission(req.admin, 'party_menu:manage') ||
+    hasPermission(req.admin, 'party_menu') ||
+    hasPermission(req.admin, 'Party Menu Catalog') ||
+    hasPermission(req.admin, 'Party Menu Items')
+  ) {
     return next();
   }
   return res.status(403).json({
